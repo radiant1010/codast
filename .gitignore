@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+work/
+outputs/*
+!outputs/README.md
+!outputs/phase1-result.md
+!outputs/2026-09-13-sqlite-result.md
+!outputs/2026-09-14-conversation-result.md
+workspaces/*
+!workspaces/.gitkeep
+
+!outputs/2026-09-14-runtime-result.md
+
+!outputs/2026-09-14-guide-result.md
