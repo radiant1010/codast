@@ -1,15 +1,35 @@
+# Local runtime and generated artifacts
 .venv/
 __pycache__/
+*.py[cod]
 .pytest_cache/
-work/
-outputs/*
-!outputs/README.md
-!outputs/phase1-result.md
-!outputs/2026-09-13-sqlite-result.md
-!outputs/2026-09-14-conversation-result.md
-workspaces/*
-!workspaces/.gitkeep
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+/work/
+/outputs/
+/workspaces/*
+!/workspaces/.gitkeep
 
-!outputs/2026-09-14-runtime-result.md
+# Local secrets and databases
+.env
+.env.*
+!.env.example
+!.env.template
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.log
 
-!outputs/2026-09-14-guide-result.md
+# Build products and OS metadata
+/build/
+/dist/
+*.egg-info/
+.DS_Store
+Thumbs.db
+Desktop.ini
