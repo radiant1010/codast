@@ -1,4 +1,9 @@
 from fastapi import APIRouter, Request, Query
+from fastapi.responses import StreamingResponse
+import asyncio
+import json
+from app.core.commands import parse_command
+from app.models.schemas import WorkspaceRegister
 from app.models.schemas import ChatRequest, Command, TaskUpdate, ClientConfig, RouteRequest
 from app.llm.cli import probe, executable
 from app.models.schemas import ProjectCreate, Command, FileWrite, AgentResult, ProjectSettings, MessageCreate, MessageMove
@@ -26,13 +31,17 @@ def configure_client(client: str, body: ClientConfig, request: Request):
 def route(name: str, body: RouteRequest, request: Request):
     s = service(request)
     s.projects.select(name)
-    return s.router.route(name, body.text)
+    _, text = parse_command(body.text)
+    return s.router.route(name, text)
 
 
 @router.post('/projects/{name}/chat')
 async def chat(name: str, body: ChatRequest, request: Request):
     s = service(request)
     s.projects.select(name)
+    client, text = parse_command(body.text)
+    if client:
+        body = body.model_copy(update={'text': text, 'raw_text': body.text, 'client': client, 'action': 'run'})
     decision = s.router.route(name, body.text) if body.auto_route and not body.task.strip() else {
         'task': body.task.strip(), 'kind': 'explicit', 'reason': '직접 선택', 'candidates': [], 'engine': 'local'}
     if body.action == 'run' and decision['kind'] == 'ambiguous':
@@ -73,6 +82,39 @@ async def cancel_run(name: str, run_id: str, request: Request):
     s.projects.select(name)
     await s.cancel(name, run_id)
     return {'cancelled': True}
+
+
+@router.get('/projects/{name}/runs/{run_id}/events')
+async def run_events(name: str, run_id: str, request: Request, after: int = Query(0, ge=0)):
+    s = service(request)
+    s.projects.select(name)
+    s.storage.run(name, run_id)
+    try:
+        cursor = max(after, int(request.headers.get('last-event-id', '0')))
+    except ValueError as exc:
+        raise ValueError('이벤트 위치가 올바르지 않습니다.') from exc
+    if cursor < 0:
+        raise ValueError('이벤트 위치가 올바르지 않습니다.')
+
+    async def stream():
+        nonlocal cursor
+        while not await request.is_disconnected():
+            # Read terminal status before events so completion cannot race the final drain.
+            status = s.storage.run(name, run_id)['status']
+            rows = s.storage.events(name, run_id, cursor)
+            for row in rows:
+                cursor = row['seq']
+                yield f"id: {cursor}\nevent: run_event\ndata: {json.dumps(row, ensure_ascii=False)}\n\n"
+            if len(rows) == 200:
+                continue
+            if status != 'running':
+                yield f"event: end\ndata: {json.dumps({'status': status})}\n\n"
+                return
+            yield ': heartbeat\n\n'
+            await asyncio.sleep(.3)
+
+    return StreamingResponse(stream(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 @router.post('/projects/{name}/runs/{run_id}/reconcile')
@@ -127,6 +169,49 @@ def service(request: Request):
 @router.get("/projects")
 def projects(request: Request):
     return {"projects": service(request).projects.list()}
+
+
+@router.get('/deleted-projects')
+def deleted_projects(request: Request):
+    return {'projects': service(request).projects.list(deleted=True)}
+
+
+@router.post('/workspace-folder')
+async def pick_workspace_folder(request: Request):
+    return {'path': await request.app.state.folder_picker.pick()}
+
+
+@router.post('/workspaces', status_code=201)
+def register_workspace(body: WorkspaceRegister, request: Request):
+    s = service(request)
+    with s.storage.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        path = s.projects.register(body.name, body.path)
+    return {'name': body.name, 'path': str(path)}
+
+
+@router.get('/projects/{name}/workspace')
+def workspace_detail(name: str, request: Request):
+    return {'path': str(service(request).projects.select(name))}
+
+
+@router.delete('/projects/{name}')
+async def delete_project(name: str, request: Request):
+    s = service(request)
+    s.projects.entry(name)
+    # Serialize against run registration. Files and all DB history stay intact.
+    with s.storage.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (name,)).fetchone():
+            raise FileExistsError('실행 중이거나 종료 확인이 필요한 작업이 있습니다. 중지·종료 확인 후 삭제하세요.')
+        s.projects.delete(name)
+    return {'deleted': True, 'recoverable': True}
+
+
+@router.post('/deleted-projects/{name}/restore')
+async def restore_project(name: str, request: Request):
+    service(request).projects.restore(name)
+    return {'restored': True, 'name': name}
 
 
 @router.post("/projects", status_code=201)

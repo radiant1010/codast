@@ -17,7 +17,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 3:
+            if version > 4:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -81,6 +81,36 @@ class Storage:
                     COMMIT;
                 """)
 
+            if version < 4:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE run_events (
+                        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                        run_id TEXT NOT NULL REFERENCES runs(id),
+                        kind TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL
+                    );
+                    CREATE INDEX run_events_run_seq ON run_events(run_id,seq);
+                    PRAGMA user_version=4;
+                    COMMIT;
+                """)
+
+    def append_event(self, run_id, kind, text):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            count = db.execute('SELECT COUNT(*) FROM run_events WHERE run_id=?', (run_id,)).fetchone()[0]
+            if count > 4096:
+                return
+            if count == 4096:
+                kind, text = 'warning', '진행 로그 한도에 도달했습니다. 최종 결과는 별도로 저장됩니다.'
+            db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
+                       (run_id, kind, str(text)[:8192], now()))
+
+    def events(self, project, run_id, after=0, limit=200):
+        self.run(project, run_id)
+        with self.connect() as db:
+            return [dict(row) for row in db.execute(
+                'SELECT * FROM run_events WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?', (run_id, after, limit))]
+
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=10)
@@ -111,7 +141,9 @@ class Storage:
             db.execute("""INSERT INTO runs(id,project,command,adapter,status,started_at)
                 VALUES (?,?,?,?, 'running',?)""", (run_id, project, command.model_dump_json(), adapter, now()))
             db.execute("INSERT INTO messages VALUES (?,?,?,?,?,?)",
-                       (run_id, project, command.task.strip(), command.text, now(), run_id))
+                       (run_id, project, command.task.strip(), command.raw_text or command.text, now(), run_id))
+            db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
+                       (run_id, 'status', f'{adapter} 실행 시작', now()))
         return run_id
 
     def add_message(self, project, text, task):
@@ -157,6 +189,8 @@ class Storage:
             db.execute("""UPDATE runs SET status=?, finished_at=?, output=?, error=?,
                 adapter=COALESCE(?,adapter), metadata=COALESCE(?,metadata) WHERE id=?""",
                 (status, now(), output, error, adapter, json.dumps(metadata,ensure_ascii=False) if metadata is not None else None, run_id))
+            db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
+                       (run_id, 'status', status, now()))
 
     def runs(self, project, limit, offset):
         with self.connect() as db:

@@ -20,8 +20,8 @@ class FileSystemTool:
         path.write_text(content, encoding="utf-8")
 
     def list_candidates(self, root: Path):
+        ignored = {'.git', '.harness', '.venv', 'node_modules', '__pycache__', '.pytest_cache'}
         for directory, dirs, files in os.walk(root, followlinks=False):
-            dirs[:] = sorted(d for d in dirs if d not in {".git", ".harness"} and not (Path(directory)/d).is_symlink() and not (Path(directory)/d).is_junction())
+            dirs[:] = sorted(d for d in dirs if d.lower() not in ignored and not (Path(directory)/d).is_symlink() and not (Path(directory)/d).is_junction())
             for name in sorted(files):
                 yield (Path(directory) / name).relative_to(root).as_posix()
-

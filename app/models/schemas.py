@@ -10,8 +10,13 @@ class ProjectCreate(StrictModel):
     name: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 
 
+class WorkspaceRegister(ProjectCreate):
+    path: str = Field(min_length=1, max_length=4096)
+
+
 class Command(StrictModel):
     text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
+    raw_text: str | None = Field(default=None, max_length=8000)
     cwd: str = "."
     context_paths: list[str] = Field(default_factory=list, max_length=10)
     task: str = Field(default="", max_length=120)

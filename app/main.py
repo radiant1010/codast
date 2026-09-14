@@ -13,6 +13,7 @@ from app.core.policy_engine import PolicyEngine
 from app.tools.filesystem import FileSystemTool
 from app.llm.mock import MockAgentAdapter
 from app.core.storage import Storage
+from app.core.folder_picker import FolderPicker
 
 BASE = Path(__file__).resolve().parent
 
@@ -29,6 +30,7 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     # Hidden metadata is excluded from workspace selection and file access.
     storage = Storage(db_path or Path(os.getenv("HARNESS_DB", str(projects.root / ".harness" / "harness.sqlite3"))))
     app.state.harness = Orchestrator(projects, PolicyEngine(), FileSystemTool(), agent or MockAgentAdapter(), storage)
+    app.state.folder_picker = FolderPicker()
 
     @app.middleware("http")
     async def same_origin(request: Request, call_next):

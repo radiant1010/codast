@@ -27,9 +27,9 @@ def executable(client, configured=''):
 class ProcessRunner:
     limit = 4 * 1024 * 1024
 
-    async def run(self, argv, cwd, prompt='', timeout=600):
+    async def run(self, argv, cwd, prompt='', timeout=600, on_line=None):
         cancel = threading.Event()
-        worker = asyncio.create_task(asyncio.to_thread(self._run, argv, cwd, prompt, timeout, cancel))
+        worker = asyncio.create_task(asyncio.to_thread(self._run, argv, cwd, prompt, timeout, cancel, on_line))
         try:
             return await asyncio.shield(worker)
         except asyncio.CancelledError:
@@ -53,23 +53,37 @@ class ProcessRunner:
             except ProcessLookupError:
                 pass
 
-    def _run(self, argv, cwd, prompt, timeout, cancel):
+    def _run(self, argv, cwd, prompt, timeout, cancel, on_line=None):
         kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
         process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, **kwargs)
         buffers = [bytearray(), bytearray()]
         overflow = threading.Event()
+        reader_errors = []
 
-        def drain(stream, target):
-            while chunk := stream.read(4096):
-                if len(target) + len(chunk) > self.limit:
-                    overflow.set()
-                else:
+        def drain(stream, target, channel):
+            pending = bytearray()
+            try:
+                while chunk := stream.read1(4096):
+                    if len(target) + len(chunk) > self.limit:
+                        overflow.set()
+                        continue
                     target.extend(chunk)
-            stream.close()
+                    if on_line:
+                        pending.extend(chunk)
+                        while b'\n' in pending:
+                            line, _, rest = pending.partition(b'\n')
+                            pending = bytearray(rest)
+                            on_line(channel, line.decode('utf-8', errors='replace'))
+                if pending and on_line:
+                    on_line(channel, pending.decode('utf-8', errors='replace'))
+            except Exception as exc:
+                reader_errors.append(exc)
+            finally:
+                stream.close()
 
-        readers = [threading.Thread(target=drain, args=(stream, target), daemon=True)
-                   for stream, target in zip((process.stdout, process.stderr), buffers)]
+        readers = [threading.Thread(target=drain, args=(stream, target, channel), daemon=True)
+                   for stream, target, channel in zip((process.stdout, process.stderr), buffers, ('stdout','stderr'))]
         for reader in readers:
             reader.start()
         # Writing stdin in its own thread also permits cancellation if a client never reads it.
@@ -88,6 +102,8 @@ class ProcessRunner:
                     raise RuntimeError('실행이 취소되었습니다.')
                 if overflow.is_set():
                     raise ValueError('클라이언트 출력이 4 MiB 한도를 초과했습니다.')
+                if reader_errors:
+                    raise reader_errors[0]
                 if time.monotonic() - started > timeout:
                     raise TimeoutError(f'클라이언트 실행 제한 시간({timeout}초)을 초과했습니다.')
                 cancel.wait(.1)
@@ -100,6 +116,8 @@ class ProcessRunner:
             writer.join(timeout=2)
         if overflow.is_set():
             raise ValueError('클라이언트 출력 한도를 초과했습니다.')
+        if reader_errors:
+            raise reader_errors[0]
         return process.returncode, *(b.decode('utf-8', errors='replace') for b in buffers)
 
 
@@ -107,6 +125,8 @@ class CliAdapter:
     def __init__(self, client, path, runner=None):
         self.client, self.path = client, path
         self.runner = runner or ProcessRunner()
+        self.on_event = None
+        self.seen_text = {}
 
     def arguments(self, mode, session=None):
         if self.client == 'codex':
@@ -115,7 +135,7 @@ class CliAdapter:
             if session:
                 args += ['resume', session]
             return args + ['--json', '--skip-git-repo-check', '-']
-        args = [self.path, '-p', '--output-format', 'json', '--permission-mode',
+        args = [self.path, '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--permission-mode',
                 'plan' if mode == 'read-only' else 'acceptEdits']
         if session:
             args += ['--resume', session]
@@ -123,18 +143,79 @@ class CliAdapter:
 
     async def execute(self, context, cwd, mode, session=None):
         prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + context
-        code, stdout, stderr = await self.runner.run(self.arguments(mode, session), cwd, prompt)
+        options = {'on_line': self.stream_line} if self.on_event else {}
+        code, stdout, stderr = await self.runner.run(self.arguments(mode, session), cwd, prompt, **options)
         if code:
             raise RuntimeError(f'{self.client} 종료 코드 {code}: '+(stderr.strip() or stdout.strip())[-3000:])
         return self.parse(stdout)
+
+    def stream_line(self, channel, line):
+        if channel == 'stderr':
+            if line.strip():
+                self.on_event('warning', line)
+            return
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(event, dict):
+            return
+        kind = event.get('type', '')
+        if self.client == 'codex':
+            item = event.get('item') or {}
+            category = item.get('type')
+            if kind in ('thread.started', 'turn.started'):
+                self.on_event('status', kind)
+            elif kind.startswith('item.') and category in ('agent_message', 'command_execution'):
+                key = (item.get('id'), category)
+                value = item.get('text', '') if category == 'agent_message' else item.get('aggregated_output', '')
+                previous = self.seen_text.get(key, '')
+                if category == 'command_execution' and key not in self.seen_text:
+                    self.on_event('tool', item.get('command', '명령 실행'))
+                if value and value != previous:
+                    self.on_event('assistant' if category == 'agent_message' else 'output',
+                                  value[len(previous):] if value.startswith(previous) else value)
+                self.seen_text[key] = value
+                if category == 'command_execution' and kind == 'item.completed':
+                    self.on_event('status', f"명령 종료 · 코드 {item.get('exit_code', '?')}")
+            elif kind == 'item.completed' and category == 'file_change':
+                self.on_event('file', json.dumps(item.get('changes', []), ensure_ascii=False))
+            elif kind in ('item.started', 'item.completed') and category in ('mcp_tool_call', 'web_search'):
+                self.on_event('tool', json.dumps(item, ensure_ascii=False))
+            elif kind in ('error', 'turn.failed'):
+                self.on_event('warning', str(event.get('message') or event.get('error')))
+        else:
+            if kind == 'stream_event':
+                delta = (event.get('event') or {}).get('delta') or {}
+                if delta.get('type') == 'text_delta':
+                    self.on_event('assistant', delta.get('text', ''))
+            elif kind == 'assistant':
+                for block in (event.get('message') or {}).get('content', []):
+                    if block.get('type') == 'tool_use':
+                        self.on_event('tool', block.get('name', '')+' '+json.dumps(block.get('input', {}), ensure_ascii=False))
+            elif kind == 'user':
+                for block in (event.get('message') or {}).get('content', []):
+                    if isinstance(block, dict) and block.get('type') == 'tool_result':
+                        self.on_event('output', str(block.get('content', '')))
+            elif kind == 'system':
+                self.on_event('status', 'Claude · '+event.get('subtype', 'system'))
 
     def parse(self, stdout):
         if self.client == 'claude':
             try:
                 data = json.loads(stdout)
-            except json.JSONDecodeError as exc:
-                raise ValueError('Claude JSON 응답을 해석하지 못했습니다.') from exc
-            if not isinstance(data, dict) or data.get('is_error') or data.get('subtype', 'success') != 'success':
+            except json.JSONDecodeError:
+                data = None
+                for line in stdout.splitlines():
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(event, dict) and event.get('type') == 'result':
+                        data = event
+            if not isinstance(data, dict):
+                raise ValueError('Claude 최종 JSON 응답을 해석하지 못했습니다.')
+            if data.get('is_error') or data.get('subtype', 'success') != 'success':
                 raise RuntimeError('Claude 실행 실패: '+str(data.get('result', data))[-2000:])
             result = data.get('result')
             if not isinstance(result, str):

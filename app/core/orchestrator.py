@@ -89,6 +89,7 @@ class Orchestrator:
             if command.client == 'mock':
                 result = await adapter.run(context)
             else:
+                adapter.on_event = lambda kind, text: self.storage.append_event(run_id, kind, text)
                 result = await adapter.execute(context.model_dump_json(), str(cwd), command.mode, session)
         except asyncio.CancelledError:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode)
