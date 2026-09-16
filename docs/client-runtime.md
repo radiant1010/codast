@@ -36,6 +36,8 @@
 
 ## 상태와 세션
 
+최초 연결 진행 상태는 SQLite v5 `onboarding_state`에 저장한다. v4 실행 데이터는 보존하며 `GET/PUT /api/onboarding`, `POST /api/onboarding/check`로 선택·보류·복원·현재 인증 재확인을 지원한다. completed는 연결 확인이며 모델 실행 검증 완료가 아니다. 상세 계약은 [연결 시나리오](connection-scenarios.md)를 따른다.
+
 2026-09-16 연결 보완: `POST /api/connections/check`는 등록된 환경의 읽기 전용 일괄 진단과 `attention` 목록을 반환한다. `GET /api/clients`는 Claude의 `auth status --json`도 확인하며 설치·인증·실행 검증을 구분한다. `GET /api/clients/{client}/login-instructions`는 공식 CLI 로그인 argv를 제공하며 로그인 자체는 사용자가 수행한다. `Command.model`은 선택 시 실제 CLI `--model`에 전달되고 `requested_model`로 기록된다. Claude의 init 이벤트에 실제 모델이 있으면 `execution_model`로 기록하고, 미수신 모델은 추정하지 않는다. 상세 순서와 검증은 [연결 시나리오](connection-scenarios.md)를 따른다.
 
 SQLite v4는 기존 데이터를 보존하고 run_events를 추가합니다. v3의 실행 메타데이터, 작업 상태, 클라이언트 경로, 세션 연결 테이블도 유지합니다. 실행 예약은 SQLite 쓰기 트랜잭션에서 동일 프로젝트의 running 기록을 검사합니다. 실행은 서버 이벤트 루프의 백그라운드 작업으로 진행하고 네이티브 프로세스 I/O는 스레드로 분리합니다. 정상 서버 종료 시 활성 실행을 취소합니다.
@@ -71,3 +73,9 @@ Codex의 명령 실행·출력·파일 변경·도구 이벤트·응답, Claude�
 사용자가 데스크톱 동시 실행 중단을 확인하고 연결하면 새 이름의 로컬 채팅과 Codex 세션 ID를 단일 트랜잭션으로 저장한다. 원문 대화는 DB에 복제하지 않는다. 선택은 Codex/루트 cwd/읽기 전용으로 맞추며 다음 사용자 메시지에서 기존 resume 경로를 사용한다. 연결 자체로 모델 호출은 하지 않는다. 동일 채팅명·하네스 실행 중 연결은 차단한다. 데스크톱의 실제 실행 여부는 확인할 수 없으며 체크박스는 사용자 확인일 뿐 프로세스 간 잠금이 아니다. 권한/cwd 변경 또는 새 세션 선택 시 기존 세션 키 계약을 따른다.
 
 검증: 관련 테스트 8개 통과, 실제 로컬 세션 4개 및 현재 데스크톱 세션 메시지 수신 확인. 실제 데스크톱 세션의 CLI 재개 실행은 아직 미검증. 근거: https://learn.chatgpt.com/docs/app-server
+
+## 공통 세션 내용 불러오기
+
+`/api/projects/{name}/native-threads/{client}` 및 하위 `/{id}`, `/{id}/attach`는 codex/claude를 지원한다. 기존 codex-threads API는 호환성을 유지한다. UI에서 에이전트를 선택하며 선택한 클라이언트의 네이티브 ID로 연결한다. Claude는 CLAUDE_CONFIG_DIR 또는 기본 .claude/projects 아래의 로컬 JSONL을 읽고 기록의 cwd가 프로젝트 루트와 일치하는 세션만 제공한다. 최근 20개 사용자/assistant 텍스트만 미리 보며 도구·thinking 블록은 제외한다. 파일당 16 MiB, 파일 목록 1000개 한도다. 이 저장 형식은 로컬 CLI에서 관찰한 형식이며 변경 시 대응이 필요하다. Claude Desktop 일반 채팅은 포함하지 않는다. 원문을 DB에 복제하지 않고 다음 메시지는 기존 --resume 경로로 실행한다. [Claude CLI 재개 명령](https://code.claude.com/docs/en/cli-reference)을 따른다.
+
+검증: 전체 63 passed / 1 skipped. 가짜 기록으로 프로젝트 경계, 텍스트 필터, Claude 세션 연결, 중복 이름 거절 검증. Claude 실제 재개 실행은 계정 연결 후 검증이 남아 있다.
