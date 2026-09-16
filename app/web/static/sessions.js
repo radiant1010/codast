@@ -2,7 +2,7 @@
 (()=>{
   const side=$('sidebar').querySelector('.side-content');
   const drawer=el('dialog',undefined,'session-drawer');drawer.id='session-drawer';
-  function closeIcon(label,handler){const node=button('×',handler,'account-dialog-close');node.setAttribute('aria-label',label);node.title=label;return node;}
+  function closeIcon(label,handler){const node=button('',handler,'account-dialog-close');window.actionIcon(node,'close',label);return node;}
   const heading=el('header');heading.append(el('h2','작업실 설정'),closeIcon('작업실 설정 닫기',async()=>drawer.close()));drawer.append(heading);document.body.append(drawer);
   const connectionIntro=el('div',undefined,'client-connection-intro');
   const connectionHint=$('clients-panel').querySelector('.hint');connectionHint.before(connectionIntro);connectionIntro.append(connectionHint,$('probe-clients'));
@@ -13,12 +13,14 @@
   function openSection(node){drawer.showModal();node.open=true;node.scrollIntoView({block:'start'});}
   const project=$('project-panel');project.querySelector('summary').textContent='프로젝트';
   const chats=el('section',undefined,'chat-navigation');
-  const title=el('div',undefined,'side-title');title.append(el('h2','채팅 세션'),$('reload'));chats.append(title);
+  const title=el('div',undefined,'side-title');const titleActions=el('div',undefined,'section-header-actions');titleActions.append($('reload'));title.append(el('h2','채팅 세션'),titleActions);chats.append(title);
   const createChat=el('dialog',undefined,'session-drawer'),chatForm=el('form');
   const chatLabel=el('label','새 채팅 이름'),chatInput=el('input');chatInput.id='new-chat-name';chatInput.maxLength=120;chatInput.required=true;chatLabel.htmlFor=chatInput.id;
-  const createButton=el('button','채팅 시작');createButton.type='submit';
+  const createButton=el('button');createButton.type='submit';window.actionIcon(createButton,'plus','새 채팅 만들기');
   const chatHeader=el('div',undefined,'account-dialog-header');chatHeader.append(el('h2','새 채팅'),closeIcon('새 채팅 닫기',async()=>createChat.close()));
-  chatForm.append(chatHeader,chatLabel,chatInput,createButton);createChat.append(chatForm);document.body.append(createChat);
+  const chatRow=el('div',undefined,'field-action-row');chatRow.append(chatInput,createButton);
+  const chatField=el('div',undefined,'form-field');chatField.append(chatLabel,chatRow);
+  chatForm.className='modal-form';chatForm.append(chatHeader,chatField);createChat.append(chatForm);document.body.append(createChat);
   chatForm.onsubmit=event=>{event.preventDefault();act(async()=>{
     const name=chatInput.value.trim();if(!name)throw Error('채팅 이름을 입력하세요.');
     if(groups.some(g=>g.task===name))throw Error('같은 이름의 채팅이 있습니다. 목록에서 선택하세요.');
@@ -41,40 +43,51 @@
   side.replaceChildren(project,chats,menu);$('setup-guide').open=false;
   const importDialog=el('dialog',undefined,'session-drawer');
   const importHead=el('div',undefined,'account-dialog-header'),importClose=button('',async()=>importDialog.close());
-  window.actionIcon(importClose,'close','기존 세션 창 닫기');importHead.append(el('h2','기존 Codex 세션'),importClose);
+  window.actionIcon(importClose,'close','세션 내용 불러오기 닫기');importHead.append(el('h2','세션 내용 불러오기'),importClose);
   const importList=el('div'),importPreview=el('div'),importStatus=el('p',undefined,'hint');importStatus.setAttribute('role','status');
-  const nextThreads=button('',async()=>loadThreads(true));window.actionIcon(nextThreads,'next','다음 세션 목록');nextThreads.hidden=true;
-  importDialog.append(importHead,el('p','프로젝트 루트 경로가 같은 로컬 저장 세션입니다. 데스크톱의 실시간 실행 상태는 확인하지 않습니다.','hint'),importStatus,importList,nextThreads,importPreview);document.body.append(importDialog);
+  const importClient=el('div',undefined,'agent-segment');importClient.setAttribute('role','group');importClient.setAttribute('aria-label','불러올 세션 에이전트');
+  let selectedImportClient='codex';
+  for(const [value,label] of [['codex','Codex'],['claude','Claude']]){
+    const choice=button(label,async()=>{
+      if(selectedImportClient===value)return;
+      selectedImportClient=value;
+      for(const item of importClient.children)item.setAttribute('aria-pressed',String(item===choice));
+      importCursor=null;nextThreads.hidden=true;importList.replaceChildren();importPreview.replaceChildren();await loadThreads();
+    });choice.setAttribute('aria-pressed',String(value===selectedImportClient));importClient.append(choice);
+  }
+  const nextThreads=button('다음 목록 ›',async()=>loadThreads(true));nextThreads.title='다음 20개 세션 보기';nextThreads.hidden=true;
+  const importScope=el('p',undefined,'hint');
+  importDialog.append(importHead,importScope,importClient,el('p','현재 프로젝트와 작업 경로가 같은 세션만 표시합니다. 다른 프로젝트의 대화는 불러오지 않습니다. 세션 내용을 확인한 뒤 연결하세요.','hint'),importStatus,importList,nextThreads,importPreview);document.body.append(importDialog);
   let importProject='',importCursor=null;
   async function loadThreads(more=false){
-    const selected=importProject;importStatus.textContent='조회 중…';nextThreads.disabled=true;
-    try{const data=await api('/projects/'+encodeURIComponent(selected)+'/codex-threads'+(more&&importCursor?'?cursor='+encodeURIComponent(importCursor):''));
-      if(selected!==importProject)return;importList.replaceChildren();importPreview.replaceChildren();
+    const selected=importProject,agent=selectedImportClient;importStatus.textContent='조회 중…';nextThreads.disabled=true;
+    try{const data=await api('/projects/'+encodeURIComponent(selected)+'/native-threads/'+agent+(more&&importCursor?'?cursor='+encodeURIComponent(importCursor):''));
+      if(selected!==importProject||agent!==selectedImportClient)return;importList.replaceChildren();importPreview.replaceChildren();
       for(const thread of data.threads){const row=el('div',undefined,'native-thread-choice'),label=el('span',thread.name||thread.preview?.slice(0,100)||'이름 없는 세션');
-        const view=button('',async()=>previewThread(thread,selected));window.actionIcon(view,'file','저장 대화 미리보기');row.append(label,view);importList.append(row);}
-      importCursor=data.next_cursor;nextThreads.hidden=!importCursor;importStatus.textContent=data.threads.length+'개 세션 · 저장된 기록 기준';
+        const view=button('선택',async()=>previewThread(thread,selected,agent));view.title='선택한 세션 내용 미리보기';row.append(label,view);importList.append(row);}
+      importCursor=data.next_cursor;nextThreads.hidden=!importCursor;importStatus.textContent=data.threads.length?data.threads.length+'개 세션 · 현재 프로젝트의 저장 기록':'현재 프로젝트에 불러올 '+(agent==='codex'?'Codex':'Claude')+' 세션이 없습니다.';
     }catch(error){importStatus.textContent=error.message;}finally{nextThreads.disabled=false;}
   }
-  async function previewThread(thread,selected){
+  async function previewThread(thread,selected,agent){
     importStatus.textContent='대화 조회 중…';importPreview.replaceChildren();
-    try{const data=await api('/projects/'+encodeURIComponent(selected)+'/codex-threads/'+encodeURIComponent(thread.id));
-      if(selected!==importProject)return;importStatus.textContent=data.preview_scope;
-      const transcript=el('div',undefined,'native-thread-preview');for(const message of data.messages)transcript.append(el('strong',message.role==='user'?'사용자':'Codex'),el('pre',message.text));
+    try{const data=await api('/projects/'+encodeURIComponent(selected)+'/native-threads/'+agent+'/'+encodeURIComponent(thread.id));
+      if(selected!==importProject||agent!==selectedImportClient)return;importStatus.textContent=data.preview_scope;
+      const transcript=el('div',undefined,'native-thread-preview');for(const message of data.messages){transcript.append(el('strong',message.role==='user'?'사용자':agent==='codex'?'Codex':'Claude'),el('pre',message.text));if(message.delivery_details){const details=el('details');details.append(el('summary','전달 내용 상세'+(message.details_truncated?' · 일부 표시':'')),el('pre',message.delivery_details));transcript.append(details);}}
       if(!data.messages.length)transcript.append(el('p','표시할 저장 메시지가 없습니다.'));
-      const name=el('input');name.maxLength=120;name.value=(thread.name||'기존 Codex 세션').slice(0,120);name.setAttribute('aria-label','연결할 새 채팅 이름');
-      const ack=el('input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('데스크톱에서 이 세션의 실행을 멈췄습니다. 동시 실행하지 않겠습니다.'));
-      const attach=button('',async()=>{if(!ack.checked)return;attach.disabled=true;
-        try{if($('project').value!==selected)throw Error('프로젝트가 변경되었습니다. 다시 열어 주세요.');
+      const name=el('input');name.maxLength=120;name.value=(thread.name||'불러온 세션').slice(0,120);name.setAttribute('aria-label','연결할 새 채팅 이름');
+      const ack=el('input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('다른 창이나 CLI에서 이 세션의 실행을 멈췄습니다. 동시 실행하지 않겠습니다.'));
+      const attach=button('선택',async()=>{if(!ack.checked)return;attach.disabled=true;
+        try{if($('project').value!==selected||agent!==selectedImportClient)throw Error('프로젝트가 변경되었습니다. 다시 열어 주세요.');
           if($('text').value.trim())throw Error('작성 중인 메시지를 먼저 보내거나 비워 주세요.');
-          const linked=await api('/projects/'+encodeURIComponent(selected)+'/codex-threads/'+encodeURIComponent(thread.id)+'/attach','POST',{task:name.value});
-          $('client').value='codex';$('cwd').value='.';$('mode').value='read-only';$('fresh').checked=false;filter=linked.task;offset=0;$('task-name').value=linked.task;importDialog.close();await conversation();actionHint();notice('세션 연결 완료 · 다음 메시지는 Codex에서 이어서 실행합니다.');
+          const linked=await api('/projects/'+encodeURIComponent(selected)+'/native-threads/'+agent+'/'+encodeURIComponent(thread.id)+'/attach','POST',{task:name.value});
+          $('client').value=linked.client;await window.loadModelChoices?.();$('cwd').value='.';$('mode').value='read-only';$('fresh').checked=false;filter=linked.task;offset=0;$('task-name').value=linked.task;importDialog.close();await conversation();actionHint();notice('세션 연결 완료 · 다음 메시지는 선택한 에이전트에서 이어서 실행합니다.');
         }catch(error){importStatus.textContent=error.message;}finally{attach.disabled=!ack.checked;}});
-      window.actionIcon(attach,'plug','선택한 세션을 새 채팅에 연결');attach.disabled=true;ack.onchange=()=>attach.disabled=!ack.checked;
+      attach.title='선택한 세션을 새 채팅에 연결';attach.disabled=true;ack.onchange=()=>attach.disabled=!ack.checked;
       const entry=el('div',undefined,'client-path-row');entry.append(name,attach);importPreview.append(transcript,ackLabel,entry);
     }catch(error){importStatus.textContent=error.message;}
   }
-  const findThreads=button('',async()=>{if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');importProject=$('project').value;importCursor=null;importPreview.replaceChildren();importList.replaceChildren();importDialog.showModal();await loadThreads();});
-  window.actionIcon(findThreads,'folder','기존 Codex 세션 찾기');title.append(findThreads);
+  const findThreads=button('',async()=>{if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');importProject=$('project').value;importScope.textContent='조회 범위 · '+importProject+' 프로젝트';importCursor=null;importPreview.replaceChildren();importList.replaceChildren();importDialog.showModal();await loadThreads();});
+  window.actionIcon(findThreads,'importDocument','세션 내용 불러오기');titleActions.append(findThreads);
   $('task-controls').querySelector('summary').textContent='채팅 관리';
   $('task-title').previousElementSibling.textContent='채팅 이름 변경 · 합치기';
   const top=el('section',undefined,'session-dashboard');top.setAttribute('aria-label','에이전트와 실행 중인 세션');

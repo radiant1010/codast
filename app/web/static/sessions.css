@@ -79,3 +79,28 @@
 .client-card{padding:18px 0}
 .client-card h3{margin:0 0 12px}
 .native-thread-choice{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid #34404e}.native-thread-choice span{min-width:0;overflow-wrap:anywhere}.native-thread-preview{max-height:300px;overflow:auto;margin:18px 0;padding:14px;background:#111820;border-radius:6px}.native-thread-preview pre{font-size:12px;line-height:1.8}
+/* Shared form layout: docs/ui-layout-guide.md */
+:root{--form-label-gap:8px;--form-action-gap:12px;--form-field-gap:16px;--modal-gap:24px;--control-height:40px}
+.session-drawer{padding:var(--modal-gap)}
+.modal-form{display:flex;flex-direction:column;gap:var(--modal-gap)}
+.form-field{display:flex;flex-direction:column;gap:var(--form-label-gap)}
+.form-field>label{margin:0}
+.field-action-row,.client-path-row{display:flex;align-items:center;gap:var(--form-action-gap)}
+.field-action-row>input,.field-action-row>select,.client-path-row>input,.client-path-row>select{flex:1;min-width:0;width:auto;margin:0;min-height:var(--control-height);box-sizing:border-box}
+.field-action-row>.action-icon,.client-path-row>.action-icon{flex:0 0 var(--control-height);width:var(--control-height);height:var(--control-height);margin:0}
+.session-drawer .account-dialog-header,.session-drawer>header{display:flex;align-items:center;justify-content:space-between;gap:var(--form-field-gap);margin:0 0 var(--modal-gap)}
+.modal-form>.account-dialog-header{margin:0}
+.session-drawer .account-dialog-header h2{margin:0}
+.session-drawer .account-dialog-close{margin-left:auto;flex-shrink:0}
+#onboarding-dialog>section{margin-top:var(--modal-gap)}
+#onboarding-dialog>section h3{margin:0 0 var(--form-field-gap)}
+#onboarding-dialog> .client-path-row:last-child{justify-content:flex-end;margin-top:var(--modal-gap)}
+@media(max-width:700px){.session-drawer{padding:20px}}
+.section-header-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.section-header-actions>.action-icon{margin:0;flex-shrink:0}
+.chat-navigation>.side-title{display:flex;align-items:center;gap:12px}
+.chat-navigation>.side-title>h2{margin:0;min-width:0}
+.agent-segment{display:flex;gap:8px;margin:0 0 16px}
+.agent-segment>button{flex:1;min-height:40px;margin:0;background:transparent;border:1px solid #465464;color:#b8c5d5}
+.agent-segment>button[aria-pressed="true"]{background:#253c35;border-color:#86c6b2;color:#d2f4e7;font-weight:600}
+.agent-segment>button:focus-visible{outline:2px solid #a4d9cd;outline-offset:3px}
