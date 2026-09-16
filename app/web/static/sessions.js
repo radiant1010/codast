@@ -1,0 +1,267 @@
+/* Session workspace. Reuse the existing task-to-native-session contract. */
+(()=>{
+  const side=$('sidebar').querySelector('.side-content');
+  const drawer=el('dialog',undefined,'session-drawer');drawer.id='session-drawer';
+  function closeIcon(label,handler){const node=button('×',handler,'account-dialog-close');node.setAttribute('aria-label',label);node.title=label;return node;}
+  const heading=el('header');heading.append(el('h2','작업실 설정'),closeIcon('작업실 설정 닫기',async()=>drawer.close()));drawer.append(heading);document.body.append(drawer);
+  const connectionIntro=el('div',undefined,'client-connection-intro');
+  const connectionHint=$('clients-panel').querySelector('.hint');connectionHint.before(connectionIntro);connectionIntro.append(connectionHint,$('probe-clients'));
+  const workspaceHeader=el('div',undefined,'account-dialog-header');
+  const workspaceTitle=$('workspace-dialog-title');workspaceTitle.before(workspaceHeader);workspaceHeader.append(workspaceTitle,$('cancel-workspace'));
+  $('cancel-workspace').textContent='×';$('cancel-workspace').className='account-dialog-close';$('cancel-workspace').setAttribute('aria-label','프로젝트 연결 닫기');$('cancel-workspace').title='닫기';
+  $('close-editor').textContent='×';$('close-editor').classList.add('account-dialog-close');
+  function openSection(node){drawer.showModal();node.open=true;node.scrollIntoView({block:'start'});}
+  const project=$('project-panel');project.querySelector('summary').textContent='프로젝트';
+  const chats=el('section',undefined,'chat-navigation');
+  const title=el('div',undefined,'side-title');title.append(el('h2','채팅 세션'),$('reload'));chats.append(title);
+  const createChat=el('dialog',undefined,'session-drawer'),chatForm=el('form');
+  const chatLabel=el('label','새 채팅 이름'),chatInput=el('input');chatInput.id='new-chat-name';chatInput.maxLength=120;chatInput.required=true;chatLabel.htmlFor=chatInput.id;
+  const createButton=el('button','채팅 시작');createButton.type='submit';
+  const chatHeader=el('div',undefined,'account-dialog-header');chatHeader.append(el('h2','새 채팅'),closeIcon('새 채팅 닫기',async()=>createChat.close()));
+  chatForm.append(chatHeader,chatLabel,chatInput,createButton);createChat.append(chatForm);document.body.append(createChat);
+  chatForm.onsubmit=event=>{event.preventDefault();act(async()=>{
+    const name=chatInput.value.trim();if(!name)throw Error('채팅 이름을 입력하세요.');
+    if(groups.some(g=>g.task===name))throw Error('같은 이름의 채팅이 있습니다. 목록에서 선택하세요.');
+    filter=name;offset=0;$('task-name').value=name;createChat.close();await conversation();$('text').focus();notice('새 채팅 준비 · 첫 메시지를 보내면 저장됩니다.');
+  });};
+  chats.append(button('＋ 새 채팅',async()=>{
+    if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');
+    chatInput.value='';createChat.showModal();chatInput.focus();
+  },'new-chat'),$('task-list'),$('task-controls'));
+  project.querySelector('.side-title').remove();
+  const projectTools=el('details');projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));drawer.append(projectTools);
+  const path=el('p','프로젝트를 선택하세요.','project-location');project.append(path,el('p','Git 상태 · 아직 연결되지 않음','hint'));
+  const menu=el('nav',undefined,'workspace-menu');menu.setAttribute('aria-label','작업실 메뉴');
+  for(const [id,label] of [['settings-panel','실행 설정'],['clients-panel','에이전트 연결'],['history-panel','실행 기록'],['files-panel','참고 파일'],['setup-guide','시작 도움말']]){
+    const node=$(id);drawer.append(node);menu.append(button(label,async()=>openSection(node)));
+  }
+  const editorButton=$('open-editor');editorButton.className='';editorButton.textContent='문서 탐색';
+  menu.append(button('프로젝트 관리',async()=>openSection(projectTools)),editorButton);
+  const overview=$('overview').closest('details');drawer.append(overview);
+  side.replaceChildren(project,chats,menu);$('setup-guide').open=false;
+  const importDialog=el('dialog',undefined,'session-drawer');
+  const importHead=el('div',undefined,'account-dialog-header'),importClose=button('',async()=>importDialog.close());
+  window.actionIcon(importClose,'close','기존 세션 창 닫기');importHead.append(el('h2','기존 Codex 세션'),importClose);
+  const importList=el('div'),importPreview=el('div'),importStatus=el('p',undefined,'hint');importStatus.setAttribute('role','status');
+  const nextThreads=button('',async()=>loadThreads(true));window.actionIcon(nextThreads,'next','다음 세션 목록');nextThreads.hidden=true;
+  importDialog.append(importHead,el('p','프로젝트 루트 경로가 같은 로컬 저장 세션입니다. 데스크톱의 실시간 실행 상태는 확인하지 않습니다.','hint'),importStatus,importList,nextThreads,importPreview);document.body.append(importDialog);
+  let importProject='',importCursor=null;
+  async function loadThreads(more=false){
+    const selected=importProject;importStatus.textContent='조회 중…';nextThreads.disabled=true;
+    try{const data=await api('/projects/'+encodeURIComponent(selected)+'/codex-threads'+(more&&importCursor?'?cursor='+encodeURIComponent(importCursor):''));
+      if(selected!==importProject)return;importList.replaceChildren();importPreview.replaceChildren();
+      for(const thread of data.threads){const row=el('div',undefined,'native-thread-choice'),label=el('span',thread.name||thread.preview?.slice(0,100)||'이름 없는 세션');
+        const view=button('',async()=>previewThread(thread,selected));window.actionIcon(view,'file','저장 대화 미리보기');row.append(label,view);importList.append(row);}
+      importCursor=data.next_cursor;nextThreads.hidden=!importCursor;importStatus.textContent=data.threads.length+'개 세션 · 저장된 기록 기준';
+    }catch(error){importStatus.textContent=error.message;}finally{nextThreads.disabled=false;}
+  }
+  async function previewThread(thread,selected){
+    importStatus.textContent='대화 조회 중…';importPreview.replaceChildren();
+    try{const data=await api('/projects/'+encodeURIComponent(selected)+'/codex-threads/'+encodeURIComponent(thread.id));
+      if(selected!==importProject)return;importStatus.textContent=data.preview_scope;
+      const transcript=el('div',undefined,'native-thread-preview');for(const message of data.messages)transcript.append(el('strong',message.role==='user'?'사용자':'Codex'),el('pre',message.text));
+      if(!data.messages.length)transcript.append(el('p','표시할 저장 메시지가 없습니다.'));
+      const name=el('input');name.maxLength=120;name.value=(thread.name||'기존 Codex 세션').slice(0,120);name.setAttribute('aria-label','연결할 새 채팅 이름');
+      const ack=el('input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('데스크톱에서 이 세션의 실행을 멈췄습니다. 동시 실행하지 않겠습니다.'));
+      const attach=button('',async()=>{if(!ack.checked)return;attach.disabled=true;
+        try{if($('project').value!==selected)throw Error('프로젝트가 변경되었습니다. 다시 열어 주세요.');
+          if($('text').value.trim())throw Error('작성 중인 메시지를 먼저 보내거나 비워 주세요.');
+          const linked=await api('/projects/'+encodeURIComponent(selected)+'/codex-threads/'+encodeURIComponent(thread.id)+'/attach','POST',{task:name.value});
+          $('client').value='codex';$('cwd').value='.';$('mode').value='read-only';$('fresh').checked=false;filter=linked.task;offset=0;$('task-name').value=linked.task;importDialog.close();await conversation();actionHint();notice('세션 연결 완료 · 다음 메시지는 Codex에서 이어서 실행합니다.');
+        }catch(error){importStatus.textContent=error.message;}finally{attach.disabled=!ack.checked;}});
+      window.actionIcon(attach,'plug','선택한 세션을 새 채팅에 연결');attach.disabled=true;ack.onchange=()=>attach.disabled=!ack.checked;
+      const entry=el('div',undefined,'client-path-row');entry.append(name,attach);importPreview.append(transcript,ackLabel,entry);
+    }catch(error){importStatus.textContent=error.message;}
+  }
+  const findThreads=button('',async()=>{if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');importProject=$('project').value;importCursor=null;importPreview.replaceChildren();importList.replaceChildren();importDialog.showModal();await loadThreads();});
+  window.actionIcon(findThreads,'folder','기존 Codex 세션 찾기');title.append(findThreads);
+  $('task-controls').querySelector('summary').textContent='채팅 관리';
+  $('task-title').previousElementSibling.textContent='채팅 이름 변경 · 합치기';
+  const top=el('section',undefined,'session-dashboard');top.setAttribute('aria-label','에이전트와 실행 중인 세션');
+  const usage=el('section',undefined,'usage-panel');
+  const usageHeading=el('div',undefined,'usage-heading');usageHeading.append(el('h2','토큰 사용량 · 누적 합계'));usage.append(usageHeading);
+  for(const client of ['codex','claude']){
+    const row=el('div',undefined,'usage-row');row.append(el('strong',client==='codex'?'Codex':'Claude'));
+    const detail=el('p','현재 프로젝트 기록 없음','hint');detail.id='usage-'+client;row.append(detail);usage.append(row);
+  }
+  usage.append(el('p','현재 프로젝트 전체 기록 · 계정 한도·컨텍스트 점유율과 별개','hint'));
+  const usageDetails=el('section',undefined,'session-usage-details');usageDetails.id='recent-session-usage';usageDetails.hidden=true;
+  usageDetails.append(el('p','에이전트별 최근 채팅 3개 · 마지막 실행 순 · 완료 포함','hint'));
+  const toggleUsage=button('+',async()=>{usageDetails.hidden=!usageDetails.hidden;toggleUsage.textContent=usageDetails.hidden?'+':'−';toggleUsage.setAttribute('aria-expanded',String(!usageDetails.hidden));toggleUsage.setAttribute('aria-label',usageDetails.hidden?'최근 세션 사용량 펼치기':'최근 세션 사용량 접기');});
+  toggleUsage.setAttribute('aria-label','최근 세션 사용량 펼치기');toggleUsage.setAttribute('aria-expanded','false');toggleUsage.setAttribute('aria-controls',usageDetails.id);usageHeading.append(toggleUsage);
+  const usageList=el('div');usageList.id='session-usage-list';usageDetails.append(usageList);usage.append(usageDetails);
+  const running=el('section',undefined,'running-panel');const rh=el('div',undefined,'side-title');rh.append(el('h2','작업 중인 세션'));
+  const alerts=button('알림 0',async()=>{$('session-alerts').hidden=!$('session-alerts').hidden;});alerts.id='session-notifications';rh.append(alerts);running.append(rh);
+  const list=el('div');list.id='running-sessions';running.append(list);top.append(usage,running);$('console').prepend(top);
+  const account=el('section',undefined,'codex-account-summary');
+  const accountLabel=el('strong','Codex 계정'),accountValue=el('span','조회 중…');
+  const accountDetails=el('dialog',undefined,'session-drawer');
+  const accountHeader=el('div',undefined,'account-dialog-header');
+  const accountClose=button('×',async()=>accountDetails.close(),'account-dialog-close');
+  accountClose.setAttribute('aria-label','조회 정보 닫기');accountClose.title='닫기';
+  accountHeader.append(el('h2','Codex 조회 정보'),accountClose);accountDetails.append(accountHeader);
+  const accountBody=el('div');accountDetails.append(accountBody);document.body.append(accountDetails);
+  account.append(accountLabel,accountValue,button('모델 · 한도 상세',async()=>accountDetails.showModal()));
+  const accountPreview=el('div',undefined,'account-preview');account.append(accountPreview);
+  const metrics=el('dialog',undefined,'session-drawer');
+  const metricsHead=el('div',undefined,'account-dialog-header');
+  const metricsClose=button('×',async()=>metrics.close(),'account-dialog-close');metricsClose.setAttribute('aria-label','사용량 닫기');
+  metricsHead.append(el('h2','세션 · 사용량 상세'),metricsClose);metrics.append(metricsHead,usage,running);document.body.append(metrics);
+  usageDetails.hidden=false;toggleUsage.remove();
+  menu.append(button('사용량 대시보드',async()=>metrics.showModal()));
+  const sessionsPanel=el('section',undefined,'compact-session-panel');
+  const sessionsHead=el('div',undefined,'compact-panel-head');sessionsHead.append(el('h2','AI 세션'),alerts,button('상세',async()=>metrics.showModal()));
+  const table=el('table',undefined,'compact-session-table'),thead=el('thead'),tr=el('tr');
+  for(const name of ['AI / 채팅','상태','컨텍스트','누적 토큰','실행 모델'])tr.append(el('th',name));
+  thead.append(tr);const sessionRows=el('tbody');table.append(thead,sessionRows);sessionsPanel.append(sessionsHead,table);
+  const environment=el('section',undefined,'compact-environment');environment.append(el('h2','실행 환경'));
+  const envProject=el('p','프로젝트를 선택하세요.','hint');environment.append(envProject);
+  const envValues=el('dl'),envFields={};for(const name of ['Git','포트','Docker']){const value=el('dd','프로젝트 선택 대기');envFields[name]=value;envValues.append(el('dt',name),value);}environment.append(envValues);
+  let envBusy=false,envProjectKey=null;
+  async function refreshEnvironment(){
+    const projectName=$('project').value;
+    if(projectName!==envProjectKey){envProjectKey=projectName;for(const value of Object.values(envFields))value.textContent=projectName?'조회 중…':'프로젝트 선택 대기';}
+    if(!projectName||envBusy)return;envBusy=true;
+    try{
+      const data=await api('/projects/'+encodeURIComponent(projectName)+'/environment');
+      if($('project').value!==projectName)return;
+      const state={not_installed:'미설치',not_repository:'저장소 아님',error:'조회 실패',unavailable:'엔진 연결 불가'};
+      envFields.Git.textContent=data.git.state==='available'?(data.git.branch||'브랜치 미확인')+' · '+(data.git.changed_entries?'변경 '+data.git.changed_entries+'건':'변경 없음'):state[data.git.state]||'확인 불가';
+      envFields.Docker.textContent=data.docker.state==='available'?(data.docker.containers.length?data.docker.containers.filter(c=>c.state==='running').length+'개 실행 / '+data.docker.containers.length+'개 연결':'연결된 Compose 없음'):state[data.docker.state]||'확인 불가';
+      envFields.Docker.title='선택 프로젝트 경로와 Compose 작업 경로가 정확히 일치하는 컨테이너만 표시';
+      envFields['포트'].textContent=data.ports.values.length?data.ports.values.join(', '):'호스트 미수집';
+      envFields['포트'].title='Docker 포트: '+(data.ports.values.join(', ')||'확인된 포트 없음')+' · 일반 개발 서버 포트는 아직 미수집';
+      for(const field of [envFields.Git,envFields['포트']])field.title=field.title||field.textContent;
+    }catch(error){if($('project').value===projectName)for(const field of Object.values(envFields))field.textContent='조회 실패';}finally{envBusy=false;if($('project').value!==projectName)refreshEnvironment();}
+  }
+  setInterval(()=>{if(!document.hidden)refreshEnvironment();},15000);
+  top.replaceChildren(sessionsPanel,account,environment);
+  let statusBusy=false;
+  async function refreshAccount(){
+    if(statusBusy)return;statusBusy=true;
+    try{
+      const data=await api('/clients/codex/status');accountBody.replaceChildren();
+      const primary=data.limits.find(row=>row.bucket==='codex');
+      const duration=minutes=>minutes===10080?'주간':minutes===300?'5시간':minutes?minutes+'분':'기간 미제공';
+      accountValue.textContent=primary?duration(primary.windowDurationMins)+' 사용 '+primary.usedPercent+'%':data.state==='not_installed'?'CLI 미설치':data.state==='error'?'조회 실패':'한도 미제공';
+      accountPreview.replaceChildren();
+      if(primary&&typeof primary.usedPercent==='number'){
+        const bar=el('progress');bar.max=100;bar.value=Math.max(0,Math.min(100,primary.usedPercent));bar.setAttribute('aria-label','Codex 계정 사용률');accountPreview.append(bar);
+        accountPreview.append(el('p','초기화 · '+(primary.resetsAt?new Date(primary.resetsAt*1000).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'미제공'),'hint'));
+      }
+      const limits=el('div',undefined,'account-limits');
+      for(const row of [...data.limits].sort((a,b)=>(a.bucket==='codex'?0:1)-(b.bucket==='codex'?0:1))){
+        const card=el('section',undefined,'account-limit');
+        const name=(row.name||(row.bucket==='codex'?'Codex':row.bucket))+' · '+duration(row.windowDurationMins);
+        card.append(el('h3',name));
+        const meter=el('div',undefined,'account-limit-meter');
+        const known=typeof row.usedPercent==='number'&&Number.isFinite(row.usedPercent);
+        if(known){const bar=el('progress');bar.max=100;bar.value=Math.max(0,Math.min(100,row.usedPercent));bar.setAttribute('aria-label',name+' 사용률');meter.append(bar);}
+        meter.append(el('span',known?row.usedPercent+'% 사용':'사용률 미제공'));card.append(meter);
+        const reset=row.resetsAt?new Date(row.resetsAt*1000):null;
+        card.append(el('p','초기화 · '+(reset&&!Number.isNaN(reset.getTime())?reset.toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'미제공'),'account-limit-reset'));limits.append(card);
+      }
+      if(!data.limits.length)limits.append(el('p','한도 정보를 받지 못했습니다.','hint'));
+      accountBody.append(limits);
+      accountBody.append(el('h3','사용 가능한 모델'));
+      for(const model of data.models)accountBody.append(el('p',(model.displayName||model.model)+(model.isDefault?' · 목록 기본값':'')));
+      if(!data.models.length)accountBody.append(el('p','모델 목록을 받지 못했습니다.'));
+      accountBody.append(el('p','목록 기본값은 실제 실행 모델을 뜻하지 않습니다. 실행 모델·컨텍스트는 아직 미수집입니다.','hint'),el('p','계정 범위 · '+data.source+' · 확인 '+new Date(data.checked_at).toLocaleString()+' · 최대 60초 캐시','hint'));
+    }catch(error){accountValue.textContent='조회 실패';accountPreview.replaceChildren();accountBody.replaceChildren(el('p','조회 정보를 불러오지 못했습니다.'));}finally{statusBusy=false;}
+  }
+  refreshAccount();setInterval(()=>{if(!document.hidden)refreshAccount();},60000);
+  const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='이 화면을 연 이후 실행 종료 알림이 표시됩니다.';top.after(alertBox);
+  const expand=button('확장',async()=>{const on=$('workspace').classList.toggle('console-expanded');expand.textContent=on?'복원':'확장';expand.setAttribute('aria-pressed',String(on));});expand.setAttribute('aria-pressed','false');$('console').querySelector('header').append(expand);
+  const native=el('div',undefined,'native-session');native.id='native-session';$('console').querySelector('header').after(native);
+  const composer=$('composer'),picker=el('div',undefined,'agent-picker');const label=el('label','AI 에이전트');label.htmlFor='client';picker.append(label,$('client'));composer.prepend(picker);
+  const oldLabel=$('settings-panel').querySelector('label[for="client"]');oldLabel.remove();
+  $('action').value='run';$('auto-route').checked=false;
+  const options=$('composer').querySelector('.composer-options');const advanced=el('details',undefined,'chat-options');advanced.append(el('summary','메시지 옵션'),options);composer.append(advanced);
+  const entry=el('div',undefined,'command-entry');$('text').before(entry);entry.append($('text'),$('send'));
+  $('text').placeholder='선택한 에이전트에게 메시지를 보내세요. Ctrl+Enter로 전송';$('text').rows=2;
+  $('task-name').placeholder='채팅 이름';$('task-name').parentElement.firstChild.textContent='대상 채팅';
+  $('welcome').querySelector('h2').textContent='프로젝트를 연결하고, 대화를 시작하세요.';
+  $('welcome').querySelector('p').textContent='채팅 기록과 에이전트 세션을 한곳에서 이어갑니다.';
+  // A named chat is required for native resume; no silent topic classification.
+  composer.addEventListener('submit',event=>{
+    if(!$('task-name').value.trim()){
+      event.preventDefault();event.stopImmediatePropagation();notice('새 채팅을 만들거나 기존 채팅을 선택하세요.',true);
+    }
+  },true);
+  let snapshot={sessions:[],running:[]},previous=null,notifications=0,inFlight=false;
+  async function openChat(projectName,task){
+    if($('text').value.trim()&&!confirm('작성 중인 메시지를 지우고 다른 세션으로 이동할까요?'))return;
+    if(metrics.open)metrics.close();
+    if($('project').value!==projectName){$('project').value=projectName;await loadProject();}
+    filter=task;offset=0;$('task-name').value=task;await conversation();
+  }
+  function renderNative(){
+    path.textContent=$('workspace-root').value||'프로젝트를 선택하세요.';
+    native.replaceChildren();const rows=snapshot.sessions.filter(s=>s.project===$('project').value&&s.task===filter);
+    if(!rows.length){native.textContent=filter?'연결된 네이티브 세션 없음 · Codex/Claude 성공 실행 후 표시됩니다.':'채팅을 선택하면 연결된 에이전트 세션이 표시됩니다.';return;}
+    for(const s of rows){const item=el('span',s.client+' · '+s.session_id+' · '+s.mode);item.title=s.cwd;native.append(item);}
+  }
+  function renderUsage(){
+    const rows=(snapshot.usage||[]).filter(row=>row.project===$('project').value);
+    envProject.textContent=$('project').value||'프로젝트를 선택하세요.';
+    for(const client of ['codex','claude']){
+      const agentRows=rows.filter(row=>row.client===client);
+      const total=kind=>agentRows.some(r=>r[kind+'_reports']>0)?agentRows.reduce((n,r)=>n+(r[kind+'_tokens']??0),0).toLocaleString():'미수신';
+      $('usage-'+client).textContent=agentRows.length?'입력 '+total('input')+' / 출력 '+total('output')+' · '+agentRows.reduce((n,r)=>n+r.runs,0)+'회 실행':'수집된 토큰 정보 없음';
+    }
+    usageList.replaceChildren();
+    const chatsByAgent=new Map();
+    for(const row of rows){
+      const key=JSON.stringify([row.client,row.task]);
+      if(!chatsByAgent.has(key))chatsByAgent.set(key,{...row});
+      else{const chat=chatsByAgent.get(key);for(const field of ['runs','running','input_reports','output_reports'])chat[field]+=row[field];
+        for(const field of ['input_tokens','output_tokens'])if(row[field]!==null)chat[field]=(chat[field]??0)+row[field];
+        if((row.last_started_at||'')>(chat.last_started_at||''))chat.last_started_at=row.last_started_at;
+      }
+    }
+    const counts=new Map();
+    const summaries=new Map(chatsByAgent);
+    for(const run of snapshot.running.filter(r=>r.project===$('project').value)){
+      const client=run.command.client||run.adapter,task=run.command.task||'',key=JSON.stringify([client,task]);
+      const row=summaries.get(key)||{client,task,project:run.project,input_tokens:null,output_tokens:null,runs:0,input_reports:0,output_reports:0};
+      row.liveState=run.cancellable?'실행 중':'종료 확인 필요';summaries.set(key,row);
+    }
+    sessionRows.replaceChildren();
+    for(const row of [...summaries.values()].sort((a,b)=>Number(Boolean(b.liveState))-Number(Boolean(a.liveState))||(b.last_started_at||'').localeCompare(a.last_started_at||''))){
+      const tr=el('tr'),name=el('td');name.append(button(row.client+' · '+(row.task||'미분류'),()=>openChat(row.project,row.task)));tr.append(name,el('td',row.liveState||'실행 없음'),el('td','미수집'));
+      const known=row.input_tokens!==null&&row.output_tokens!==null;
+      const complete=known&&row.input_reports===row.runs&&row.output_reports===row.runs;
+      const token=el('td',known?(row.input_tokens+row.output_tokens).toLocaleString()+(complete?'':' (일부)'):'미수신');
+      token.title='현재 프로젝트 · 해당 AI/채팅의 저장된 누적 입력+출력';tr.append(token,el('td','미수집'));sessionRows.append(tr);
+    }
+    if(!summaries.size){const empty=el('td',$('project').value?'아직 실행 기록이 없습니다.':'프로젝트를 선택하면 세션이 표시됩니다.');empty.colSpan=5;sessionRows.append(el('tr'));sessionRows.lastChild.append(empty);}
+    for(const row of [...chatsByAgent.values()].sort((a,b)=>a.client.localeCompare(b.client)||(b.last_started_at||'').localeCompare(a.last_started_at||''))){
+      const count=counts.get(row.client)||0;if(count>=3)continue;counts.set(row.client,count+1);
+      const item=el('div',undefined,'session-usage-item');
+      item.classList.toggle('selected',row.task===filter);
+      item.append(button((row.task||'미분류')+' · '+row.client,()=>openChat(row.project,row.task)));
+      item.append(el('p','입력 '+(row.input_tokens===null?'미수신':row.input_tokens.toLocaleString())+' / 출력 '+(row.output_tokens===null?'미수신':row.output_tokens.toLocaleString())+' 토큰','usage-count'));
+      item.append(el('p',row.runs+'회 실행 · 입력 수신 '+row.input_reports+'/'+row.runs+' · 출력 수신 '+row.output_reports+'/'+row.runs+(row.running?' · 실행 중 '+row.running+'회':''),'hint'));
+      item.append(el('p','마지막 실행 '+(row.last_started_at?new Date(row.last_started_at).toLocaleString():'확인 불가'),'hint'));usageList.append(item);
+    }
+    if(!rows.length)usageList.append(el('p','프로젝트를 선택하고 실행하면 세션별 사용량이 표시됩니다.','hint'));
+  }
+  window.refreshSessionView=()=>{
+    refreshEnvironment();
+    renderUsage();
+    renderNative();refresh();
+  };
+  async function refresh(){
+    if(inFlight)return;inFlight=true;
+    try{
+      const next=await api('/session-overview');snapshot=next;list.replaceChildren();
+      for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+run.project+' / '+(run.command.task||'미분류')+' · '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트 윈도우 사용량 · 미수집','hint'));list.append(item);}
+      if(!next.running.length)list.append(el('p','실행 중인 세션이 없습니다.','hint'));
+      if(previous){for(const run of previous.filter(old=>!next.running.some(r=>r.id===old.id))){notifications++;alertBox.prepend(el('p',run.project+' · '+(run.command.task||'미분류')+' 실행 상태가 변경되었습니다. 기록을 확인하세요.'));}}
+      previous=next.running;alerts.textContent='알림 '+notifications;renderNative();renderUsage();
+    }catch(error){list.replaceChildren(el('p','세션 현황을 불러오지 못했습니다. '+error.message,'error'));sessionRows.replaceChildren();const row=el('tr'),cell=el('td','세션 조회 실패 · 다음 갱신에서 재시도합니다.');cell.colSpan=5;row.append(cell);sessionRows.append(row);}finally{inFlight=false;}
+  }
+  $('project').addEventListener('change',()=>{refreshEnvironment();for(const c of ['codex','claude'])$('usage-'+c).textContent='수집된 토큰 정보 없음';});
+  $('welcome-start').onclick=()=>openSection(projectTools);
+  refresh();setInterval(()=>{if(!document.hidden)refresh();},5000);actionHint();
+})();

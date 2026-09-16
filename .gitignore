@@ -26,6 +26,35 @@ htmlcov/
 *.sqlite3-shm
 *.log
 
+# Private runtime settings, AI connections and data exports
+/.local/
+/backups/
+/dumps/
+/exports/
+/.codex/
+/.claude/
+/.harness/
+auth.json
+credentials.json
+secrets.json
+settings.local.json
+connections.local.json
+*.local.toml
+*.local.yaml
+*.local.yml
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
+*.dump
+*.dump.sql
+*.data.sql
+*.sqlite.bak
+*.sqlite3.bak
+*.db.bak
+
 # Build products and OS metadata
 /build/
 /dist/

@@ -37,9 +37,9 @@ $('history-panel').ontoggle=()=>{if($('history-panel').open&&$('project').value)
 async function projects(selected=''){const d=await api('/projects');$('project').replaceChildren(new Option('선택하세요',''));for(const p of d.projects)$('project').add(new Option(p,p));$('project').value=selected;}
 function drawTasks(){
   $('task-list').replaceChildren();$('task-names').replaceChildren();
-  const choices=[{task:null,label:'전체 대화'},{task:'',label:'미분류'},...groups.filter(g=>g.task).map(g=>({...g,label:g.task+' · '+g.count+' · '+taskStates[g.status]}))];
+  const choices=[{task:null,label:'전체 채팅 기록'},{task:'',label:'이전 미분류 기록'},...groups.filter(g=>g.task).map(g=>({...g,label:g.task+' · '+g.count+' · '+taskStates[g.status]}))];
   for(const g of choices){const b=button(g.label,async()=>{filter=g.task;offset=0;$('task-name').value=g.task||'';showPage('chat');await conversation();},'task'+(filter===g.task?' active':''));$('task-list').append(b);if(g.task)$('task-names').append(new Option(g.task,g.task));}
-  $('chat-title').textContent=filter===null?'전체 대화':filter||'미분류';$('task-controls').hidden=!filter;
+  $('chat-title').textContent=filter===null?'전체 채팅 기록':filter||'이전 미분류 기록';$('task-controls').hidden=!filter;
   if(filter){$('task-title').value=filter;$('task-status').value=groups.find(g=>g.task===filter)?.status||'active';}
 }
 function routeView(route){$('routing').replaceChildren(el('span',(route.task?'작업: '+route.task+' · ':'')+route.reason));for(const name of route.candidates||[])$('routing').append(button(name,async()=>{$('task-name').value=name;notice('작업을 선택했습니다. 보내기를 눌러 실행하세요.');}));}
@@ -66,7 +66,7 @@ async function conversation(b=base()){
   if(!d.messages.length)$('messages').append(el('div','아직 대화가 없습니다. 아래에서 시작하세요.','empty'));
   $('messages-prev').disabled=offset===0;$('messages-next').disabled=d.messages.length<20;$('page-number').textContent=d.messages.length?(offset+1)+'–'+(offset+d.messages.length):'0개';
   const running=r.runs.filter(x=>x.status==='running');$('activity').textContent=running.length?'실행 중인 작업 '+running.length+'개':'';
-  $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);
+  $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);window.refreshSessionView?.(r.runs);
   clearTimeout(pollTimer);if(follow)followOutput(true);else $('messages').scrollTop=scroll;
 }
 function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개 기준 · 작업을 선택하면 관련 대화와 결과를 함께 볼 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+' · '+taskStates[g.status],async()=>{filter=g.task;offset=0;$('task-name').value=g.task||'';showPage('chat');await conversation();},'task'));}
@@ -74,7 +74,7 @@ async function loadProject(){
   epoch++;conversationTicket++;closeStreams();clearTimeout(pollTimer);filter=null;offset=0;historyOffset=0;groups=[];$('text').value='';$('task-name').value='';$('routing').replaceChildren();$('messages').replaceChildren();$('files').replaceChildren();$('history').replaceChildren();$('rules').textContent='프로젝트 선택 대기';$('path').value='';$('content').value='';$('workspace-root').value='';window.resetEditor?.();drawTasks();window.refreshSetup?.();
   if(!$('project').value){notice('프로젝트를 선택하세요.');return;}
   const b=base(),e=epoch,[s,workspace]=await Promise.all([api(b+'/settings'),api(b+'/workspace')]);if(!valid(b,e))return;$('workspace-root').value=workspace.path;$('cwd').value=s.cwd;$('client').value=s.client;$('mode').value=s.mode;
-  await filesAndRules(b,s.context_paths);if(!valid(b,e))return;await conversation(b);actionHint();window.refreshSetup?.();notice('프로젝트를 불러왔습니다. 왼쪽 시작 준비에서 설정을 확인하세요.');
+  await filesAndRules(b,s.context_paths);if(!valid(b,e))return;await conversation(b);actionHint();window.refreshSetup?.();notice('프로젝트를 불러왔습니다. 채팅을 선택하거나 새 채팅을 시작하세요.');
 }
 async function filesAndRules(b=base(),checked=selectedPaths()){
   const e=epoch,[rules,listing]=await Promise.all([api(b+'/rules?cwd='+encodeURIComponent($('cwd').value)),api(b+'/files')]);if(!valid(b,e))return;
@@ -85,7 +85,7 @@ $('composer').onsubmit=e=>{e.preventDefault();if(busy)return;act(async()=>{
   const b=base(),generation=epoch;busy=true;$('send').disabled=true;
   try{const data=await api(b+'/chat','POST',{text:$('text').value,task:$('task-name').value,auto_route:$('auto-route').checked,action:$('action').value,client:$('client').value,mode:$('mode').value,fresh:$('fresh').checked,cwd:$('cwd').value,context_paths:selectedPaths()});
     if(!valid(b,generation))return;routeView(data.routing);if(data.needs_selection){notice('어떤 작업인지 선택한 뒤 다시 보내세요. 아직 실행하지 않았습니다.');return;}
-    window.setupRequestSent?.();$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=null;offset=0;await conversation(b);notice(data.run_id?'요청을 접수했습니다. 대화에서 실행 상태를 확인하세요.':'메시지를 저장했습니다.');
+    window.setupRequestSent?.();$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=data.routing.task||'';offset=0;await conversation(b);notice(data.run_id?'요청을 접수했습니다. 대화에서 실행 상태를 확인하세요.':'메시지를 저장했습니다.');
   }finally{busy=false;$('send').disabled=false;}
 });};
 $('preview-route').onclick=()=>act(async()=>{const b=base(),text=$('text').value,route=await api(b+'/route','POST',{text});if(valid(b)&&text===$('text').value)routeView(route);});
@@ -102,7 +102,7 @@ $('history-prev').onclick=()=>act(async()=>{historyOffset=Math.max(0,historyOffs
 $('save-settings').onclick=()=>act(async()=>{await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
 $('update-task').onclick=()=>act(async()=>{const title=$('task-title').value.trim();if(!title)throw Error('작업 이름을 입력하세요.');if(title!==filter&&groups.some(g=>g.task===title)&&!confirm('두 작업의 기록을 합칠까요? 클라이언트 대화는 새로 시작합니다.'))return;await api(base()+'/tasks','PATCH',{task:filter,title,status:$('task-status').value});filter=title;await conversation();notice('작업을 변경했습니다.');});
 $('probe-clients').onclick=()=>act(async()=>{
-  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?' · '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');card.append(input,button('경로 저장',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('클라이언트 경로를 저장했습니다. 다시 확인을 눌러 검증하세요.');},'icon-action'));$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
+  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?' · '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('클라이언트 경로를 저장했습니다. 다시 확인을 눌러 검증하세요.');},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
 });
 act(()=>projects());
 

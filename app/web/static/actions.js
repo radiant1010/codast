@@ -19,10 +19,11 @@
     button.classList.add('action-icon');button.setAttribute('aria-label',label);button.title=label;
     button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+paths[kind]+'</svg>';
   }
-  const dynamic={'열기':'file','경로 저장':'save','복원':'restore','이 에이전트로 준비':'check','CLI 설치·연결 확인 열기':'plug','이동':'route'};
+  const dynamic={'열기':'file','경로 저장':'folder','경로 등록':'folder','복원':'restore','이 에이전트로 준비':'check','CLI 설치·연결 확인 열기':'plug','이동':'route'};
   window.decorateAction=(button,label)=>{if(dynamic[label])icon(button,dynamic[label],label);};
+  window.actionIcon=icon;
   const actions={
-    'add-workspace':['plus','폴더로 워크스페이스 추가'],
+    'add-workspace':['folder','프로젝트 폴더 선택'],
     'choose-workspace':['folder','폴더 선택 · 워크스페이스 추가'],
     'pick-folder':['folder','폴더 선택'],
     'register-folder':['plus','선택한 워크스페이스 추가'],

@@ -11,6 +11,38 @@ from app.models.schemas import ProjectCreate, Command, FileWrite, AgentResult, P
 router = APIRouter(prefix="/api")
 
 
+@router.get('/projects/{name}/codex-threads')
+def codex_threads(name: str, request: Request, cursor: str | None = Query(None, max_length=2048)):
+    from app.core.native_threads import list_threads
+    s = service(request)
+    return list_threads(s.projects.select(name), s.storage.client_path('codex'), cursor)
+
+
+@router.get('/projects/{name}/codex-threads/{identity}')
+def codex_thread(name: str, identity: str, request: Request):
+    from app.core.native_threads import read_thread
+    s = service(request)
+    return read_thread(s.projects.select(name), identity, s.storage.client_path('codex'))
+
+
+@router.post('/projects/{name}/codex-threads/{identity}/attach')
+def attach_codex_thread(name: str, identity: str, body: TaskUpdate, request: Request):
+    from app.core.native_threads import read_thread
+    s = service(request)
+    root = s.projects.select(name)
+    thread = read_thread(root, identity, s.storage.client_path('codex'), include_turns=False)
+    task = body.task.strip()
+    if not task:
+        raise ValueError('채팅 이름을 입력하세요.')
+    s.storage.attach_native_thread(name, task, str(root), thread['id'])
+    return {'task': task, 'client': 'codex', 'cwd': '.', 'mode': 'read-only'}
+
+
+@router.get('/clients/codex/status')
+def codex_status(request: Request):
+    return request.app.state.codex_status.read(service(request).storage.client_path('codex'))
+
+
 @router.get('/clients')
 async def clients(request: Request):
     import asyncio
@@ -139,6 +171,20 @@ def tasks(name: str, request: Request):
     return {"tasks": s.storage.tasks(name)}
 
 
+@router.get('/session-overview')
+def session_overview(request: Request):
+    s = service(request)
+    result = {'sessions': [], 'running': [], 'usage': []}
+    for project in s.projects.list():
+        overview = s.storage.session_overview(project)
+        result['sessions'].extend(overview['sessions'])
+        result['usage'].extend(overview['usage'])
+        for row in overview['running']:
+            row['cancellable'] = row['id'] in s.active
+            result['running'].append(row)
+    return result
+
+
 @router.get("/projects/{name}/messages")
 def messages(name: str, request: Request, task: str | None = Query(None, max_length=120),
              limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
@@ -193,6 +239,12 @@ def register_workspace(body: WorkspaceRegister, request: Request):
 @router.get('/projects/{name}/workspace')
 def workspace_detail(name: str, request: Request):
     return {'path': str(service(request).projects.select(name))}
+
+
+@router.get('/projects/{name}/environment')
+async def environment_status(name: str, request: Request):
+    root = service(request).projects.select(name)
+    return await request.app.state.environment_status.read(root)
 
 
 @router.delete('/projects/{name}')

@@ -153,6 +153,17 @@ class Storage:
                        (message_id, project, task.strip(), text, now()))
         return message_id
 
+    def attach_native_thread(self, project, task, cwd, session_id):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
+                raise FileExistsError('실행 중이거나 종료 확인이 필요한 작업이 있습니다.')
+            if db.execute('SELECT 1 FROM messages WHERE project=? AND task=?', (project, task)).fetchone():
+                raise FileExistsError('같은 이름의 채팅이 있습니다. 다른 이름을 사용하세요.')
+            db.execute('INSERT INTO client_sessions VALUES (?,?,?,?,?,?)',
+                       (project, task, 'codex', cwd, 'read-only', session_id))
+            db.execute('INSERT INTO messages VALUES (?,?,?,?,?,NULL)',
+                       (uuid4().hex, project, task, '기존 Codex 세션을 연결했습니다. 이전 대화는 네이티브 세션에 보관됩니다.', now()))
     def move_message(self, project, message_id, task):
         with self.connect() as db:
             old = db.execute("SELECT task FROM messages WHERE project=? AND id=?", (project,message_id)).fetchone()
@@ -204,6 +215,45 @@ class Storage:
         if not row:
             raise FileNotFoundError("실행을 찾을 수 없습니다.")
         return {**dict(row), "command": json.loads(row['command']), "metadata": json.loads(row['metadata'])}
+
+    def session_overview(self, project):
+        """Read native links and all unresolved runs, without a history-page limit."""
+        with self.connect() as db:
+            sessions = [dict(row) for row in db.execute(
+                'SELECT * FROM client_sessions WHERE project=? ORDER BY task,client', (project,))]
+            running = [dict(row) for row in db.execute(
+                "SELECT * FROM runs WHERE project=? AND status='running' ORDER BY started_at DESC", (project,))]
+        for row in running:
+            row['command'] = json.loads(row['command'])
+        return {'sessions': sessions, 'running': running, 'usage': self.session_usage(project)}
+
+    def session_usage(self, project):
+        """Aggregate recorded run usage by current chat and native session, not history page."""
+        with self.connect() as db:
+            rows = db.execute('''SELECT m.task,r.command,r.metadata,r.status,r.started_at
+                FROM runs r JOIN messages m ON m.run_id=r.id AND m.project=r.project
+                WHERE r.project=?''', (project,)).fetchall()
+        groups = {}
+        for row in rows:
+            command, meta = json.loads(row['command']), json.loads(row['metadata'])
+            key = (row['task'], command.get('client', 'mock'), meta.get('session_id'),
+                   command.get('cwd', '.'), command.get('mode', 'read-only'))
+            group = groups.setdefault(key, dict(project=project, task=key[0], client=key[1],
+                session_id=key[2], cwd=key[3], mode=key[4], runs=0, running=0,
+                input_tokens=None, output_tokens=None, input_reports=0, output_reports=0,
+                last_started_at=row['started_at']))
+            group['last_started_at'] = max(group['last_started_at'], row['started_at'])
+            group['runs'] += 1
+            group['running'] += row['status'] == 'running'
+            usage = meta.get('usage') or {}
+            if not isinstance(usage, dict):
+                continue
+            for kind in ('input', 'output'):
+                value = usage.get(kind + '_tokens')
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    group[kind + '_tokens'] = (group[kind + '_tokens'] or 0) + value
+                    group[kind + '_reports'] += 1
+        return list(groups.values())
 
     def session(self, project, task, client, cwd, mode):
         if not task:

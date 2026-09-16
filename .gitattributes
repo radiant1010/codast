@@ -1,0 +1,24 @@
+# Defense in depth for git archive; do not package local runtime data.
+/.local export-ignore
+/work export-ignore
+/outputs export-ignore
+/workspaces export-ignore
+/backups export-ignore
+/dumps export-ignore
+/exports export-ignore
+/.codex export-ignore
+/.claude export-ignore
+/.harness export-ignore
+.env export-ignore
+.env.* export-ignore
+*.sqlite* export-ignore
+*.db export-ignore
+*.db-* export-ignore
+*.dump export-ignore
+*.dump.sql export-ignore
+*.data.sql export-ignore
+auth.json export-ignore
+credentials.json export-ignore
+secrets.json export-ignore
+settings.local.json export-ignore
+connections.local.json export-ignore

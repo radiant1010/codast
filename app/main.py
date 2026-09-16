@@ -14,6 +14,8 @@ from app.tools.filesystem import FileSystemTool
 from app.llm.mock import MockAgentAdapter
 from app.core.storage import Storage
 from app.core.folder_picker import FolderPicker
+from app.llm.codex_status import CodexStatus
+from app.core.environment import EnvironmentStatus
 
 BASE = Path(__file__).resolve().parent
 
@@ -31,6 +33,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     storage = Storage(db_path or Path(os.getenv("HARNESS_DB", str(projects.root / ".harness" / "harness.sqlite3"))))
     app.state.harness = Orchestrator(projects, PolicyEngine(), FileSystemTool(), agent or MockAgentAdapter(), storage)
     app.state.folder_picker = FolderPicker()
+    app.state.codex_status = CodexStatus()
+    app.state.environment_status = EnvironmentStatus()
 
     @app.middleware("http")
     async def same_origin(request: Request, call_next):

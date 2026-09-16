@@ -18,6 +18,9 @@
   function save(update){if(!name())return;Object.assign(read(),update);try{localStorage.setItem('codast-setup:'+name(),JSON.stringify(read()));}catch{}refresh();}
   function signature(){return JSON.stringify({cwd:$('cwd').value,client:$('client').value,mode:$('mode').value,files:selectedPaths().sort()});}
   function openPanel(id,focus){
+    const dialog=$(id).closest('dialog');
+    if(dialog&&!dialog.open)dialog.showModal();
+    if(!dialog&&$('session-drawer')?.open)$('session-drawer').close();
     $('workspace').classList.remove('collapsed');$('toggle-sidebar').setAttribute('aria-expanded','true');
     $(id).open=true;$(id).scrollIntoView({block:'nearest',behavior:'smooth'});if(focus)$(focus).focus({preventScroll:true});
   }
@@ -36,7 +39,7 @@
   function go(index){
     if(index===0){openPanel('project-panel',name()?'project':'name');return;}
     if(!name())return;
-    if(index===1){openPanel('settings-panel','client');return;}
+    if(index===1){if($('session-drawer')?.open)$('session-drawer').close();$('client').focus();return;}
     if(index===2){openPanel('settings-panel','cwd');return;}
     const client=$('client').value;
     if(!$('text').value.trim())$('text').value=client==='mock'?'선택한 자료와 적용 규칙을 확인해줘.':'/'+client+' '+(selectedPaths().length?'선택한 파일을 읽고 요구사항을 정리해줘.':'이번 프로젝트에서 만들 기능을 정리하려고 해. 먼저 필요한 정보를 질문해줘.');
