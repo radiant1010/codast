@@ -127,6 +127,7 @@ class CliAdapter:
         self.runner = runner or ProcessRunner()
         self.on_event = None
         self.seen_text = {}
+        self.model = None
 
     def arguments(self, mode, session=None):
         if self.client == 'codex':
@@ -134,11 +135,15 @@ class CliAdapter:
             args = [self.path, '-c', 'approval_policy="never"', '-c', f'sandbox_mode="{mode}"', 'exec']
             if session:
                 args += ['resume', session]
+            if self.model:
+                args += ['--model', self.model]
             return args + ['--json', '--skip-git-repo-check', '-']
         args = [self.path, '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--permission-mode',
                 'plan' if mode == 'read-only' else 'acceptEdits']
         if session:
             args += ['--resume', session]
+        if self.model:
+            args += ['--model', self.model]
         return args
 
     async def execute(self, context, cwd, mode, session=None):
@@ -202,6 +207,7 @@ class CliAdapter:
 
     def parse(self, stdout):
         if self.client == 'claude':
+            execution_model = None
             try:
                 data = json.loads(stdout)
             except json.JSONDecodeError:
@@ -211,6 +217,8 @@ class CliAdapter:
                         event = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    if isinstance(event, dict) and event.get('type') == 'system' and event.get('subtype') == 'init':
+                        execution_model = event.get('model')
                     if isinstance(event, dict) and event.get('type') == 'result':
                         data = event
             if not isinstance(data, dict):
@@ -220,7 +228,7 @@ class CliAdapter:
             result = data.get('result')
             if not isinstance(result, str):
                 raise ValueError('Claude 최종 결과가 없습니다.')
-            return AgentResult(adapter='claude', output=result, session_id=data.get('session_id'), usage=data.get('usage'))
+            return AgentResult(adapter='claude', output=result, session_id=data.get('session_id'), usage=data.get('usage'), execution_model=execution_model)
         messages, session, usage, completed = [], None, None, False
         for line in stdout.splitlines():
             try:
@@ -255,6 +263,20 @@ async def probe(client, configured=''):
         if client == 'codex':
             status, _, _ = await runner.run([path, 'login', 'status'], str(Path(path).parent), timeout=10)
             auth = 'ready' if status == 0 else 'check_required'
-        return {'client': client, 'state': 'installed', 'path': path, 'version': out.strip()[:200], 'auth': auth}
-    except Exception as exc:
-        return {'client': client, 'state': 'error', 'path': path, 'detail': str(exc)[:1000]}
+        else:
+            status, auth_out, _ = await runner.run([path, 'auth', 'status', '--json'], str(Path(path).parent), timeout=10)
+            try:
+                payload = json.loads(auth_out)
+                logged_in = payload.get('loggedIn') if isinstance(payload, dict) else None
+                if logged_in is False:
+                    auth = 'check_required'
+                elif logged_in is True and status == 0:
+                    auth = 'ready'
+            except (ValueError, TypeError):
+                pass
+        return {'client': client, 'state': 'installed', 'path': path, 'version': out.strip()[:200], 'auth': auth,
+                'execution_state': 'not_verified',
+                'next_action': None if auth == 'ready' else 'login' if auth == 'check_required' else 'check_auth'}
+    except (OSError, ValueError, RuntimeError, TimeoutError):
+        return {'client': client, 'state': 'error', 'path': path, 'auth': 'unknown',
+                'detail': 'CLI 확인에 실패했습니다. 실행 권한과 설치 상태를 확인하세요.', 'next_action': 'check_cli'}

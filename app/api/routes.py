@@ -50,6 +50,18 @@ async def clients(request: Request):
     return {'clients': await asyncio.gather(*(probe(client, s.storage.client_path(client)) for client in ('codex','claude')))}
 
 
+@router.post('/connections/check')
+async def connections_check(request: Request):
+    from app.core.connections import check_connections
+    return await check_connections(service(request), request.app.state.environment_status, request.app.state.codex_status)
+
+
+@router.get('/clients/{client}/login-instructions')
+def client_login_instructions(client: str, request: Request):
+    from app.core.connections import login_instructions
+    return login_instructions(client, service(request).storage.client_path(client))
+
+
 @router.put('/clients/{client}')
 def configure_client(client: str, body: ClientConfig, request: Request):
     if client not in ('codex','claude'):

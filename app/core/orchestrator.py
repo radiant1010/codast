@@ -60,6 +60,8 @@ class Orchestrator:
         selected = [ContextPart(path=p, content=self.read_file(name, p)) for p in dict.fromkeys(command.context_paths)]
         context = self.context.build(command, rules, selected)
         adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))
+        if command.client != 'mock':
+            adapter.model = command.model
         session = None if command.fresh else self.storage.session(name, command.task, command.client, str(cwd), command.mode)
         rows = self.storage.messages(name, command.task, 30, 0) if command.task else []
         history = []
@@ -82,6 +84,7 @@ class Orchestrator:
         run_id, command, context, cwd, adapter, session = prepared
         started = time.monotonic()
         metadata = {'client': command.client, 'mode': command.mode, 'resumed': bool(session),
+                    'requested_model': command.model,
                     'history_count': len(context.history),
                     'rules': [{'path': rule.path, 'sha256': hashlib.sha256(rule.content.encode('utf-8')).hexdigest()}
                               for rule in context.rules]}
@@ -102,7 +105,7 @@ class Orchestrator:
             raise
         native_session = result.session_id or session
         self.storage.save_session(name, command.task, command.client, str(cwd), command.mode, native_session)
-        metadata.update(session_id=native_session, usage=result.usage, elapsed_seconds=round(time.monotonic()-started, 2))
+        metadata.update(session_id=native_session, usage=result.usage, execution_model=result.execution_model, elapsed_seconds=round(time.monotonic()-started, 2))
         self.storage.finish_run(run_id, "completed", output=result.output, adapter=result.adapter, metadata=metadata)
         return result.model_copy(update={"run_id": run_id})
 

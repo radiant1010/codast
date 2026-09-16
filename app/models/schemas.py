@@ -23,6 +23,7 @@ class Command(StrictModel):
     client: Literal['mock', 'codex', 'claude'] = 'mock'
     mode: Literal['read-only', 'workspace-write'] = 'read-only'
     fresh: bool = False
+    model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
 
 
 class MessageCreate(StrictModel):
@@ -83,3 +84,4 @@ class AgentResult(BaseModel):
     run_id: str | None = None
     session_id: str | None = None
     usage: dict | None = None
+    execution_model: str | None = None
