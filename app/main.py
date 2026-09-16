@@ -16,6 +16,7 @@ from app.core.storage import Storage
 from app.core.folder_picker import FolderPicker
 from app.llm.codex_status import CodexStatus
 from app.core.environment import EnvironmentStatus
+from app.core.onboarding import Onboarding
 
 BASE = Path(__file__).resolve().parent
 
@@ -35,6 +36,7 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.folder_picker = FolderPicker()
     app.state.codex_status = CodexStatus()
     app.state.environment_status = EnvironmentStatus()
+    app.state.onboarding = Onboarding(app.state.harness)
 
     @app.middleware("http")
     async def same_origin(request: Request, call_next):

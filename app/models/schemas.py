@@ -41,6 +41,7 @@ class FileWrite(StrictModel):
 
 
 class ProjectSettings(StrictModel):
+    model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$')
     cwd: str = Field(default=".", max_length=1024)
     context_paths: list[str] = Field(default_factory=list, max_length=10)
     client: Literal['mock', 'codex', 'claude'] = 'mock'
@@ -60,6 +61,12 @@ class TaskUpdate(StrictModel):
 
 class ClientConfig(StrictModel):
     path: str = Field(default='', max_length=2048)
+
+
+class OnboardingSelection(StrictModel):
+    project: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$')
+    client: Literal['codex', 'claude'] | None = None
+    deferred: bool = False
 
 
 class RouteRequest(StrictModel):

@@ -11,11 +11,60 @@ from app.models.schemas import ProjectCreate, Command, FileWrite, AgentResult, P
 router = APIRouter(prefix="/api")
 
 
+@router.get('/onboarding')
+def onboarding(request: Request):
+    return request.app.state.onboarding.read()
+
+
+from app.models.schemas import OnboardingSelection
+
+
+@router.put('/onboarding')
+async def select_onboarding(body: OnboardingSelection, request: Request):
+    return await request.app.state.onboarding.select(body)
+
+
+@router.post('/onboarding/check')
+async def check_onboarding(request: Request):
+    return await request.app.state.onboarding.check()
+
+
 @router.get('/projects/{name}/codex-threads')
 def codex_threads(name: str, request: Request, cursor: str | None = Query(None, max_length=2048)):
     from app.core.native_threads import list_threads
     s = service(request)
     return list_threads(s.projects.select(name), s.storage.client_path('codex'), cursor)
+
+
+def thread_provider(client):
+    from app.core import native_threads, claude_threads
+    if client not in ('codex', 'claude'):
+        raise ValueError('지원하지 않는 에이전트입니다.')
+    return native_threads if client == 'codex' else claude_threads
+
+
+@router.get('/projects/{name}/native-threads/{client}')
+def native_threads(name: str, client: str, request: Request, cursor: str | None = Query(None, max_length=2048)):
+    s = service(request)
+    return thread_provider(client).list_threads(s.projects.select(name), s.storage.client_path(client), cursor)
+
+
+@router.get('/projects/{name}/native-threads/{client}/{identity}')
+def native_thread(name: str, client: str, identity: str, request: Request):
+    s = service(request)
+    return thread_provider(client).read_thread(s.projects.select(name), identity, s.storage.client_path(client))
+
+
+@router.post('/projects/{name}/native-threads/{client}/{identity}/attach')
+def attach_native_thread(name: str, client: str, identity: str, body: TaskUpdate, request: Request):
+    s = service(request)
+    root = s.projects.select(name)
+    thread = thread_provider(client).read_thread(root, identity, s.storage.client_path(client), include_turns=False)
+    task = body.task.strip()
+    if not task:
+        raise ValueError('채팅 이름을 입력하세요.')
+    s.storage.attach_native_thread(name, task, str(root), thread['id'], client)
+    return {'task': task, 'client': client, 'cwd': '.', 'mode': 'read-only'}
 
 
 @router.get('/projects/{name}/codex-threads/{identity}')

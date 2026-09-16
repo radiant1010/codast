@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import UUID
 from app.llm.cli import executable
 from app.llm.codex_status import query_readonly
+from app.core.transcript import display_message, PREFIX
 
 
 def request(configured, method, params):
@@ -16,7 +17,13 @@ def request(configured, method, params):
 
 
 def summary(thread):
-    return {key: thread.get(key) for key in ('id', 'name', 'preview', 'cwd', 'updatedAt')}
+    result = {key: thread.get(key) for key in ('id', 'name', 'preview', 'cwd', 'updatedAt')}
+    for key in ('name', 'preview'):
+        text = result.get(key)
+        if isinstance(text, str) and text.startswith(PREFIX.split('\n')[0]):
+            message = display_message('user', text)
+            result[key] = message['text'] if 'delivery_details' in message else '하네스 요청 · 대화 미리보기에서 확인'
+    return result
 
 
 def list_threads(root, configured='', cursor=None):
@@ -39,7 +46,7 @@ def read_thread(root, identity, configured='', include_turns=True):
         for item in turn.get('items', []):
             if item.get('type') == 'userMessage':
                 text = '\n'.join(c.get('text', '') for c in item.get('content', []) if c.get('type') == 'text')
-                messages.append({'role': 'user', 'text': text[:8000]})
+                messages.append(display_message('user', text))
             elif item.get('type') == 'agentMessage':
                 messages.append({'role': 'assistant', 'text': item.get('text', '')[:8000]})
     result.update(messages=messages[-20:], live_state='unknown', preview_scope='최근 최대 10턴 / 20메시지, 메시지당 8000자')

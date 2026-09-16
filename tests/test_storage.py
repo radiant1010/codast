@@ -15,14 +15,14 @@ def test_restart_restores_settings_and_history(tmp_path):
         client.post('/api/projects', json={'name': 'one'})
         client.post('/api/projects', json={'name': 'two'})
         client.put('/api/projects/one/file', json={'path': 'source/a.py', 'content': 'print(1)'})
-        settings = {'cwd': 'source', 'context_paths': ['source/a.py'], 'client': 'mock', 'mode': 'read-only'}
+        settings = {'cwd': 'source', 'context_paths': ['source/a.py'], 'client': 'mock', 'mode': 'read-only', 'model': 'test-model'}
         assert client.put('/api/projects/one/settings', json=settings).status_code == 200
         result = client.post('/api/projects/one/commands', json={'text': "it's a task; DROP TABLE runs;", **settings})
         assert result.status_code == 200
         run_id = result.json()['run_id']
     with TestClient(create_app(root)) as client:
         assert client.get('/api/projects/one/settings').json() == settings
-        assert client.get('/api/projects/two/settings').json() == {'cwd': '.', 'context_paths': [], 'client': 'mock', 'mode': 'read-only'}
+        assert client.get('/api/projects/two/settings').json() == {'cwd': '.', 'context_paths': [], 'client': 'mock', 'mode': 'read-only', 'model': None}
         records = client.get('/api/projects/one/runs').json()['runs']
         assert len(records) == 1
         assert records[0]['id'] == run_id
@@ -67,7 +67,7 @@ def test_settings_validate_paths_and_origin(tmp_path):
             assert client.put('/api/projects/sample/settings', json=settings).status_code == 403
         assert client.put('/api/projects/sample/settings', json={'cwd': 'missing'}).status_code == 404
         assert client.put('/api/projects/sample/settings', json={'cwd': '.'}, headers={'Origin': 'https://evil.example'}).status_code == 403
-        assert client.get('/api/projects/sample/settings').json() == {'cwd': '.', 'context_paths': [], 'client': 'mock', 'mode': 'read-only'}
+        assert client.get('/api/projects/sample/settings').json() == {'cwd': '.', 'context_paths': [], 'client': 'mock', 'mode': 'read-only', 'model': None}
 
 
 def test_concurrent_writes_and_pagination(tmp_path):

@@ -17,7 +17,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 4:
+            if version > 5:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -94,6 +94,33 @@ class Storage:
                     COMMIT;
                 """)
 
+            if version < 5:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE IF NOT EXISTS onboarding_state (
+                        id INTEGER PRIMARY KEY CHECK(id=1),
+                        status TEXT NOT NULL CHECK(status IN ('in_progress','deferred','completed')),
+                        project TEXT,
+                        client TEXT CHECK(client IN ('codex','claude')),
+                        step TEXT NOT NULL CHECK(step IN ('project','client','authentication','complete')),
+                        updated_at TEXT NOT NULL
+                    );
+                    PRAGMA user_version=5;
+                    COMMIT;
+                """)
+
+    def onboarding(self):
+        with self.connect() as db:
+            row = db.execute('SELECT status,project,client,step,updated_at FROM onboarding_state WHERE id=1').fetchone()
+            return dict(row) if row else {'status': 'pending', 'project': None, 'client': None, 'step': 'client', 'updated_at': None}
+
+    def save_onboarding(self, status, project, client, step):
+        with self.connect() as db:
+            db.execute('INSERT INTO onboarding_state VALUES (1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET '
+                       'status=excluded.status,project=excluded.project,client=excluded.client,step=excluded.step,updated_at=excluded.updated_at',
+                       (status, project, client, step, now()))
+        return self.onboarding()
+
     def append_event(self, run_id, kind, text):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -153,7 +180,9 @@ class Storage:
                        (message_id, project, task.strip(), text, now()))
         return message_id
 
-    def attach_native_thread(self, project, task, cwd, session_id):
+    def attach_native_thread(self, project, task, cwd, session_id, client="codex"):
+        if client not in ("codex", "claude"):
+            raise ValueError("지원하지 않는 에이전트입니다.")
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
@@ -161,9 +190,9 @@ class Storage:
             if db.execute('SELECT 1 FROM messages WHERE project=? AND task=?', (project, task)).fetchone():
                 raise FileExistsError('같은 이름의 채팅이 있습니다. 다른 이름을 사용하세요.')
             db.execute('INSERT INTO client_sessions VALUES (?,?,?,?,?,?)',
-                       (project, task, 'codex', cwd, 'read-only', session_id))
+                       (project, task, client, cwd, 'read-only', session_id))
             db.execute('INSERT INTO messages VALUES (?,?,?,?,?,NULL)',
-                       (uuid4().hex, project, task, '기존 Codex 세션을 연결했습니다. 이전 대화는 네이티브 세션에 보관됩니다.', now()))
+                       (uuid4().hex, project, task, f'기존 {client} 세션을 연결했습니다. 이전 대화는 네이티브 세션에 보관됩니다.', now()))
     def move_message(self, project, message_id, task):
         with self.connect() as db:
             old = db.execute("SELECT task FROM messages WHERE project=? AND id=?", (project,message_id)).fetchone()
