@@ -23,8 +23,8 @@
   chatForm.className='modal-form';chatForm.append(chatHeader,chatField);createChat.append(chatForm);document.body.append(createChat);
   chatForm.onsubmit=event=>{event.preventDefault();act(async()=>{
     const name=chatInput.value.trim();if(!name)throw Error('채팅 이름을 입력하세요.');
-    if(groups.some(g=>g.task===name))throw Error('같은 이름의 채팅이 있습니다. 목록에서 선택하세요.');
-    filter=name;offset=0;$('task-name').value=name;createChat.close();await conversation();$('text').focus();notice('새 채팅 준비 · 첫 메시지를 보내면 저장됩니다.');
+    if(groups.some(g=>g.task===name)||window.chatState.drafts($('project').value).includes(name))throw Error('같은 이름의 채팅이 있습니다. 목록에서 선택하세요.');
+    createChat.close();await switchChat(name);$('text').focus();notice('새 채팅 준비 · 작성 내용은 이 탭에 보관되며 첫 전송 후 서버에 저장됩니다.');
   });};
   chats.append(button('＋ 새 채팅',async()=>{
     if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');
@@ -35,7 +35,7 @@
   const path=el('p','프로젝트를 선택하세요.','project-location');project.append(path,el('p','Git 상태 · 아직 연결되지 않음','hint'));
   const menu=el('nav',undefined,'workspace-menu');menu.setAttribute('aria-label','작업실 메뉴');
   for(const [id,label] of [['settings-panel','실행 설정'],['clients-panel','에이전트 연결'],['history-panel','실행 기록'],['files-panel','참고 파일'],['setup-guide','시작 도움말']]){
-    const node=$(id);drawer.append(node);menu.append(button(label,async()=>openSection(node)));
+    const node=$(id);drawer.append(node);menu.append(button(label,async()=>id==='clients-panel'&&window.openConnections?window.openConnections():openSection(node)));
   }
   const editorButton=$('open-editor');editorButton.className='';editorButton.textContent='문서 탐색';
   menu.append(button('프로젝트 관리',async()=>openSection(projectTools)),editorButton);
@@ -78,9 +78,9 @@
       const ack=el('input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('다른 창이나 CLI에서 이 세션의 실행을 멈췄습니다. 동시 실행하지 않겠습니다.'));
       const attach=button('선택',async()=>{if(!ack.checked)return;attach.disabled=true;
         try{if($('project').value!==selected||agent!==selectedImportClient)throw Error('프로젝트가 변경되었습니다. 다시 열어 주세요.');
-          if($('text').value.trim())throw Error('작성 중인 메시지를 먼저 보내거나 비워 주세요.');
+          window.chatState.save();
           const linked=await api('/projects/'+encodeURIComponent(selected)+'/native-threads/'+agent+'/'+encodeURIComponent(thread.id)+'/attach','POST',{task:name.value});
-          $('client').value=linked.client;await window.loadModelChoices?.();$('cwd').value='.';$('mode').value='read-only';$('fresh').checked=false;filter=linked.task;offset=0;$('task-name').value=linked.task;importDialog.close();await conversation();actionHint();notice('세션 연결 완료 · 다음 메시지는 선택한 에이전트에서 이어서 실행합니다.');
+          if($('project').value!==selected)throw Error('세션은 원래 프로젝트에 연결됐습니다. 해당 프로젝트에서 채팅을 선택하세요.');window.chatState.seed(selected,linked.task,{client:linked.client,cwd:'.',mode:'read-only',model:null,paths:[],fresh:false,action:'run'});importDialog.close();await switchChat(linked.task);actionHint();notice('세션 연결 완료 · 다음 메시지는 선택한 에이전트에서 이어서 실행합니다.');
         }catch(error){importStatus.textContent=error.message;}finally{attach.disabled=!ack.checked;}});
       attach.title='선택한 세션을 새 채팅에 연결';attach.disabled=true;ack.onchange=()=>attach.disabled=!ack.checked;
       const entry=el('div',undefined,'client-path-row');entry.append(name,attach);importPreview.append(transcript,ackLabel,entry);
@@ -203,10 +203,9 @@
   },true);
   let snapshot={sessions:[],running:[]},previous=null,notifications=0,inFlight=false;
   async function openChat(projectName,task){
-    if($('text').value.trim()&&!confirm('작성 중인 메시지를 지우고 다른 세션으로 이동할까요?'))return;
     if(metrics.open)metrics.close();
     if($('project').value!==projectName){$('project').value=projectName;await loadProject();}
-    filter=task;offset=0;$('task-name').value=task;await conversation();
+    await switchChat(task);
   }
   function renderNative(){
     path.textContent=$('workspace-root').value||'프로젝트를 선택하세요.';

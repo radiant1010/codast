@@ -111,6 +111,15 @@ def client_login_instructions(client: str, request: Request):
     return login_instructions(client, service(request).storage.client_path(client))
 
 
+@router.post('/clients/{client}/executable-picker')
+async def pick_client_executable(client: str, request: Request):
+    if client not in ('codex', 'claude'):
+        raise ValueError('지원하지 않는 클라이언트입니다.')
+    path = await request.app.state.folder_picker.pick(executable=True)
+    # Selection alone does not change settings or execute the chosen file.
+    return {'path': executable(client, path) if path else None}
+
+
 @router.put('/clients/{client}')
 def configure_client(client: str, body: ClientConfig, request: Request):
     if client not in ('codex','claude'):

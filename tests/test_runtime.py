@@ -159,7 +159,7 @@ def test_task_merge_and_completed_topic_is_not_silently_reopened(tmp_path):
 
 
 def test_missing_client_does_not_fallback_to_mock(tmp_path, monkeypatch):
-    monkeypatch.setattr('app.llm.cli.shutil.which',lambda *args:None)
+    monkeypatch.setattr('app.llm.cli.discovery_candidates',lambda *args:iter(()))
     with TestClient(create_app(tmp_path/'ws')) as c:
         c.post('/api/projects',json={'name':'one'})
         response=c.post('/api/projects/one/chat',json={'text':'run','task':'one','client':'claude','action':'run'})

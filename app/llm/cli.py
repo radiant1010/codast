@@ -12,10 +12,31 @@ import time
 from app.models.schemas import AgentResult
 
 
+def discovery_candidates(client):
+    """PATH first, then bounded native install locations; never run shell wrappers."""
+    found = shutil.which(client)
+    if found:
+        yield Path(found)
+    if os.name != 'nt':
+        return
+    try:
+        home = Path.home()
+    except RuntimeError:
+        home = None
+    if home:
+        yield home / '.local' / 'bin' / (client + '.exe')
+    local = os.environ.get('LOCALAPPDATA')
+    if client == 'codex' and local:
+        folder = Path(local) / 'OpenAI' / 'Codex' / 'bin'
+        if folder.is_dir():
+            yield from sorted(folder.glob('*/codex.exe'), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
 def executable(client, configured=''):
     if client not in ('codex', 'claude'):
         raise ValueError('지원하지 않는 클라이언트입니다.')
-    path = configured or shutil.which(client) or ''
+    path = configured or next((str(p) for p in discovery_candidates(client)
+                               if p.is_file() and (os.name != 'nt' or p.suffix.lower() == '.exe')), '')
     if not path or not Path(path).is_file():
         raise FileNotFoundError(f'{client} 실행 파일을 찾지 못했습니다. 설치 후 클라이언트 화면에서 경로를 지정하세요.')
     path = str(Path(path).resolve())

@@ -1,4 +1,5 @@
 const $=id=>document.getElementById(id);
+let projectDefaults={}, chatLoading=false;
 let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false, pollTimer;
 const statusNames={running:'실행 중 / 종료 미확인',completed:'완료',failed:'실패',interrupted:'중단'};
 const taskStates={active:'진행',paused:'보류',done:'완료'};
@@ -37,8 +38,9 @@ $('history-panel').ontoggle=()=>{if($('history-panel').open&&$('project').value)
 async function projects(selected=''){const d=await api('/projects');$('project').replaceChildren(new Option('선택하세요',''));for(const p of d.projects)$('project').add(new Option(p,p));$('project').value=selected;}
 function drawTasks(){
   $('task-list').replaceChildren();$('task-names').replaceChildren();
-  const choices=[{task:null,label:'전체 채팅 기록'},{task:'',label:'이전 미분류 기록'},...groups.filter(g=>g.task).map(g=>({...g,label:g.task+' · '+g.count+' · '+taskStates[g.status]}))];
-  for(const g of choices){const b=button(g.label,async()=>{filter=g.task;offset=0;$('task-name').value=g.task||'';showPage('chat');await conversation();},'task'+(filter===g.task?' active':''));$('task-list').append(b);if(g.task)$('task-names').append(new Option(g.task,g.task));}
+  const drafts=window.chatState.drafts($('project').value).filter(task=>!groups.some(g=>g.task===task)).map(task=>({task,label:task+' · 작성 중'}));
+  const choices=[{task:null,label:'전체 채팅 기록'},{task:'',label:'이전 미분류 기록'},...groups.filter(g=>g.task).map(g=>({...g,label:g.task+' · '+g.count+' · '+taskStates[g.status]})),...drafts];
+  for(const g of choices){const b=button(g.label,async()=>{await switchChat(g.task);},'task'+(filter===g.task?' active':''));$('task-list').append(b);if(g.task)$('task-names').append(new Option(g.task,g.task));}
   $('chat-title').textContent=filter===null?'전체 채팅 기록':filter||'이전 미분류 기록';$('task-controls').hidden=!filter;
   if(filter){$('task-title').value=filter;$('task-status').value=groups.find(g=>g.task===filter)?.status||'active';}
 }
@@ -69,24 +71,35 @@ async function conversation(b=base()){
   $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);window.refreshSessionView?.(r.runs);
   clearTimeout(pollTimer);if(follow)followOutput(true);else $('messages').scrollTop=scroll;
 }
-function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개 기준 · 작업을 선택하면 관련 대화와 결과를 함께 볼 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+' · '+taskStates[g.status],async()=>{filter=g.task;offset=0;$('task-name').value=g.task||'';showPage('chat');await conversation();},'task'));}
+function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개 기준 · 작업을 선택하면 관련 대화와 결과를 함께 볼 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+' · '+taskStates[g.status],async()=>{await switchChat(g.task);},'task'));}
+async function switchChat(task){
+  window.chatState.pause();epoch++;conversationTicket++;closeStreams();chatLoading=true;$('send').disabled=true;
+  filter=task;const b=base(),e=epoch;
+  try{const restored=await window.chatState.restore($('project').value,task,projectDefaults);
+    if(!valid(b,e)||!restored)return;$('files').replaceChildren();
+    try{await filesAndRules(b,restored.state.paths);}catch(error){if(valid(b,e))notice('참고 자료 복원 실패 · 작업 경로를 확인하세요: '+error.message,true);}
+    if(!valid(b,e))return;
+    await conversation(b);if(valid(b,e))window.chatState.finish(restored);
+  }finally{if(valid(b,e)){chatLoading=false;$('send').disabled=busy;}}
+}
 async function loadProject(){
+  window.chatState.pause();chatLoading=true;$('send').disabled=true;
   epoch++;conversationTicket++;closeStreams();clearTimeout(pollTimer);filter=null;offset=0;historyOffset=0;groups=[];$('text').value='';$('task-name').value='';$('routing').replaceChildren();$('messages').replaceChildren();$('files').replaceChildren();$('history').replaceChildren();$('rules').textContent='프로젝트 선택 대기';$('path').value='';$('content').value='';$('workspace-root').value='';window.resetEditor?.();drawTasks();window.refreshSetup?.();
-  if(!$('project').value){notice('프로젝트를 선택하세요.');return;}
-  const b=base(),e=epoch,[s,workspace]=await Promise.all([api(b+'/settings'),api(b+'/workspace')]);if(!valid(b,e))return;$('workspace-root').value=workspace.path;$('cwd').value=s.cwd;$('client').value=s.client;$('mode').value=s.mode;await window.loadModelChoices?.(s.model);
-  await filesAndRules(b,s.context_paths);if(!valid(b,e))return;await conversation(b);actionHint();window.refreshSetup?.();notice('프로젝트를 불러왔습니다. 채팅을 선택하거나 새 채팅을 시작하세요.');
+  if(!$('project').value){chatLoading=false;notice('프로젝트를 선택하세요.');return;}
+  const b=base(),e=epoch,[s,workspace]=await Promise.all([api(b+'/settings'),api(b+'/workspace')]);if(!valid(b,e))return;$('workspace-root').value=workspace.path;projectDefaults=s;
+  await switchChat(window.chatState.selected($('project').value));window.refreshSetup?.();notice('프로젝트와 채팅의 작성 상태를 복원했습니다.');
 }
 async function filesAndRules(b=base(),checked=selectedPaths()){
   const e=epoch,[rules,listing]=await Promise.all([api(b+'/rules?cwd='+encodeURIComponent($('cwd').value)),api(b+'/files')]);if(!valid(b,e))return;
   window.setEditorFiles?.(listing.files);$('rules').textContent=rules.rules.map(r=>'# '+r.path+'\n'+r.content).join('\n')||'RULES.md 없음';$('files').replaceChildren();for(const path of listing.files){const label=el('label'),box=el('input');box.type='checkbox';box.value=path;box.checked=checked.includes(path);box.onchange=actionHint;label.append(box,document.createTextNode(path));const row=el('div',undefined,'file-row');row.append(label,button('열기',async()=>window.openDocument(path),'secondary'));$('files').append(row);}
 }
 async function history(){const b=base(),e=epoch,d=await api(b+'/runs?limit=20&offset='+historyOffset);if(!valid(b,e))return;$('history').replaceChildren();for(const r of d.runs){const item=el('details');item.append(el('summary',new Date(r.started_at).toLocaleString()+' · '+r.adapter+' · '+statusNames[r.status]+' · '+r.command.text.slice(0,60)),el('pre',r.output||r.error||'실행 중 / 종료 미확인'));$('history').append(item);}if(!d.runs.length)$('history').textContent='실행 기록이 없습니다.';$('history-prev').disabled=historyOffset===0;$('history-next').disabled=d.runs.length<20;}
-$('composer').onsubmit=e=>{e.preventDefault();if(busy)return;act(async()=>{
-  const b=base(),generation=epoch;busy=true;$('send').disabled=true;
+$('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;act(async()=>{
+  const b=base(),generation=epoch,sentProject=$('project').value,sentTask=filter,sentText=$('text').value;window.chatState.save();busy=true;$('send').disabled=true;
   try{const data=await api(b+'/chat','POST',{text:$('text').value,task:$('task-name').value,auto_route:$('auto-route').checked,action:$('action').value,client:$('client').value,mode:$('mode').value,fresh:$('fresh').checked,model:window.selectedExecutionModel?.()||null,cwd:$('cwd').value,context_paths:selectedPaths()});
-    if(!valid(b,generation))return;routeView(data.routing);if(data.needs_selection){notice('어떤 작업인지 선택한 뒤 다시 보내세요. 아직 실행하지 않았습니다.');return;}
-    window.setupRequestSent?.();$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=data.routing.task||'';offset=0;await conversation(b);notice(data.run_id?'요청을 접수했습니다. 대화에서 실행 상태를 확인하세요.':'메시지를 저장했습니다.');
-  }finally{busy=false;$('send').disabled=false;}
+    if(!data.needs_selection)window.chatState.sent(sentProject,sentTask,sentText);if(!valid(b,generation))return;routeView(data.routing);if(data.needs_selection){notice('어떤 작업인지 선택한 뒤 다시 보내세요. 아직 실행하지 않았습니다.');return;}
+    window.setupRequestSent?.();if($('text').value===sentText)$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=data.routing.task||'';offset=0;window.chatState.save();await conversation(b);notice(data.run_id?'요청을 접수했습니다. 대화에서 실행 상태를 확인하세요.':'메시지를 저장했습니다.');
+  }finally{busy=false;$('send').disabled=chatLoading;}
 });};
 $('preview-route').onclick=()=>act(async()=>{const b=base(),text=$('text').value,route=await api(b+'/route','POST',{text});if(valid(b)&&text===$('text').value)routeView(route);});
 function actionHint(){const match=$('text').value.trim().match(/^\/(codex|claude)(?:\s|$)/);const client=match?match[1]:$('client').value;const run=!!match||$('action').value==='run';$('action-hint').textContent=(run?client+' 실행 · '+($('mode').value==='read-only'?'읽기 전용':'코드 수정 허용'):'일반 메시지는 기록만')+' · 첨부 '+selectedPaths().length+'개 · /codex 또는 /claude 명령은 지정한 에이전트로 실행합니다.';}
@@ -99,8 +112,8 @@ $('create').onsubmit=e=>{e.preventDefault();act(async()=>{const name=$('name').v
 $('reload').onclick=()=>act(()=>conversation());$('reload-rules').onclick=()=>act(()=>filesAndRules());
 $('messages-prev').onclick=()=>act(async()=>{offset=Math.max(0,offset-20);await conversation();});$('messages-next').onclick=()=>act(async()=>{offset+=20;await conversation();});
 $('history-prev').onclick=()=>act(async()=>{historyOffset=Math.max(0,historyOffset-20);await history();});$('history-next').onclick=()=>act(async()=>{historyOffset+=20;await history();});
-$('save-settings').onclick=()=>act(async()=>{await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
-$('update-task').onclick=()=>act(async()=>{const title=$('task-title').value.trim();if(!title)throw Error('작업 이름을 입력하세요.');if(title!==filter&&groups.some(g=>g.task===title)&&!confirm('두 작업의 기록을 합칠까요? 클라이언트 대화는 새로 시작합니다.'))return;await api(base()+'/tasks','PATCH',{task:filter,title,status:$('task-status').value});filter=title;await conversation();notice('작업을 변경했습니다.');});
+$('save-settings').onclick=()=>act(async()=>{projectDefaults=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
+$('update-task').onclick=()=>act(async()=>{const title=$('task-title').value.trim();if(!title)throw Error('작업 이름을 입력하세요.');if(title!==filter&&groups.some(g=>g.task===title)&&!confirm('두 작업의 기록을 합칠까요? 클라이언트 대화는 새로 시작합니다.'))return;window.chatState.checkRename($('project').value,filter,title);await api(base()+'/tasks','PATCH',{task:filter,title,status:$('task-status').value});window.chatState.rename($('project').value,filter,title);await switchChat(title);notice('작업을 변경했습니다.');});
 $('probe-clients').onclick=()=>act(async()=>{
   $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?' · '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('클라이언트 경로를 저장했습니다. 다시 확인을 눌러 검증하세요.');},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
 });

@@ -5,7 +5,7 @@ import os
 import subprocess
 
 
-def choose_folder():
+def choose_folder(executable=False):
     if os.name != 'nt':
         raise ValueError('폴더 선택 창은 현재 Windows 로컬 실행에서 지원합니다.')
     script = r'''
@@ -21,6 +21,9 @@ try {
     } else { ConvertTo-Json -Compress -InputObject @{path=$null} }
 } finally { $picker.Dispose() }
 '''
+    if executable:
+        script = script.replace("$picker = New-Object System.Windows.Forms.FolderBrowserDialog\n$picker.Description = 'Codast에서 사용할 워크스페이스 폴더를 선택하세요'\n$picker.ShowNewFolderButton = $false", "$picker = New-Object System.Windows.Forms.OpenFileDialog\n$picker.Title = 'CLI 실행 파일을 선택하세요'\n$picker.Filter = '실행 파일 (*.exe)|*.exe'\n$picker.CheckFileExists = $true\n$picker.Multiselect = $false")
+        script = script.replace('$picker.SelectedPath', '$picker.FileName')
     try:
         result = subprocess.run(['powershell.exe', '-NoProfile', '-STA', '-Command', script],
                                 capture_output=True, encoding='utf-8', timeout=180,
@@ -36,10 +39,10 @@ class FolderPicker:
     def __init__(self):
         self.busy = False
 
-    async def pick(self):
+    async def pick(self, *, executable=False):
         if self.busy:
             raise FileExistsError('이미 폴더 선택 창이 열려 있습니다.')
         self.busy = True
-        task = asyncio.create_task(asyncio.to_thread(choose_folder))
+        task = asyncio.create_task(asyncio.to_thread(choose_folder, True) if executable else asyncio.to_thread(choose_folder))
         task.add_done_callback(lambda _: setattr(self, 'busy', False))
         return await asyncio.shield(task)
