@@ -104,3 +104,10 @@
 .agent-segment>button{flex:1;min-height:40px;margin:0;background:transparent;border:1px solid #465464;color:#b8c5d5}
 .agent-segment>button[aria-pressed="true"]{background:#253c35;border-color:#86c6b2;color:#d2f4e7;font-weight:600}
 .agent-segment>button:focus-visible{outline:2px solid #a4d9cd;outline-offset:3px}
+
+#startup-loading{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0c1118aa;backdrop-filter:blur(5px);padding:24px;text-align:center}
+#startup-loading[hidden]{display:none}
+.startup-spinner{width:32px;height:32px;border:3px solid #344050;border-top-color:#9bd4b9;border-radius:50%;animation:startup-spin .9s linear infinite}
+#startup-loading.failed .startup-spinner{display:none}
+@keyframes startup-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.startup-spinner{animation:none}}

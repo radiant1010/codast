@@ -73,3 +73,5 @@ Codex·Claude 모두 같은 진행·복원 계약을 사용한다. Claude는 `cl
 자동 검색은 PATH를 우선하고 Windows에서는 사용자 `.local/bin/{client}.exe`, Codex 데스크톱의 `LOCALAPPDATA/OpenAI/Codex/bin/*/codex.exe`도 확인한다. 셸 래퍼는 실행하지 않는다. 명시적으로 저장한 잘못된 경로를 임의의 다른 실행 파일로 대체하지 않으며 사용자가 자동 검색을 선택하면 해제한다. 근거는 [기존 실행 파일 검증과 후보 검색](../app/llm/cli.py), [기존 폴더 선택기의 파일 선택 확장](../app/core/folder_picker.py)이다.
 
 검증: 브라우저에서 테스트 대역으로 양쪽 상태 전환·경로 분리·파일 선택 결과 저장·취소 안내를 확인했다. Windows 실제 파일 선택창의 클릭 조작은 미검증이며 OpenFileDialog 생성·선택/취소 API·Origin 검사·기본 위치 자동 검색은 자동 테스트로 확인한다. 실제 로컬 서버는 Codex 설치/인증 확인, Claude 설치/로그인 필요로 조회됐다. Claude의 존재하지 않는 데스크톱 앱 경로 설정을 자동 검색으로 되돌려 설치된 CLI를 찾았다. 실제 경로·인증값은 공개 문서에 남기지 않는다.
+
+시작 모달 재표시 보완: 시작 시 마지막/저장 프로젝트를 먼저 복원한다. 복원할 프로젝트가 없어도 Codex·Claude 중 하나가 installed/auth=ready이면 자동 모달을 생략하고 프로젝트 선택을 안내한다. completed/deferred 상태는 자동으로 열지 않으며 조회 실패도 재설정으로 간주하지 않는다. 최초 pending/in_progress이고 인증된 에이전트가 없을 때만 자동으로 연다. 에이전트 연결 메뉴의 수동 열기는 유지한다. node --test tests/test_startup.cjs 3개 통과.

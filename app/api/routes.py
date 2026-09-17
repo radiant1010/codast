@@ -4,7 +4,7 @@ import asyncio
 import json
 from app.core.commands import parse_command
 from app.models.schemas import WorkspaceRegister
-from app.models.schemas import ChatRequest, Command, TaskUpdate, ClientConfig, RouteRequest
+from app.models.schemas import ChatRequest, ChatCreate, Command, TaskUpdate, ClientConfig, RouteRequest
 from app.llm.cli import probe, executable
 from app.models.schemas import ProjectCreate, Command, FileWrite, AgentResult, ProjectSettings, MessageCreate, MessageMove
 
@@ -156,9 +156,16 @@ async def chat(name: str, body: ChatRequest, request: Request):
                 s.storage.set_task_status(name, decision['task'], 'paused')
                 decision['reason'] += ' · 보류로 기록 (실행 취소는 별도)'
         return {'id': message_id, 'routing': decision, 'action': 'note'}
-    command = Command(**body.model_dump(exclude={'action','auto_route'}))
+    command = Command(**body.model_dump(exclude={'action','auto_route','request_id'}))
     command.task = decision['task']
-    return {'run_id': s.submit(name, command), 'routing': decision, 'action': 'run'}
+    return {'run_id': s.submit(name, command, body.request_id), 'routing': decision, 'action': 'run'}
+
+
+@router.post('/projects/{name}/tasks', status_code=201)
+def create_task(name: str, body: ChatCreate, request: Request):
+    s = service(request)
+    s.projects.select(name)
+    return s.storage.create_task(name, body.task)
 
 
 @router.patch('/projects/{name}/tasks')
@@ -260,7 +267,10 @@ def messages(name: str, request: Request, task: str | None = Query(None, max_len
              limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
     s = service(request)
     s.projects.select(name)
-    return {"messages": s.storage.messages(name, task, limit, offset)}
+    rows = s.storage.messages(name, task, limit, offset)
+    for row in rows:
+        row['cancellable'] = row['status'] == 'running' and row['run_id'] in s.active
+    return {"messages": rows}
 
 
 @router.post("/projects/{name}/messages", status_code=201)

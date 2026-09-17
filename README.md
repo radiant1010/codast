@@ -57,7 +57,7 @@ uv run uvicorn app.main:app --host 127.0.0.1 --port 8765
 
 ## 클라이언트 실행과 세션
 
-채팅별 작성 중 입력·에이전트·모델·참고 파일·작업 경로와 권한은 같은 브라우저 탭에서 전환·새로고침해도 복원됩니다. 전송 전 새 채팅은 ‘작성 중’으로 표시합니다. 탭을 닫은 뒤 복구하거나 다른 기기로 동기화하는 기능은 아직 없습니다.
+채팅별 작성 중 입력·에이전트·모델·참고 파일·작업 경로와 권한은 같은 브라우저·주소에서 탭을 닫았다 열어도 복원됩니다. 새 채팅은 생성 즉시 서버에 저장됩니다. 초안은 브라우저에만 보관하므로 사이트 데이터 삭제나 다른 기기에서는 복원되지 않으며 여러 탭의 동시 편집은 지원하지 않습니다. 단순 이름 변경은 네이티브 세션을 유지하고, 기존 채팅과 합칠 때는 연결을 초기화합니다.
 
 - Codex: `exec --json`, 저장된 ID로 `exec resume`. 실제 설치 버전에서 첫 응답·세션 재개·수정 모드 파일 생성을 검증했습니다.
 - Claude: `-p --output-format stream-json --verbose --include-partial-messages`, 저장된 ID로 `--resume`. 이 개발 환경에는 미설치여서 실제 호출은 아직 검증하지 못했습니다. 어댑터 응답·세션 전달은 테스트 대역으로 검증했습니다.
@@ -102,7 +102,7 @@ node --test tests/test_chat_state.cjs
 - `GET/POST /api/projects`, `GET/PUT /api/projects/{name}/settings`
 - `POST /api/projects/{name}/route`: 실행 없는 분류 미리보기
 - `POST /api/projects/{name}/chat`: 기록 또는 백그라운드 실행. 모호하면 `needs_selection` 반환
-- `GET /api/projects/{name}/tasks`, `PATCH /api/projects/{name}/tasks`: 상태·이름 변경·합치기
+- `GET/POST /api/projects/{name}/tasks`, `PATCH /api/projects/{name}/tasks`: 상태·이름 변경·합치기
 - `GET/POST /api/projects/{name}/messages`, `PATCH /api/projects/{name}/messages/{id}`
 - `GET /api/projects/{name}/runs`, `GET /api/projects/{name}/runs/{id}`
 - `POST /api/projects/{name}/runs/{id}/cancel`, `POST .../reconcile`

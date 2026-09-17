@@ -37,7 +37,7 @@
   for(const value of ['codex','claude']){const tab=button(value==='codex'?'Codex':'Claude',()=>runConnection(async()=>{draftPaths[client.value]=path.value;client.value=value;path.value=draftPaths[value]??observations[value]?.path??'';renderTabs();await inspect();}));tab.dataset.client=value;tabs.append(tab);}
   const path=el('input');path.id='onboarding-cli-path';path.setAttribute('aria-label','CLI 실행 파일 경로');path.placeholder='자동으로 찾습니다 · 찾지 못하면 실행 파일 선택';
   const status=el('p');status.setAttribute('role','status');const commands=el('pre');commands.style.whiteSpace='pre-wrap';
-  const pathRow=el('div',undefined,'client-path-row');pathRow.append(path,icon('folder','CLI 실행 파일 선택',async()=>{status.textContent='● Windows 파일 선택 창에서 '+(client.value==='codex'?'codex.exe':'claude.exe')+'를 선택하세요. 다른 창 뒤에 있다면 작업 표시줄을 확인하세요.';status.style.color='#7ab8ff';const chosen=await api('/clients/'+client.value+'/executable-picker','POST');if(!chosen.path){status.textContent='● 파일 선택을 취소했습니다. 기존 연결은 유지됩니다.';return;}path.value=chosen.path;draftPaths[client.value]=chosen.path;await api('/clients/'+client.value,'PUT',{path:chosen.path});await inspect();}));
+  const pathRow=el('div',undefined,'client-path-row');pathRow.append(path,icon('folder','CLI 실행 파일 선택',async()=>{status.textContent='● Windows 파일 선택 창에서 '+(client.value==='codex'?'codex.exe':'claude.exe')+'를 선택하세요. 최대 60초 후 대기를 종료합니다.';status.style.color='#7ab8ff';const chosen=await api('/clients/'+client.value+'/executable-picker','POST');if(!chosen.path){status.textContent='● 파일 선택을 취소했습니다. 기존 연결은 유지됩니다.';return;}path.value=chosen.path;draftPaths[client.value]=chosen.path;await api('/clients/'+client.value,'PUT',{path:chosen.path});await inspect();}));
   const pathLabel=el('label','CLI 실행 파일');pathLabel.htmlFor=path.id;
   const pathField=el('div',undefined,'form-field');pathField.append(pathLabel,pathRow);
   const autoFind=icon('restore','CLI 자동 검색',async()=>{path.value='';draftPaths[client.value]='';await api('/clients/'+client.value,'PUT',{path:''});await inspect();});
@@ -93,6 +93,6 @@
   $('setup-steps').replaceChildren();$('setup-progress').textContent='서버에 진행 상태 저장';$('setup-detail').textContent='STEP 1 · 에이전트별 연결 확인 → STEP 2 · 프로젝트 생성 또는 선택 → 모델 선택';
   $('setup-next').onclick=()=>act(open);window.actionIcon($('setup-next'),'plug','초기 연결 설정 열기');
   $('setup-skip').onclick=()=>{$('setup-guide').open=false;};$('welcome-start').textContent='처음 시작하기';$('welcome-start').onclick=()=>act(open);
-  window.refreshSetup();window.loadModelChoices();
-  act(async()=>{await projects();const saved=await api('/onboarding'),last=window.chatState.lastProject();if(last){await projects(last);if($('project').value){await loadProject();return;}}if(['pending','in_progress'].includes(saved.status))await open();else if(saved.status==='completed'&&saved.project){await projects(saved.project);if($('project').value)await loadProject();}});
+  window.refreshSetup();
+  startWorkspace();
 })();

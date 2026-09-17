@@ -70,7 +70,7 @@ def test_session_resume_handoff_and_move_invalidates_native_history(tmp_path,mon
         assert c.patch(base+'/tasks',json={'task':'로그인','title':'인증 개선','status':'paused'}).status_code==200
         r=c.post(base+'/chat',json={'text':'검토','task':'인증 개선','client':'codex','action':'run'}).json()
         assert wait_run(c,r['run_id'])['status']=='completed'
-        assert calls[-1][2] is None
+        assert calls[-1][2]=='codex-session'
 
 
 def test_background_cancel_and_project_exclusion(tmp_path):

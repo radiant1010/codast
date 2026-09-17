@@ -115,3 +115,27 @@ def test_windows_default_install_discovery_without_path(tmp_path, monkeypatch):
     monkeypatch.setenv('LOCALAPPDATA', str(local))
     assert executable('claude') == str(cli.resolve())
     assert executable('codex') == str(codex.resolve())
+
+@pytest.mark.parametrize('executable', [False, True])
+def test_picker_foreground_launch_and_failures(monkeypatch, executable):
+    from app.core.folder_picker import choose_folder
+    from types import SimpleNamespace
+    import os
+    import subprocess
+    if os.name != 'nt': pytest.skip('Windows dialog')
+    seen={}
+    def run(argv, **kwargs):
+        seen.update(argv=argv,**kwargs)
+        return SimpleNamespace(returncode=0,stdout='{"path":null}')
+    monkeypatch.setattr('app.core.folder_picker.subprocess.run',run)
+    assert choose_folder(executable=executable) is None
+    assert seen['startupinfo'].wShowWindow==1
+    assert seen['startupinfo'].lpDesktop=='winsta0\\default'
+    assert '$picker.ShowDialog($owner)' in seen['argv'][-1]
+    assert '$owner.TopMost = $true' in seen['argv'][-1]
+    def timeout(*args,**kwargs): raise subprocess.TimeoutExpired('picker',60)
+    monkeypatch.setattr('app.core.folder_picker.subprocess.run',timeout)
+    with pytest.raises(ValueError,match='대기 시간'): choose_folder(executable=executable)
+    def unavailable(*args,**kwargs): raise OSError('unavailable')
+    monkeypatch.setattr('app.core.folder_picker.subprocess.run',unavailable)
+    with pytest.raises(ValueError,match='직접 입력'): choose_folder(executable=executable)

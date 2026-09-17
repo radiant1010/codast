@@ -49,6 +49,7 @@ class ProjectSettings(StrictModel):
 
 
 class ChatRequest(Command):
+    request_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[a-zA-Z0-9_-]+$')
     action: Literal['note', 'run'] = 'note'
     auto_route: bool = True
 
@@ -57,6 +58,10 @@ class TaskUpdate(StrictModel):
     task: str = Field(min_length=1, max_length=120, pattern=r'\S')
     title: str | None = Field(default=None, min_length=1, max_length=120, pattern=r'\S')
     status: Literal['active', 'paused', 'done'] | None = None
+
+
+class ChatCreate(StrictModel):
+    task: str = Field(min_length=1, max_length=120, pattern=r'\S')
 
 
 class ClientConfig(StrictModel):

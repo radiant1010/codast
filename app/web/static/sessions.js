@@ -24,7 +24,7 @@
   chatForm.onsubmit=event=>{event.preventDefault();act(async()=>{
     const name=chatInput.value.trim();if(!name)throw Error('채팅 이름을 입력하세요.');
     if(groups.some(g=>g.task===name)||window.chatState.drafts($('project').value).includes(name))throw Error('같은 이름의 채팅이 있습니다. 목록에서 선택하세요.');
-    createChat.close();await switchChat(name);$('text').focus();notice('새 채팅 준비 · 작성 내용은 이 탭에 보관되며 첫 전송 후 서버에 저장됩니다.');
+    await api(base()+'/tasks','POST',{task:name});createChat.close();await switchChat(name);$('text').focus();notice('새 채팅을 저장했습니다. 작성 중인 내용도 이 브라우저에 보관됩니다.');
   });};
   chats.append(button('＋ 새 채팅',async()=>{
     if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');
@@ -32,7 +32,7 @@
   },'new-chat'),$('task-list'),$('task-controls'));
   project.querySelector('.side-title').remove();
   const projectTools=el('details');projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));drawer.append(projectTools);
-  const path=el('p','프로젝트를 선택하세요.','project-location');project.append(path,el('p','Git 상태 · 아직 연결되지 않음','hint'));
+  const path=el('p','프로젝트를 선택하세요.','project-location');const projectGit=el('p','Git · 프로젝트 선택 대기','hint');project.append(path,projectGit);
   const menu=el('nav',undefined,'workspace-menu');menu.setAttribute('aria-label','작업실 메뉴');
   for(const [id,label] of [['settings-panel','실행 설정'],['clients-panel','에이전트 연결'],['history-panel','실행 기록'],['files-panel','참고 파일'],['setup-guide','시작 도움말']]){
     const node=$(id);drawer.append(node);menu.append(button(label,async()=>id==='clients-panel'&&window.openConnections?window.openConnections():openSection(node)));
@@ -134,18 +134,21 @@
   async function refreshEnvironment(){
     const projectName=$('project').value;
     if(projectName!==envProjectKey){envProjectKey=projectName;for(const value of Object.values(envFields))value.textContent=projectName?'조회 중…':'프로젝트 선택 대기';}
+    projectGit.textContent='Git · '+envFields.Git.textContent;
     if(!projectName||envBusy)return;envBusy=true;
     try{
       const data=await api('/projects/'+encodeURIComponent(projectName)+'/environment');
       if($('project').value!==projectName)return;
       const state={not_installed:'미설치',not_repository:'저장소 아님',error:'조회 실패',unavailable:'엔진 연결 불가'};
       envFields.Git.textContent=data.git.state==='available'?(data.git.branch||'브랜치 미확인')+' · '+(data.git.changed_entries?'변경 '+data.git.changed_entries+'건':'변경 없음'):state[data.git.state]||'확인 불가';
+      projectGit.textContent='Git · '+envFields.Git.textContent;
+      envFields.Git.title=envFields.Git.textContent;
       envFields.Docker.textContent=data.docker.state==='available'?(data.docker.containers.length?data.docker.containers.filter(c=>c.state==='running').length+'개 실행 / '+data.docker.containers.length+'개 연결':'연결된 Compose 없음'):state[data.docker.state]||'확인 불가';
       envFields.Docker.title='선택 프로젝트 경로와 Compose 작업 경로가 정확히 일치하는 컨테이너만 표시';
       envFields['포트'].textContent=data.ports.values.length?data.ports.values.join(', '):'호스트 미수집';
       envFields['포트'].title='Docker 포트: '+(data.ports.values.join(', ')||'확인된 포트 없음')+' · 일반 개발 서버 포트는 아직 미수집';
       for(const field of [envFields.Git,envFields['포트']])field.title=field.title||field.textContent;
-    }catch(error){if($('project').value===projectName)for(const field of Object.values(envFields))field.textContent='조회 실패';}finally{envBusy=false;if($('project').value!==projectName)refreshEnvironment();}
+    }catch(error){if($('project').value===projectName){for(const field of Object.values(envFields))field.textContent='조회 실패';projectGit.textContent='Git · 조회 실패';}}finally{envBusy=false;if($('project').value!==projectName)refreshEnvironment();}
   }
   setInterval(()=>{if(!document.hidden)refreshEnvironment();},15000);
   top.replaceChildren(sessionsPanel,account,environment);

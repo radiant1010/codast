@@ -7,6 +7,7 @@ from app.llm.base import AgentAdapter
 from app.core.context_builder import ContextBuilder
 from app.core.rule_loader import RuleLoader
 from app.core.routing import TaskRouter
+from app.core.storage import ExistingRun
 from app.llm.cli import CliAdapter, executable
 
 
@@ -50,7 +51,7 @@ class Orchestrator:
     def write_file(self, name, relative, content):
         self.files.write(self.policy.file_path(self.projects.select(name), relative, write=True), content)
 
-    def prepare(self, name, command):
+    def prepare(self, name, command, request_id=None):
         root = self.projects.select(name)
         cwd = self.policy.file_path(root, command.cwd)
         if not cwd.is_dir():
@@ -75,7 +76,7 @@ class Orchestrator:
         context.history = list(reversed(history))
         while context.history and len(context.model_dump_json()) > self.context.max_chars:
             context.history.pop(0)
-        run_id = self.storage.start_run(name, command, command.client, exclusive=True)
+        run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id)
         if command.fresh:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode)
         return run_id, command, context, cwd, adapter, session
@@ -118,8 +119,11 @@ class Orchestrator:
         finally:
             self.active.pop(run_id, None)
 
-    def submit(self, name, command):
-        prepared = self.prepare(name, command)
+    def submit(self, name, command, request_id=None):
+        try:
+            prepared = self.prepare(name, command, request_id)
+        except ExistingRun as prior:
+            return prior.run_id
         run_id = prepared[0]
 
         async def work():
@@ -133,6 +137,8 @@ class Orchestrator:
         def finished(_):
             self.active.pop(run_id, None)
             if self.storage.run(name, run_id)['status'] == 'running':
+                _, cmd, _, cwd, _, _ = prepared
+                self.storage.forget_session(name, cmd.task, cmd.client, str(cwd), cmd.mode)
                 self.storage.finish_run(run_id, 'interrupted', error='서버가 실행을 종료했습니다.')
         task.add_done_callback(finished)
         return run_id
@@ -150,6 +156,9 @@ class Orchestrator:
         except asyncio.CancelledError:
             pass
         if self.storage.run(name, run_id)['status'] == 'running':
+            command = record['command']
+            cwd = self.policy.file_path(self.projects.select(name), command['cwd'])
+            self.storage.forget_session(name, command['task'], command['client'], str(cwd), command['mode'])
             self.storage.finish_run(run_id, 'interrupted', error='시작 전에 취소되었습니다.')
 
     async def shutdown(self):

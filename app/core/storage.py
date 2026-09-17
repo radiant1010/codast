@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
+import hashlib
 from pathlib import Path
 import sqlite3
 from uuid import uuid4
@@ -9,6 +10,11 @@ from uuid import uuid4
 
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+
+class ExistingRun(Exception):
+    def __init__(self, run_id):
+        self.run_id = run_id
 
 
 class Storage:
@@ -159,10 +165,16 @@ class Storage:
                 ON CONFLICT(project) DO UPDATE SET settings=excluded.settings, updated_at=excluded.updated_at""",
                 (project, json.dumps(settings, ensure_ascii=False), now()))
 
-    def start_run(self, project, command, adapter, *, exclusive=False):
-        run_id = uuid4().hex
+    def start_run(self, project, command, adapter, *, exclusive=False, request_id=None):
+        run_id = hashlib.sha256(json.dumps([project, request_id]).encode()).hexdigest() if request_id else uuid4().hex
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if request_id:
+                prior = db.execute('SELECT command, adapter FROM runs WHERE id=? AND project=?', (run_id, project)).fetchone()
+                if prior:
+                    if json.loads(prior['command']) != command.model_dump() or prior['adapter'] != adapter:
+                        raise FileExistsError('같은 요청 ID에 다른 실행 내용을 사용할 수 없습니다.')
+                    raise ExistingRun(run_id)
             if exclusive and db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError("이 프로젝트에 실행 중이거나 종료 확인이 필요한 작업이 있습니다.")
             db.execute("""INSERT INTO runs(id,project,command,adapter,status,started_at)
@@ -187,7 +199,7 @@ class Storage:
             db.execute('BEGIN IMMEDIATE')
             if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError('실행 중이거나 종료 확인이 필요한 작업이 있습니다.')
-            if db.execute('SELECT 1 FROM messages WHERE project=? AND task=?', (project, task)).fetchone():
+            if self._task_exists(db, project, task):
                 raise FileExistsError('같은 이름의 채팅이 있습니다. 다른 이름을 사용하세요.')
             db.execute('INSERT INTO client_sessions VALUES (?,?,?,?,?,?)',
                        (project, task, client, cwd, 'read-only', session_id))
@@ -205,11 +217,31 @@ class Storage:
             if not result.rowcount:
                 raise FileNotFoundError("메시지를 찾을 수 없습니다.")
 
+    @staticmethod
+    def _task_exists(db, project, task):
+        return db.execute('SELECT 1 FROM messages WHERE project=? AND task=? UNION ALL '
+                          'SELECT 1 FROM task_states WHERE project=? AND task=? LIMIT 1',
+                          (project, task, project, task)).fetchone() is not None
+
+    def create_task(self, project, task):
+        task = task.strip()
+        if not task:
+            raise ValueError('채팅 이름을 입력하세요.')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if self._task_exists(db, project, task):
+                raise FileExistsError('같은 이름의 채팅이 있습니다.')
+            db.execute('INSERT INTO task_states VALUES (?,?,?)', (project, task, 'active'))
+        return {'task': task, 'count': 0, 'status': 'active'}
+
     def tasks(self, project):
         with self.connect() as db:
-            return [dict(row) for row in db.execute("""SELECT m.task, COUNT(*) AS count, COALESCE(s.status,'active') AS status
-                FROM messages m LEFT JOIN task_states s ON s.project=m.project AND s.task=m.task
-                WHERE m.project=? GROUP BY m.task ORDER BY MAX(m.created_at) DESC""", (project,))]
+            return [dict(row) for row in db.execute("""WITH names AS (
+                SELECT task FROM messages WHERE project=? UNION SELECT task FROM task_states WHERE project=?)
+                SELECT n.task, COUNT(m.id) AS count, COALESCE(s.status,'active') AS status
+                FROM names n LEFT JOIN messages m ON m.project=? AND m.task=n.task
+                LEFT JOIN task_states s ON s.project=? AND s.task=n.task
+                GROUP BY n.task ORDER BY MAX(m.created_at) DESC,n.task""", (project,)*4)]
 
     def messages(self, project, task, limit, offset):
         where = "m.project=?"
@@ -318,12 +350,16 @@ class Storage:
             db.execute("BEGIN IMMEDIATE")
             if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError("실행이 끝난 뒤 작업을 변경하세요.")
-            if not db.execute("SELECT 1 FROM messages WHERE project=? AND task=?", (project,task)).fetchone():
+            if not self._task_exists(db, project, task):
                 raise FileNotFoundError("작업을 찾을 수 없습니다.")
             old = db.execute("SELECT status FROM task_states WHERE project=? AND task=?", (project,task)).fetchone()
             if title != task:
+                merging = self._task_exists(db, project, title)
                 db.execute("UPDATE messages SET task=? WHERE project=? AND task=?", (title,project,task))
-                db.execute("DELETE FROM client_sessions WHERE project=? AND task IN (?,?)", (project,task,title))
+                if merging:
+                    db.execute("DELETE FROM client_sessions WHERE project=? AND task IN (?,?)", (project,task,title))
+                else:
+                    db.execute("UPDATE client_sessions SET task=? WHERE project=? AND task=?", (title,project,task))
                 db.execute("DELETE FROM task_states WHERE project=? AND task=?", (project,task))
             db.execute("INSERT OR REPLACE INTO task_states VALUES (?,?,?)", (project,title,status or (old[0] if old else 'active')))
 

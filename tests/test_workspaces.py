@@ -59,4 +59,4 @@ def test_folder_picker_selection_and_cancel(tmp_path,monkeypatch):
         runner.return_value=SimpleNamespace(returncode=0,stdout=json.dumps({'path':str(tmp_path)}))
         assert choose_folder()==str(tmp_path)
         assert '-STA' in runner.call_args.args[0]
-        assert runner.call_args.kwargs['timeout']==180
+        assert runner.call_args.kwargs['timeout']==60
