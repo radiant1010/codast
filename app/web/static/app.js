@@ -29,6 +29,7 @@ function streamRun(id,b,container,refresh){
     followOutput(follow);
   });
   source.addEventListener('end',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)act(async()=>{await conversation(b);if(valid(b,generation))notice('실행이 종료되었습니다. 결과와 실행 과정을 확인하세요.');});});
+  source.addEventListener('detached',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)act(async()=>{await conversation(b);if(valid(b,generation))notice('서버 연결이 바뀌었습니다. 실행 종료 여부를 확인한 뒤 기록을 정리하세요.',true);});});
   source.onerror=()=>{if(valid(b,generation)&&container.isConnected&&source.readyState!==EventSource.CLOSED)notice('출력 연결 재시도 중 · 저장된 위치부터 이어받습니다.');};
 }
 $('toggle-sidebar').onclick=()=>{const collapsed=$('workspace').classList.toggle('collapsed');$('toggle-sidebar').setAttribute('aria-expanded',String(!collapsed));$('toggle-sidebar').title=collapsed?'제어판 펼치기':'제어판 접기';};
@@ -88,7 +89,7 @@ function messageCard(m,b){
       if(run.cancellable){if(confirm('이 실행을 취소할까요? 이미 변경된 파일은 유지됩니다.')){await api(b+'/runs/'+m.run_id+'/cancel','POST');await conversation();}}
       else if(confirm('이 서버가 관리하는 실행이 아닙니다. 다른 서버나 CLI 프로세스가 종료된 것을 확인했나요? 확인하면 기록만 중단으로 정리합니다.')){await api(b+'/runs/'+m.run_id+'/reconcile','POST');await conversation();}
     },'secondary'));card.append(answer);
-    if(m.status==='running'){const detail=el('details'),log=el('div',undefined,'stream');detail.append(el('summary','실행 과정 보기 · 실시간'),log);answer.append(detail);queueMicrotask(()=>{if(log.isConnected)streamRun(m.run_id,b,log,true);});}
+    if(m.status==='running'){const detail=el('details'),log=el('div',undefined,'stream');detail.append(el('summary',m.cancellable?'실행 과정 보기 · 실시간':'실행 과정 보기 · 저장된 기록'),log);answer.append(detail);queueMicrotask(()=>{if(log.isConnected)streamRun(m.run_id,b,log,m.cancellable);});}
     else{const detail=el('details'),log=el('div',undefined,'stream');detail.append(el('summary','실행 과정 보기'),log);let loaded=false;detail.ontoggle=()=>{if(detail.open&&!loaded){loaded=true;streamRun(m.run_id,b,log,false);}};answer.append(detail);}
   }
   return card;

@@ -18,3 +18,13 @@ test('late SSE completion from a switched chat cannot refresh or notify the new 
   container.isConnected=true;context.streamRun('run','/projects/one',container,true);
   handlers.end();await new Promise(setImmediate);assert.equal(refreshes,1);assert.equal(notices,1);
 });
+
+test('detached server refreshes a live card once; saved replay never loops',async()=>{
+ const handlers={};let refreshes=0,notices=0;
+ const context={epoch:1,streams:[],valid:(_b,e)=>e===context.epoch,
+ EventSource:class{addEventListener(name,fn){handlers[name]=fn;}close(){}},act:fn=>fn(),conversation:async()=>{refreshes++;},notice:()=>{notices++;}};
+ vm.createContext(context);vm.runInContext(fn,context);const container={isConnected:true};
+ context.streamRun('run','/projects/one',container,true);handlers.detached();await new Promise(setImmediate);assert.equal(refreshes,1);assert.equal(notices,1);
+ context.streamRun('run','/projects/one',container,false);handlers.detached();await new Promise(setImmediate);assert.equal(refreshes,1);
+ context.streamRun('run','/projects/one',container,true);context.epoch++;handlers.detached();await new Promise(setImmediate);assert.equal(refreshes,1);
+});

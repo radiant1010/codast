@@ -349,11 +349,31 @@ class Storage:
 
     def finish_run(self, run_id, status, *, output=None, error=None, adapter=None, metadata=None):
         with self.connect() as db:
-            db.execute("""UPDATE runs SET status=?, finished_at=?, output=?, error=?,
-                adapter=COALESCE(?,adapter), metadata=COALESCE(?,metadata) WHERE id=?""",
+            changed = db.execute("""UPDATE runs SET status=?, finished_at=?, output=?, error=?,
+                adapter=COALESCE(?,adapter), metadata=COALESCE(?,metadata) WHERE id=? AND status='running'""",
                 (status, now(), output, error, adapter, json.dumps(metadata,ensure_ascii=False) if metadata is not None else None, run_id))
+            if not changed.rowcount:
+                return
             db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
                        (run_id, 'status', status, now()))
+
+    def notifications(self, projects, after=0, limit=100):
+        """Read durable terminal events, including runs completed between polls."""
+        if not projects:
+            return {'events': [], 'cursor': after, 'has_more': False}
+        placeholders = ','.join('?' for _ in projects)
+        with self.connect() as db:
+            rows = db.execute(f"""SELECT e.seq, e.run_id, e.created_at, r.project, r.status,
+                    COALESCE(m.task,'') AS task, m.chat_id
+                FROM run_events e JOIN runs r ON r.id=e.run_id
+                LEFT JOIN messages m ON m.run_id=r.id
+                WHERE e.seq>? AND e.kind='status' AND e.text=r.status
+                    AND r.status IN ('completed','failed','interrupted')
+                    AND r.project IN ({placeholders})
+                ORDER BY e.seq LIMIT ?""", (after, *projects, limit+1)).fetchall()
+        events = [dict(row) for row in rows[:limit]]
+        return {'events': events, 'cursor': events[-1]['seq'] if events else after,
+                'has_more': len(rows)>limit}
 
     def runs(self, project, limit, offset):
         with self.connect() as db:

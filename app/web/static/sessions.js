@@ -135,7 +135,7 @@
   toggleUsage.setAttribute('aria-label','최근 세션 사용량 펼치기');toggleUsage.setAttribute('aria-expanded','false');toggleUsage.setAttribute('aria-controls',usageDetails.id);usageHeading.append(toggleUsage);
   const usageList=el('div');usageList.id='session-usage-list';usageDetails.append(usageList);usage.append(usageDetails);
   const running=el('section',undefined,'running-panel');const rh=el('div',undefined,'side-title');rh.append(el('h2','작업 중인 세션'));
-  const alerts=button('알림 0',async()=>{$('session-alerts').hidden=!$('session-alerts').hidden;});alerts.id='session-notifications';rh.append(alerts);running.append(rh);
+  const alerts=button('알림 0',async()=>{$('session-alerts').hidden=!$('session-alerts').hidden;if(!$('session-alerts').hidden){window.runNotifications.read();renderNotifications();}});alerts.id='session-notifications';rh.append(alerts);running.append(rh);
   const list=el('div');list.id='running-sessions';running.append(list);top.append(usage,running);$('console').prepend(top);
   const account=el('section',undefined,'codex-account-summary');
   const accountLabel=el('h2','계정 사용량');
@@ -244,7 +244,7 @@
     }catch(error){if(accountRows.textContent.includes('조회 중…'))accountRows.replaceChildren(accountPlaceholder('Codex','조회 실패'),accountPlaceholder('Claude','미수집'));accountStatus('error','조회 실패 · 다시 조회하세요.');}finally{statusBusy=false;}
   }
   refreshAccount();setInterval(()=>{if(!document.hidden)refreshAccount();},60000);
-  const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='이 화면을 연 이후 실행 종료 알림이 표시됩니다.';top.after(alertBox);
+  const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='저장된 실행 종료 알림을 확인합니다.';top.after(alertBox);
   const expand=button('확장',async()=>{const on=$('workspace').classList.toggle('console-expanded');expand.textContent=on?'복원':'확장';expand.setAttribute('aria-pressed',String(on));});expand.setAttribute('aria-pressed','false');$('console').querySelector('header').append(expand);
   const native=el('div',undefined,'native-session');native.id='native-session';$('console').querySelector('header').after(native);
   const composer=$('composer'),picker=el('div',undefined,'agent-picker');const label=el('label','AI 에이전트');label.htmlFor='client';picker.append(label,$('client'));composer.prepend(picker);
@@ -262,7 +262,7 @@
       event.preventDefault();event.stopImmediatePropagation();notice('새 채팅을 만들거나 기존 채팅을 선택하세요.',true);
     }
   },true);
-  let snapshot={sessions:[],running:[]},previous=null,notifications=0,inFlight=false;
+  let snapshot={sessions:[],running:[]},inFlight=false;
   const sessionStatus=queryStatus(sessionsPanel,'세션 현황',refresh);
   async function openChat(projectName,task){
     window.settingsPage.close();
@@ -332,11 +332,24 @@
       const next=await api('/session-overview');snapshot=next;list.replaceChildren();
       for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+run.project+' / '+(run.command.task||'미분류')+' · '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트 윈도우 사용량 · 미수집','hint'));list.append(item);}
       if(!next.running.length)list.append(el('p','실행 중인 세션이 없습니다.','hint'));
-      if(previous){for(const run of previous.filter(old=>!next.running.some(r=>r.id===old.id))){notifications++;alertBox.prepend(el('p',run.project+' · '+(run.command.task||'미분류')+' 실행 상태가 변경되었습니다. 기록을 확인하세요.'));}}
-      previous=next.running;alerts.textContent='알림 '+notifications;renderNative();renderUsage();
+      renderNative();renderUsage();
       sessionStatus('ready','확인 '+new Date().toLocaleTimeString());
     }catch(error){sessionStatus('error','조회 실패 · 다시 조회하세요.');}finally{inFlight=false;}
+    try{await window.runNotifications.refresh();renderNotifications();}catch{alerts.title='알림 조회 실패 · 다음 연결에서 다시 확인합니다.';}
   }
+  function renderNotifications(){
+    const state=window.runNotifications.snapshot();alerts.textContent='알림 '+state.unread;alerts.title='저장된 종료 알림 · 최근 100개';alertBox.replaceChildren();
+    for(const row of [...state.events].reverse()){alertBox.append(button(row.project+' · '+(row.task||'미분류')+' · '+statusNames[row.status],async()=>{
+      const tasks=await api('/projects/'+encodeURIComponent(row.project)+'/tasks');
+      const current=tasks.tasks.find(t=>row.chat_id?t.id===row.chat_id:t.task===row.task);
+      if(!current)throw Error('알림에 연결된 채팅을 찾을 수 없습니다.');
+      await openChat(row.project,current.task);alertBox.hidden=true;
+    }));}
+    if(!state.events.length)alertBox.append(el('p','저장된 종료 알림이 없습니다.'));
+  }
+  renderNotifications();
+  window.addEventListener('online',refresh);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
   $('project').addEventListener('change',()=>{refreshEnvironment();for(const c of ['codex','claude'])$('usage-'+c).textContent='수집된 토큰 정보 없음';});
   $('welcome-start').onclick=()=>openSection(projectTools);
   refresh();setInterval(()=>{if(!document.hidden)refresh();},5000);actionHint();

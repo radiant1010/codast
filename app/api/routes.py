@@ -221,6 +221,12 @@ async def run_events(name: str, run_id: str, request: Request, after: int = Quer
             if status != 'running':
                 yield f"event: end\ndata: {json.dumps({'status': status})}\n\n"
                 return
+            if run_id not in s.active:
+                latest = s.storage.run(name, run_id)['status']
+                if latest == 'running':
+                    yield 'event: detached\ndata: {"status":"unknown"}\n\n'
+                    return
+                continue  # Completion raced this page; drain its terminal event next.
             yield ': heartbeat\n\n'
             await asyncio.sleep(.3)
 
@@ -248,6 +254,12 @@ def tasks(name: str, request: Request):
     s = service(request)
     s.projects.select(name)
     return {"tasks": s.storage.tasks(name)}
+
+
+@router.get('/notifications')
+def notifications(request: Request, after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100)):
+    s = service(request)
+    return s.storage.notifications(s.projects.list(), after, limit)
 
 
 @router.get('/session-overview')

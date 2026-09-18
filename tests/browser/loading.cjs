@@ -7,7 +7,7 @@ const {chromium}=require('playwright');
  let fail=false,hold=true,releaseEnvironment;const waiting=[];
  const chats={one:[{task:'one-chat',count:0,status:'active',pinned:0,archived:0}],two:[{task:'regular',count:0,status:'active',pinned:0,archived:0},{task:'other',count:0,status:'active',pinned:0,archived:0}]};
  for(const rows of Object.values(chats))for(const row of rows)row.id=require('node:crypto').randomBytes(16).toString('hex');
- const rulebooks={};
+ const rulebooks={};let notificationRows=[],notificationOffline=false;
  let unfilteredMessages=0,fileRequests=0;
  const account={state:'available',limits:[{bucket:'codex',windowDurationMins:300,usedPercent:25,resetsAt:1790000000},{bucket:'codex',windowDurationMins:10080,usedPercent:63,resetsAt:1790100000}],models:[],source:'fixture',checked_at:new Date().toISOString()};
  await page.route('http://harness.test/**',async route=>{
@@ -16,6 +16,11 @@ const {chromium}=require('playwright');
   if(path.endsWith('/messages')&&!new URL(route.request().url()).searchParams.get('task')&&!new URL(route.request().url()).searchParams.get('chat_id'))unfilteredMessages++;
   if(path==='/')return route.fulfill({contentType:'text/html',body:fs.readFileSync('app/web/templates/index.html','utf8')});
   if(path.startsWith('/static/'))return route.fulfill({contentType:path.endsWith('.css')?'text/css':'application/javascript',body:fs.readFileSync('app/web'+path)});
+  if(path==='/api/notifications'){
+   if(notificationOffline)return route.fulfill({status:503,json:{detail:'offline'}});
+   const after=Number(new URL(route.request().url()).searchParams.get('after')),events=notificationRows.filter(row=>row.seq>after);
+   return route.fulfill({json:{events,cursor:events.at(-1)?.seq||after,has_more:false}});
+  }
   if(path==='/api/clients/codex/status'){
    if(hold)await new Promise(done=>waiting.push(done));
    return route.fulfill({status:fail?503:200,json:fail?{detail:'offline'}:account});
@@ -294,6 +299,20 @@ const {chromium}=require('playwright');
  assert.equal(await page.evaluate(()=>window.chatState.identity('two','external rename')),originalId);
  await chatRow('renamed').locator('button.task').click();await page.waitForFunction(()=>document.querySelector('#send').disabled===false);
  assert.equal(await page.locator('#text').inputValue(),'');
+ notificationRows.push({seq:1,run_id:'completed-between-polls',project:'two',task:'renamed',status:'completed'});
+ await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+ await page.waitForFunction(()=>document.querySelector('#session-notifications').textContent==='알림 1');
+ await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+ await page.waitForFunction(()=>document.querySelector('#session-notifications').textContent==='알림 1');
+ await page.locator('#session-notifications').click();assert.equal(await page.locator('#session-notifications').textContent(),'알림 0');
+ assert.equal(await page.locator('#session-alerts button').count(),1);
+ notificationOffline=true;notificationRows.push({seq:2,run_id:'offline-failure',project:'two',task:'renamed',status:'failed'});
+ await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+ await page.waitForFunction(()=>document.querySelector('#session-notifications').title.includes('조회 실패'));
+ assert.equal(await page.locator('#session-notifications').textContent(),'알림 0');
+ notificationOffline=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
+ await page.waitForFunction(()=>document.querySelector('#session-notifications').textContent==='알림 1');
+ assert.equal(await page.locator('#session-alerts button').count(),2);
  assert.deepEqual(errors,[]);console.log('PASS: pending account does not block workspace; failure retains data; retry recovers; pending environment does not block input or project switching; stale response ignored; narrow viewport has no horizontal overflow; no JS errors.');
  await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});
