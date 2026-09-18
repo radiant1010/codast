@@ -2,7 +2,7 @@ import asyncio
 import json
 import hashlib
 import time
-from app.models.schemas import ContextPart, ProjectSettings
+from app.models.schemas import ContextPart, ProjectSettings, RulebookSettings
 from app.llm.base import AgentAdapter
 from app.core.context_builder import ContextBuilder
 from app.core.rule_loader import RuleLoader
@@ -51,13 +51,25 @@ class Orchestrator:
     def write_file(self, name, relative, content):
         self.files.write(self.policy.file_path(self.projects.select(name), relative, write=True), content)
 
+    def rulebook(self, name, cwd='.'):
+        from app.core.rule_loader import COMMON_GUIDE
+        root = self.projects.select(name)
+        settings = RulebookSettings(**self.storage.rulebook_settings(name))
+        return {'settings': settings, 'default_content': self.files.read(COMMON_GUIDE),
+                'rules': self.rules.load(root, cwd, settings)}
+
+    def save_rulebook(self, name, settings):
+        self.projects.select(name)
+        self.storage.save_rulebook_settings(name, settings.model_dump())
+        return {'saved': True}
+
     def prepare(self, name, command, request_id=None):
         root = self.projects.select(name)
         cwd = self.policy.file_path(root, command.cwd)
         if not cwd.is_dir():
             raise FileNotFoundError('작업 디렉터리를 찾을 수 없습니다.')
         command = command.model_copy(update={'task': command.task.strip()})
-        rules = self.rules.load(root, command.cwd)
+        rules = self.rules.load(root, command.cwd, RulebookSettings(**self.storage.rulebook_settings(name)))
         selected = [ContextPart(path=p, content=self.read_file(name, p)) for p in dict.fromkeys(command.context_paths)]
         context = self.context.build(command, rules, selected)
         adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))

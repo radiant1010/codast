@@ -6,6 +6,7 @@
     edit:'<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6z"/>',
     plus:'<path d="M12 5v14M5 12h14"/>',
     importDocument:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M20 15H10m3-3-3 3 3 3"/>',
+    folderPlus:'<path d="M3 7V5h6l2 2h10v12H3zM9 13h6M12 10v6"/>',
     folder:'<path d="M3 7V5h6l2 2h10v12H3z"/><path d="M3 11h18"/>',
     file:'<path d="M14 3H5v18h14V8zM14 3v5h5"/><path d="M8 13h8M8 17h6"/>',
     save:'<path d="M4 3h13l3 3v15H4zM8 3v6h8V3M8 21v-8h8v8"/>',

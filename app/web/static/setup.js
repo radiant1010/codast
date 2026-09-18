@@ -90,9 +90,15 @@
   client.onchange=()=>act(async()=>{const chosen=client.value;projectStep.hidden=true;path.value='';status.textContent='선택한 에이전트의 연결을 다시 확인하세요.';commands.textContent='';const data=await api('/clients');if(client.value===chosen)path.value=data.clients.find(c=>c.client===chosen)?.path||'';});
   window.refreshSetup=()=>{const chosen=!!$('project').value;$('welcome').hidden=chosen;$('messages').hidden=!chosen;$('composer').hidden=!chosen||!filter;$('messages-prev').closest('.pagination').hidden=!chosen||!filter;$('delete-project').disabled=!chosen;};
   window.setupSettingsSaved=()=>{};window.setupRequestSent=()=>{};
-  $('setup-steps').replaceChildren();$('setup-progress').textContent='서버에 진행 상태 저장';$('setup-detail').textContent='STEP 1 · 에이전트별 연결 확인 → STEP 2 · 프로젝트 생성 또는 선택 → 모델 선택';
-  $('setup-next').onclick=()=>act(open);window.actionIcon($('setup-next'),'plug','초기 연결 설정 열기');
-  $('setup-skip').onclick=()=>{$('setup-guide').open=false;};$('welcome-start').textContent='처음 시작하기';$('welcome-start').onclick=()=>act(open);
+  $('setup-steps').replaceChildren(...[
+    ['에이전트 연결','설치된 Codex 또는 Claude CLI의 연결과 로그인 상태를 확인합니다.'],
+    ['프로젝트 선택','작업할 폴더를 연결하거나 빈 프로젝트를 만듭니다.'],
+    ['룰북과 실행 설정','필요한 규정과 코드 수정 권한을 확인합니다.'],
+    ['새 채팅 시작','채팅을 만들고 요청을 입력합니다. Ctrl+Enter로 전송할 수 있습니다.']
+  ].map(([title,description])=>{const item=el('li');item.append(el('h3',title),el('p',description));return item;}));
+  $('setup-progress').textContent='';$('setup-detail').textContent='이미 연결했다면 프로젝트를 선택하고 새 채팅을 시작하세요.';
+  $('setup-next').onclick=()=>act(async()=>{$('setup-guide').closest('dialog').close();await open();});window.actionIcon($('setup-next'),'plug','에이전트 연결 열기');
+  $('setup-skip').hidden=true;$('welcome-start').textContent='처음 시작하기';$('welcome-start').onclick=()=>act(open);
   window.refreshSetup();
   startWorkspace();
 })();

@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 import asyncio
 import json
 from app.core.commands import parse_command
-from app.models.schemas import WorkspaceRegister
+from app.models.schemas import WorkspaceRegister, RulebookSettings
 from app.models.schemas import ChatRequest, ChatCreate, Command, TaskUpdate, ClientConfig, RouteRequest
 from app.llm.cli import probe, executable
 from app.models.schemas import ProjectCreate, Command, FileWrite, AgentResult, ProjectSettings, MessageCreate, MessageMove
@@ -355,7 +355,7 @@ def create(body: ProjectCreate, request: Request):
 @router.get("/projects/{name}/rules")
 def rules(name: str, request: Request, cwd: str = "."):
     s = service(request)
-    return {"rules": s.rules.load(s.projects.select(name), cwd)}
+    return s.rulebook(name, cwd)
 
 
 @router.get("/projects/{name}/settings", response_model=ProjectSettings)
@@ -394,3 +394,8 @@ def write(name: str, body: FileWrite, request: Request):
 @router.post("/projects/{name}/commands", response_model=AgentResult)
 async def command(name: str, body: Command, request: Request):
     return await service(request).execute(name, body)
+
+
+@router.put('/projects/{name}/rules')
+def save_rules(name: str, body: RulebookSettings, request: Request):
+    return service(request).save_rulebook(name, body)

@@ -23,7 +23,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 6:
+            if version > 7:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -127,6 +127,23 @@ class Storage:
                     PRAGMA user_version=6;
                     COMMIT;
                 """)
+
+            if version < 7:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE IF NOT EXISTS rulebook_settings (project TEXT PRIMARY KEY, settings TEXT NOT NULL);
+                    PRAGMA user_version=7;
+                    COMMIT;
+                """)
+
+    def rulebook_settings(self, project):
+        with self.connect() as db:
+            row = db.execute('SELECT settings FROM rulebook_settings WHERE project=?', (project,)).fetchone()
+            return json.loads(row[0]) if row else {}
+
+    def save_rulebook_settings(self, project, settings):
+        with self.connect() as db:
+            db.execute('INSERT INTO rulebook_settings VALUES (?,?) ON CONFLICT(project) DO UPDATE SET settings=excluded.settings', (project,json.dumps(settings,ensure_ascii=False)))
 
     def onboarding(self):
         with self.connect() as db:

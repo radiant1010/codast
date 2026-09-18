@@ -12,15 +12,20 @@
     return (state,text)=>{retry.dataset.state=state;retry.title=label+' 다시 조회 · '+text;retry.setAttribute('aria-description',text);retry.disabled=state==='loading';};
   }
   const side=$('sidebar').querySelector('.side-content');
-  const drawer=el('dialog',undefined,'session-drawer');drawer.id='session-drawer';
   function closeIcon(label,handler){const node=button('',handler,'account-dialog-close');window.actionIcon(node,'close',label);return node;}
-  const heading=el('header');heading.append(el('h2','작업실 설정'),closeIcon('작업실 설정 닫기',async()=>drawer.close()));drawer.append(heading);document.body.append(drawer);
+  const sectionDialogs=new Map();
+  function sectionDialog(node,label){
+    const dialog=el('dialog',undefined,'session-drawer menu-dialog');dialog.id=node.id+'-dialog';
+    const heading=el('header'),title=el('h2',label);title.id=dialog.id+'-title';dialog.setAttribute('aria-labelledby',title.id);
+    heading.append(title,closeIcon(label+' 닫기',async()=>dialog.close()));dialog.append(heading,node);document.body.append(dialog);
+    node.classList.add('menu-dialog-content');sectionDialogs.set(node,dialog);return dialog;
+  }
   const connectionIntro=el('div',undefined,'client-connection-intro');
   const connectionHint=$('clients-panel').querySelector('.hint');connectionHint.before(connectionIntro);connectionIntro.append(connectionHint,$('probe-clients'));
   const workspaceHeader=el('div',undefined,'account-dialog-header');
   const workspaceTitle=$('workspace-dialog-title');workspaceTitle.before(workspaceHeader);workspaceHeader.append(workspaceTitle,$('cancel-workspace'));
   $('cancel-workspace').textContent='×';$('cancel-workspace').className='account-dialog-close';$('cancel-workspace').setAttribute('aria-label','프로젝트 연결 닫기');$('cancel-workspace').title='닫기';
-  function openSection(node){drawer.showModal();node.open=true;node.scrollIntoView({block:'start'});}
+  function openSection(node){const dialog=sectionDialogs.get(node);node.open=true;dialog.showModal();dialog.scrollTop=0;if(node.id==='rules-panel')act(()=>window.openRulebook?.());}
   const project=$('project-panel');project.querySelector('summary').textContent='프로젝트';
   const chats=el('section',undefined,'chat-navigation');
   const title=el('div',undefined,'side-title');const titleActions=el('div',undefined,'section-header-actions');titleActions.append($('reload'));title.append(el('h2','채팅 세션'),titleActions);chats.append(title);
@@ -41,14 +46,14 @@
     chatInput.value='';createChat.showModal();chatInput.focus();
   },'new-chat'),$('task-list'),$('chat-archive'));
   project.querySelector('.side-title').remove();
-  const projectTools=el('details');projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));drawer.append(projectTools);
+  const projectTools=el('details');projectTools.id='project-tools';projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));sectionDialog(projectTools,'프로젝트 관리');
   const path=el('p','프로젝트를 선택하세요.','project-location');const projectGit=el('p','Git · 프로젝트 선택 대기','hint');project.append(path,projectGit);
   const menu=el('nav',undefined,'workspace-menu');menu.setAttribute('aria-label','작업실 메뉴');
   for(const [id,label] of [['settings-panel','실행 설정'],['clients-panel','에이전트 연결'],['history-panel','실행 기록'],['rules-panel','작업 룰북'],['setup-guide','시작 도움말']]){
-    const node=$(id);drawer.append(node);menu.append(button(label,async()=>id==='clients-panel'&&window.openConnections?window.openConnections():openSection(node)));
+    const node=$(id);sectionDialog(node,label);menu.append(button(label,async()=>id==='clients-panel'&&window.openConnections?window.openConnections():openSection(node)));
   }
   menu.append(button('프로젝트 관리',async()=>openSection(projectTools)));
-  const overview=$('overview').closest('details');drawer.append(overview);
+  const overview=$('overview').closest('details');projectTools.append(overview);
   side.replaceChildren(project,chats,menu);$('setup-guide').open=false;
   const importDialog=el('dialog',undefined,'session-drawer');
   const importHead=el('div',undefined,'account-dialog-header'),importClose=button('',async()=>importDialog.close());

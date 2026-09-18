@@ -6,6 +6,7 @@ const {chromium}=require('playwright');
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  let fail=false,hold=true,releaseEnvironment;const waiting=[];
  const chats={one:[{task:'one-chat',count:0,status:'active',pinned:0,archived:0}],two:[{task:'regular',count:0,status:'active',pinned:0,archived:0},{task:'other',count:0,status:'active',pinned:0,archived:0}]};
+ const rulebooks={};
  let unfilteredMessages=0,fileRequests=0;
  const account={state:'available',limits:[{bucket:'codex',windowDurationMins:300,usedPercent:25,resetsAt:1790000000},{bucket:'codex',windowDurationMins:10080,usedPercent:63,resetsAt:1790100000}],models:[],source:'fixture',checked_at:new Date().toISOString()};
  await page.route('http://harness.test/**',async route=>{
@@ -21,6 +22,10 @@ const {chromium}=require('playwright');
   const project=path.match(/^\/api\/projects\/(one|two)\/(.*)$/);
   if(project){
    const [,name,resource]=project;
+   if(resource==='rules'){
+    if(route.request().method()==='PUT'){rulebooks[name]=route.request().postDataJSON();return route.fulfill({json:{saved:true}});}
+    return route.fulfill({json:{settings:rulebooks[name]||{enabled:true,include_project_rules:true,content:null},default_content:'기본 규정',rules:[]}});
+   }
    if(resource==='tasks'){
     if(route.request().method()==='PATCH'){
      const payload=route.request().postDataJSON(),chat=chats[name].find(row=>row.task===payload.task);
@@ -109,16 +114,16 @@ const {chromium}=require('playwright');
   assert.equal(result.before,result.after);assert.ok(result.moved>0);
  }
  await page.getByRole('button',{name:'실행 설정',exact:true}).click();
- await page.locator('#session-drawer').evaluate(n=>n.querySelectorAll('details').forEach(d=>d.open=true));
- for(const selector of ['#name','#create button','#workspace-root','#choose-workspace','#cwd','#mode','#save-settings']){
+
+ for(const selector of ['#workspace-root','#choose-workspace','#cwd','#mode','#save-settings']){
   const box=await page.locator(selector).boundingBox();assert.equal(box.height,40,selector);
   if(await page.locator(selector).evaluate(n=>n.matches('button')))assert.equal(box.width,40,selector);
  }
  await page.screenshot({path:'work/control-sizes-wide.png',fullPage:true});
  await page.setViewportSize({width:600,height:900});
- assert.equal(await page.locator('#session-drawer').evaluate(n=>n.scrollWidth<=n.clientWidth),true);
+ assert.equal(await page.locator('#settings-panel-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth),true);
  await page.screenshot({path:'work/control-sizes-narrow.png',fullPage:true});
- await page.getByRole('button',{name:'작업실 설정 닫기',exact:true}).click();
+ await page.getByRole('button',{name:'실행 설정 닫기',exact:true}).click();
  await page.setViewportSize({width:1440,height:1000});
  await page.screenshot({path:'work/loading-ui-wide.png',fullPage:true});
  await page.setViewportSize({width:600,height:900});
@@ -133,13 +138,127 @@ const {chromium}=require('playwright');
  await page.selectOption('#project','two');
  await page.waitForFunction(()=>document.querySelector('#send').disabled===false);
  assert.equal(await page.locator('#text').inputValue(),'홈 이동 후 복원할 초안');
+ await page.evaluate(()=>{
+  const messages=document.querySelector('#messages');messages.replaceChildren();
+  for(let i=0;i<8;i++)messages.append(messageCard({id:100+i,task:'renamed',created_at:'2026-09-18T12:00:00Z',text:'목차 요청 '+(i+1)+'\n'+('요청 내용\n'.repeat(12))},base()));
+ });
+ await page.waitForFunction(()=>document.querySelectorAll('.outline-item').length===8);
+ const outline=page.locator('.outline-item');
+ await outline.nth(4).focus();assert.equal(await outline.nth(4).locator('.outline-preview').isVisible(),true);
+ await outline.nth(4).press('Enter');
+ await page.waitForFunction(()=>document.querySelectorAll('.outline-item')[4].getAttribute('aria-current')==='location');
+ const distance=await page.evaluate(()=>document.querySelectorAll('#messages>.message')[4].getBoundingClientRect().top-document.querySelector('#messages').getBoundingClientRect().top);
+ assert.ok(Math.abs(distance-8)<2);
+ await page.locator('#messages').evaluate(n=>n.scrollTop=0);
+ await page.waitForFunction(()=>document.querySelector('.outline-item').getAttribute('aria-current')==='location');
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.screenshot({path:'work/chat-outline-narrow.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});
+ await outline.nth(2).hover();await page.screenshot({path:'work/chat-outline-wide.png',fullPage:true});
+ await page.evaluate(()=>document.querySelector('#messages').replaceChildren());
+ await page.locator('.chat-outline').waitFor({state:'hidden'});
  assert.equal(unfilteredMessages,0);
  assert.equal(fileRequests,0);
  assert.deepEqual(await page.evaluate(()=>selectedPaths()),[]);
  assert.equal(await page.locator('#document-panel,#files-panel,#open-editor').count(),0);
  await page.getByRole('button',{name:'작업 룰북',exact:true}).click();
- assert.equal(await page.locator('#rules').isVisible(),true);
- await page.getByRole('button',{name:'작업실 설정 닫기',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#rulebook-content').value==='기본 규정');
+ await page.getByText('변경 후 저장 버튼을 누르세요.',{exact:true}).waitFor();
+ await page.fill('#rulebook-content','내 작업 규정');
+ const checkStyle=await page.locator('#rulebook-tree input[type=checkbox]').first().evaluate(n=>({radius:getComputedStyle(n).borderRadius,bg:getComputedStyle(n).backgroundColor,width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height}));
+ assert.deepEqual(checkStyle,{radius:'0px',bg:'rgb(237, 155, 95)',width:14,height:14});
+ await page.locator('#rulebook-tree input[type=checkbox]').first().focus();await page.keyboard.press('Space');
+ assert.equal(await page.locator('#rulebook-tree input[type=checkbox]').first().isChecked(),false);
+ await page.keyboard.press('Space');assert.equal(await page.locator('#rulebook-tree input[type=checkbox]').first().isChecked(),true);
+ await page.screenshot({path:'work/orange-checkboxes.png',fullPage:true});
+ await page.locator('#rulebook-tree input[type=checkbox]').first().uncheck();
+ await page.getByRole('button',{name:'룰북 저장',exact:true}).click();
+ await page.waitForFunction(()=>!document.querySelector('#save-rulebook').disabled);
+ assert.equal(rulebooks.two.books[0].content,'내 작업 규정');
+ assert.equal(rulebooks.two.books[0].enabled,false);
+ page.once('dialog',dialog=>dialog.accept('UI 규칙'));await page.getByRole('button',{name:'룰북 폴더 추가',exact:true}).click();
+ await page.getByRole('button',{name:'룰북 추가',exact:true}).click();await page.fill('#rulebook-name','접근성');
+ await page.selectOption('#rulebook-folder','UI 규칙');await page.fill('#rulebook-content','키보드 조작을 지원한다.');
+ await page.getByRole('button',{name:'룰북 저장',exact:true}).click();
+ await page.getByText('저장했습니다. 다음 요청부터 적용됩니다.',{exact:true}).waitFor();
+ assert.equal(rulebooks.two.books.length,2);assert.equal(rulebooks.two.books[1].folder,'UI 규칙');
+ assert.equal(rulebooks.two.books[1].enabled,true);
+ assert.equal(await page.locator('#reload-rules').count(),0);
+ await page.locator('details[data-folder="UI 규칙"]>summary').hover();
+ page.once('dialog',dialog=>dialog.accept('웹'));await page.getByRole('button',{name:'UI 규칙 하위 폴더 추가',exact:true}).click();
+ await page.locator('details[data-folder="UI 규칙"]').evaluate(n=>n.open=true);
+ await page.locator('details[data-folder="UI 규칙/웹"]>summary').hover();
+ page.once('dialog',dialog=>dialog.accept('CSS'));await page.getByRole('button',{name:'UI 규칙/웹 하위 폴더 추가',exact:true}).click();
+ await page.locator('details[data-folder="UI 규칙/웹"]').evaluate(n=>n.open=true);
+ await page.locator('details[data-folder="UI 규칙/웹/CSS"]>summary').hover();
+ assert.equal(await page.getByRole('button',{name:'UI 규칙/웹/CSS 하위 폴더 추가',exact:true}).isDisabled(),true);
+ await page.selectOption('#rulebook-folder','UI 규칙/웹/CSS');
+ await page.locator('details[data-folder="UI 규칙"]>summary').hover();
+ page.once('dialog',dialog=>dialog.accept('인덱스'));await page.getByRole('button',{name:'UI 규칙 폴더 이름 변경',exact:true}).click();
+ assert.equal(await page.locator('#rulebook-folder').inputValue(),'인덱스/웹/CSS');
+ await page.getByRole('button',{name:'룰북 저장',exact:true}).click();
+ await page.getByText('저장했습니다. 다음 요청부터 적용됩니다.',{exact:true}).waitFor();
+ assert.deepEqual(rulebooks.two.folders,['인덱스','인덱스/웹','인덱스/웹/CSS']);
+ assert.equal(rulebooks.two.books[1].folder,'인덱스/웹/CSS');
+ await page.locator('#rulebook-tree details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
+ await page.locator('details[data-folder="인덱스/웹/CSS"] .rulebook-select').dragTo(page.locator('.rulebook-root-drop'));
+ assert.equal(await page.locator('#rulebook-folder').inputValue(),'');
+ await page.locator('.rulebook-select').filter({hasText:'접근성'}).dragTo(page.locator('details[data-folder="인덱스/웹"]>summary'));
+ assert.equal(await page.locator('#rulebook-folder').inputValue(),'인덱스/웹');
+ await page.locator('details[data-folder="인덱스/웹"]>summary').dragTo(page.locator('.rulebook-root-drop'));
+ assert.equal(await page.locator('#rulebook-folder').inputValue(),'웹');
+ assert.equal(await page.locator('details[data-folder="웹/CSS"]').count(),1);
+ await page.locator('#rulebook-tree details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
+ await page.locator('details[data-folder="웹"]>summary').dragTo(page.locator('details[data-folder="웹/CSS"]>summary'));
+ assert.equal(await page.locator('details[data-folder="웹"]').count(),1);
+ await page.getByRole('button',{name:'룰북 저장',exact:true}).click();
+ await page.getByText('저장했습니다. 다음 요청부터 적용됩니다.',{exact:true}).waitFor();
+ assert.equal(rulebooks.two.books[1].folder,'웹');
+ assert.equal(await page.locator('#rulebook-files').count(),0);
+ await page.locator('#rulebook-import-files').setInputFiles({name:'RULES.md',mimeType:'text/markdown',buffer:Buffer.from('직접 추가한 규정')});
+ await page.getByText('파일 내용을 추가했습니다. 적용할 룰북을 체크하고 저장하세요. 원본 파일은 변경하지 않습니다.',{exact:true}).waitFor();
+ assert.equal(await page.locator('#rulebook-content').inputValue(),'직접 추가한 규정');
+ await page.locator('#rulebook-tree details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
+ assert.equal(await page.getByRole('checkbox',{name:'RULES.md 적용',exact:true}).isChecked(),false);
+ await page.getByRole('checkbox',{name:'RULES.md 적용',exact:true}).check();
+ await page.getByRole('button',{name:'룰북 저장',exact:true}).click();
+ await page.getByText('저장했습니다. 다음 요청부터 적용됩니다.',{exact:true}).waitFor();
+ assert.equal(rulebooks.two.books.at(-1).content,'직접 추가한 규정');
+ assert.equal(rulebooks.two.include_project_rules,false);
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'선택한 룰북 삭제',exact:true}).click();
+ await page.getByRole('button',{name:'룰북 저장',exact:true}).click();await page.getByText('저장했습니다. 다음 요청부터 적용됩니다.',{exact:true}).waitFor();
+ assert.equal(rulebooks.two.books.at(-1).trashed,true);
+ await page.getByRole('button',{name:'작업 룰북 닫기',exact:true}).click();
+ await page.getByRole('button',{name:'작업 룰북',exact:true}).click();await page.getByText('변경 후 저장 버튼을 누르세요.',{exact:true}).waitFor();
+ await page.locator('#rulebook-trash>summary').click();
+ await page.getByRole('button',{name:'RULES.md 룰북 복원',exact:true}).click();
+ assert.equal(await page.locator('#rulebook-content').inputValue(),'직접 추가한 규정');
+ assert.equal(await page.getByRole('checkbox',{name:'RULES.md 적용',exact:true}).isChecked(),false);
+ await page.getByRole('button',{name:'룰북 저장',exact:true}).click();await page.getByText('저장했습니다. 다음 요청부터 적용됩니다.',{exact:true}).waitFor();
+ assert.equal(rulebooks.two.books.at(-1).trashed,false);
+
+
+
+
+
+ await page.screenshot({path:'work/rulebook-edit.png',fullPage:true});
+ await page.setViewportSize({width:600,height:900});
+ assert.equal(await page.locator('#rules-panel-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth),true);
+ await page.screenshot({path:'work/rulebook-library-narrow.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'작업 룰북 닫기',exact:true}).click();
+ for(const [label,id] of [['실행 설정','settings-panel'],['실행 기록','history-panel'],['작업 룰북','rules-panel'],['시작 도움말','setup-guide'],['프로젝트 관리','project-tools']]){
+  await page.getByRole('button',{name:label,exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:label,exact:true});assert.equal(await dialog.isVisible(),true);
+  assert.equal(await page.locator('dialog[open]').count(),1);
+  for(const other of ['settings-panel','history-panel','rules-panel','setup-guide','project-tools'])if(other!==id)assert.equal(await page.locator('#'+other).isVisible(),false);
+  if(id==='setup-guide'){
+   assert.equal(await dialog.locator('#setup-steps li').count(),4);
+   assert.equal(await dialog.locator('#setup-steps').isVisible(),true);
+   await page.screenshot({path:'work/start-help.png',fullPage:true});
+  }
+  await page.keyboard.press('Escape');assert.equal(await dialog.isVisible(),false);
+ }
  assert.deepEqual(errors,[]);console.log('PASS: pending account does not block workspace; failure retains data; retry recovers; pending environment does not block input or project switching; stale response ignored; narrow viewport has no horizontal overflow; no JS errors.');
  await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

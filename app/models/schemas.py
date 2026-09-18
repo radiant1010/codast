@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class StrictModel(BaseModel):
@@ -99,3 +99,37 @@ class AgentResult(BaseModel):
     session_id: str | None = None
     usage: dict | None = None
     execution_model: str | None = None
+
+
+class RulebookEntry(StrictModel):
+    trashed: bool = False
+    id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+    name: str = Field(min_length=1, max_length=80, pattern=r'\S')
+    folder: str = Field(default='', max_length=242)
+    enabled: bool = True
+    content: str | None = Field(default=None, max_length=24000)
+
+
+class RulebookSettings(StrictModel):
+    enabled: bool = True
+    include_project_rules: bool = True
+    content: str | None = Field(default=None, max_length=24000)
+    folders: list[str] = Field(default_factory=list, max_length=40)
+    books: list[RulebookEntry] | None = Field(default=None, max_length=40)
+
+    @model_validator(mode='after')
+    def validate_library(self):
+        if any(not f.strip() for f in self.folders) or len(set(self.folders))!=len(self.folders):
+            raise ValueError('폴더 이름은 비어 있거나 중복될 수 없습니다.')
+        for folder in self.folders:
+            parts = folder.split('/')
+            if len(parts)>3 or any(not part.strip() or part!=part.strip() or len(part)>80 or part in ('.','..') or '\\' in part for part in parts):
+                raise ValueError('폴더는 이름당 80자, 최대 3단계까지 허용합니다.')
+            if len(parts)>1 and '/'.join(parts[:-1]) not in self.folders:
+                raise ValueError('상위 폴더를 찾을 수 없습니다.')
+        if self.books is not None:
+            if len({b.id for b in self.books})!=len(self.books):
+                raise ValueError('룰북 ID가 중복되었습니다.')
+            if any(b.folder and b.folder not in self.folders for b in self.books):
+                raise ValueError('룰북 폴더를 찾을 수 없습니다.')
+        return self

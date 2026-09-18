@@ -120,3 +120,90 @@ summary,label,.hint,.project-location,.native-session,#connection,#status,.meta{
 .startup-spinner{border-radius:0;border-color:#343434;border-top-color:var(--terminal-accent)}
 @media(max-width:1150px) and (min-width:701px){.session-dashboard{height:300px;grid-template-rows:minmax(0,1fr) minmax(0,1fr)}}
 @media(max-width:700px){#sidebar{width:190px;min-width:190px}#console{--workspace-gutter:10px}.session-dashboard{height:220px;padding:10px;gap:8px}.session-dashboard>.compact-session-panel,.session-dashboard>.codex-account-summary,.session-dashboard>.compact-environment{height:156px;flex-basis:156px}.agent-picker select{width:140px}.brand{padding:10px;gap:5px}.brand span{font-size:9px}}
+
+/* Request outline stays beside the independently scrolling conversation. */
+.conversation-pane{position:relative;display:flex;flex:1;min-height:0;min-width:0}
+.conversation-pane>#messages{padding-left:36px;min-width:0}
+.chat-outline{position:absolute;z-index:2;left:4px;top:8px;bottom:8px;width:24px;display:flex;flex-direction:column;justify-content:flex-start}
+.chat-outline .outline-item{position:relative;display:flex;align-items:center;justify-content:center;flex:0 1 24px;min-height:8px;width:24px;padding:0;border:0;background:transparent}
+.outline-mark{display:block;width:7px;height:2px;background:#555}
+.outline-item[aria-current] .outline-mark{width:14px;background:var(--terminal-accent)}
+.outline-item:hover .outline-mark,.outline-item:focus-visible .outline-mark{background:#eee}
+.outline-preview{display:none;position:absolute;left:26px;top:0;width:max-content;max-width:min(300px,calc(100vw - 70px));padding:6px 8px;background:#202020;border:1px solid var(--terminal-border);color:#ddd;text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:11px;line-height:1.5;pointer-events:none}
+.outline-item:hover .outline-preview,.outline-item:focus .outline-preview{display:block}
+
+.chat-outline:has(.outline-item:hover) .outline-item:not(:hover) .outline-preview{display:none}
+
+.menu-dialog>.menu-dialog-content{margin:0;padding:0;border:0}
+.menu-dialog>.menu-dialog-content>summary{display:none}
+#history-panel-dialog,#rules-panel-dialog{width:min(860px,94vw)}
+#rules-panel-dialog pre{overflow-wrap:anywhere}
+
+#setup-guide-dialog #setup-guide{background:transparent;border:0;padding:0;margin:0}
+#setup-guide-dialog #setup-steps{list-style:decimal;padding-left:22px;margin:20px 0}
+#setup-guide-dialog #setup-steps li{padding:0 0 16px 4px}
+#setup-guide-dialog #setup-steps h3{margin:0 0 6px;font-size:13px;color:#ddd}
+#setup-guide-dialog #setup-steps p{color:var(--terminal-muted);line-height:1.6}
+#setup-guide-dialog #setup-next{width:40px!important;margin:8px 0 0}
+#rulebook-content{width:100%;min-height:260px;max-height:50vh;padding:10px;resize:vertical}
+.rulebook-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:12px}
+
+/* Shared interaction palette; operational status colors remain semantic. */
+:root{--control-accent:var(--terminal-accent);--control-bg:#151515;--control-border:var(--terminal-border);--control-hover:#252525;--terminal-selected:#302219}
+input[type=checkbox],.check input[type=checkbox]{appearance:none;display:inline-grid;place-content:center;box-sizing:border-box;width:14px;height:14px;min-width:14px;min-height:14px;flex:0 0 14px;padding:0;margin:0;border:1px solid #777;border-radius:0;background:#151515;accent-color:var(--terminal-accent);cursor:pointer;vertical-align:middle}
+input[type=checkbox]::before{content:'';width:8px;height:5px;border-left:2px solid #151515;border-bottom:2px solid #151515;transform:translateY(-1px) rotate(-45deg) scale(0)}
+input[type=checkbox]:checked{background:var(--terminal-accent);border-color:var(--terminal-accent)}
+input[type=checkbox]:checked::before{transform:translateY(-1px) rotate(-45deg) scale(1)}
+input[type=checkbox]:indeterminate{background:var(--terminal-accent);border-color:var(--terminal-accent)}
+input[type=checkbox]:indeterminate::before{height:0;border-left:0;transform:none}
+input[type=checkbox]:focus-visible{outline:2px solid var(--terminal-accent);outline-offset:3px}
+input[type=checkbox]:disabled{opacity:.4;cursor:default}
+select:focus-visible{outline-color:var(--terminal-accent)}
+select:open{border-color:var(--terminal-accent);box-shadow:none}
+select::picker(select){background:#151515;border-color:var(--terminal-border);color:#d4d4d4}
+select option:checked,.agent-segment>button[aria-pressed="true"]{background:var(--terminal-selected);border-color:var(--terminal-accent);color:var(--terminal-accent)}
+select option:hover,select option:focus-visible{background:#252525;color:#eee}
+select option::checkmark,select::picker-icon,.agent-picker select{color:var(--terminal-accent)}
+#setup-next,#register-folder,#welcome-start{background:var(--terminal-selected);border-color:var(--terminal-accent);color:var(--terminal-accent)}
+.client-path-row .action-icon,.field-action-row .action-icon,#add-workspace.action-icon{background:#202020;border-color:var(--terminal-border);color:var(--terminal-accent)}
+@media(forced-colors:active){input[type=checkbox],.check input[type=checkbox]{appearance:auto}input[type=checkbox]::before{content:none}}
+
+#rules-panel-dialog{width:min(1000px,94vw)}
+.rulebook-library{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;border:0;margin:0;padding:0;min-width:0}
+.rulebook-navigation{border-right:1px dashed var(--terminal-border);padding-right:12px;min-width:0;max-height:55vh;overflow:auto}
+.rulebook-toolbar,.rulebook-folder-actions{display:flex;gap:8px}
+.rulebook-folder-actions{justify-content:flex-end}
+.rulebook-row{display:flex;align-items:center;gap:8px;min-width:0}
+.rulebook-row .rulebook-select{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent}
+.rulebook-row .rulebook-select[aria-pressed=true]{background:var(--terminal-selected);color:var(--terminal-accent)}
+.rulebook-editor{min-width:0}
+.rulebook-editor label:first-child{margin-top:0}
+.rulebook-library>.check{grid-column:1/-1;margin:0}
+.rulebook-library>.rulebook-actions{grid-column:1/-1;margin:0}
+@media(max-width:700px){.rulebook-library{grid-template-columns:1fr}.rulebook-navigation{max-height:180px;border-right:0;border-bottom:1px dashed var(--terminal-border);padding:0 0 12px}.rulebook-library #rulebook-content{min-height:180px}}
+
+.rulebook-list-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;margin-bottom:8px;border-bottom:1px dashed var(--terminal-border)}
+.rulebook-list-header h3{margin:0;font-size:12px;color:var(--terminal-muted)}
+.rulebook-toolbar{align-items:center}
+.rulebook-toolbar .action-icon{margin:0}
+
+#rulebook-tree details details{margin-left:10px;padding-left:8px;border-left:1px dashed var(--terminal-border)}
+#rulebook-tree summary{overflow-wrap:anywhere}
+
+.rulebook-root-drop{padding:10px 8px;margin-bottom:8px;border:1px dashed var(--terminal-border);color:var(--terminal-muted);font-size:11px;text-align:center}
+#rulebook-tree .drop-target{outline:1px solid var(--terminal-accent);background:var(--terminal-selected)}
+#rulebook-tree [draggable=true]{cursor:grab}
+#rulebook-tree [draggable=true]:active{cursor:grabbing}
+#rulebook-tree details{margin:4px 0;padding:0;border-bottom:0}
+#rulebook-tree summary{position:relative;min-height:30px;padding:6px 0;line-height:18px}
+#rulebook-tree summary:hover,#rulebook-tree summary:focus-within{padding-right:80px}
+#rulebook-tree .rulebook-folder-actions{position:absolute;right:0;top:3px;gap:2px;visibility:hidden}
+#rulebook-tree summary:hover .rulebook-folder-actions,#rulebook-tree summary:focus-within .rulebook-folder-actions{visibility:visible}
+#rules-panel-dialog .rulebook-folder-actions .action-icon{width:24px!important;min-width:24px;max-width:24px;height:24px;min-height:24px;flex-basis:24px;padding:3px!important}
+@media(hover:none){#rulebook-tree .rulebook-folder-actions{visibility:visible}#rulebook-tree summary{padding-right:80px}}
+
+.rulebook-import-row{grid-column:1/-1;display:flex;align-items:center;gap:12px;min-width:0}
+.rulebook-import-row .hint{margin:0}
+
+#rulebook-trash{margin-top:16px;border-top:1px dashed var(--terminal-border);padding-top:8px}
+.rulebook-trash-row{display:flex;align-items:center;gap:8px}.rulebook-trash-row>span{flex:1;min-width:0;overflow-wrap:anywhere}

@@ -91,7 +91,7 @@ function messageCard(m,b){
     if(m.status==='running'){const detail=el('details'),log=el('div',undefined,'stream');detail.append(el('summary','실행 과정 보기 · 실시간'),log);answer.append(detail);queueMicrotask(()=>{if(log.isConnected)streamRun(m.run_id,b,log,true);});}
     else{const detail=el('details'),log=el('div',undefined,'stream');detail.append(el('summary','실행 과정 보기'),log);let loaded=false;detail.ontoggle=()=>{if(detail.open&&!loaded){loaded=true;streamRun(m.run_id,b,log,false);}};answer.append(detail);}
   }
-  const controls=el('details');controls.append(el('summary','작업 이동'));const input=el('input');input.value=m.task;input.maxLength=120;input.setAttribute('list','task-names');input.setAttribute('aria-label','옮길 작업 이름');input.placeholder='비우면 미분류';controls.append(input,button('이동',async()=>{await api(b+'/messages/'+m.id,'PATCH',{task:input.value});if(valid(b))await conversation();},'secondary'));card.append(controls);return card;
+  return card;
 }
 async function conversation(b=base()){
   const ticket=++conversationTicket,e=epoch,query='&task='+encodeURIComponent(filter||'');
@@ -125,6 +125,7 @@ async function loadProject(){
 }
 async function loadRules(b=base()){
   const e=epoch,rules=await api(b+'/rules?cwd='+encodeURIComponent($('cwd').value));if(!valid(b,e))return;
+  window.renderRulebook?.(rules);
   $('rules').textContent=rules.rules.map(r=>'# '+r.path+'\n'+r.content).join('\n')||'적용된 룰북이 없습니다.';
 }
 
