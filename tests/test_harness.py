@@ -18,6 +18,8 @@ def setup(tmp_path):
     agent = RecordingAgent()
     with TestClient(create_app(tmp_path / 'workspaces', agent)) as client:
         assert client.post('/api/projects', json={'name':'sample'}).status_code == 201
+        # These tests cover the supported legacy file-rule contract.
+        client.put('/api/projects/sample/rules', json={'enabled':True,'include_project_rules':True})
         yield client, tmp_path / 'workspaces/sample', agent
 
 

@@ -98,3 +98,18 @@ def test_trashed_rules_persist_and_are_never_applied(tmp_path):
         saved['enabled']=True
         client.put('/api/projects/one/rules',json={'books':[saved]})
         assert client.get('/api/projects/one/rules').json()['rules'][0]['content']=='Keep me'
+
+
+def test_packaged_defaults_and_saved_overrides(tmp_path):
+    import json
+    from pathlib import Path
+    expected=json.loads((Path(__file__).parents[1]/'app/defaults/rulebooks.json').read_text(encoding='utf-8'))
+    with TestClient(create_app(tmp_path/'ws')) as client:
+        client.post('/api/projects',json={'name':'one'})
+        initial=client.get('/api/projects/one/rules').json()
+        assert initial['settings']==expected
+        assert len(initial['rules'])==6
+        client.put('/api/projects/one/rules',json={'books':[]})
+        assert client.get('/api/projects/one/rules').json()['rules']==[]
+    with TestClient(create_app(tmp_path/'ws')) as client:
+        assert client.get('/api/projects/one/rules').json()['settings']['books']==[]
