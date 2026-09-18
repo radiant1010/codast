@@ -1,5 +1,16 @@
 /* Session workspace. Reuse the existing task-to-native-session contract. */
 (()=>{
+  function queryStatus(panel,label,refresh){
+    const retry=button('',refresh);window.actionIcon(retry,'restore',label+' 다시 조회');
+    retry.classList.add('query-refresh');
+    panel.querySelector('.section-header-actions').append(retry);
+    const head=panel.firstElementChild;
+    const body=el('div',undefined,'dashboard-body');
+    body.tabIndex=0;body.setAttribute('role','region');body.setAttribute('aria-label',label+' 내용');
+    while(head.nextSibling)body.append(head.nextSibling);
+    panel.append(body);
+    return (state,text)=>{retry.dataset.state=state;retry.title=label+' 다시 조회 · '+text;retry.setAttribute('aria-description',text);retry.disabled=state==='loading';};
+  }
   const side=$('sidebar').querySelector('.side-content');
   const drawer=el('dialog',undefined,'session-drawer');drawer.id='session-drawer';
   function closeIcon(label,handler){const node=button('',handler,'account-dialog-close');window.actionIcon(node,'close',label);return node;}
@@ -107,15 +118,21 @@
   const alerts=button('알림 0',async()=>{$('session-alerts').hidden=!$('session-alerts').hidden;});alerts.id='session-notifications';rh.append(alerts);running.append(rh);
   const list=el('div');list.id='running-sessions';running.append(list);top.append(usage,running);$('console').prepend(top);
   const account=el('section',undefined,'codex-account-summary');
-  const accountLabel=el('strong','Codex 계정'),accountValue=el('span','조회 중…');
+  const accountLabel=el('h2','계정 사용량');
   const accountDetails=el('dialog',undefined,'session-drawer');
   const accountHeader=el('div',undefined,'account-dialog-header');
   const accountClose=button('×',async()=>accountDetails.close(),'account-dialog-close');
   accountClose.setAttribute('aria-label','조회 정보 닫기');accountClose.title='닫기';
   accountHeader.append(el('h2','Codex 조회 정보'),accountClose);accountDetails.append(accountHeader);
   const accountBody=el('div');accountDetails.append(accountBody);document.body.append(accountDetails);
-  account.append(accountLabel,accountValue,button('모델 · 한도 상세',async()=>accountDetails.showModal()));
-  const accountPreview=el('div',undefined,'account-preview');account.append(accountPreview);
+  const accountHead=el('div',undefined,'compact-panel-head'),accountActions=el('div',undefined,'section-header-actions');
+  const accountDetail=button('모델·한도',async()=>accountDetails.showModal());accountDetail.title='모델 · 한도 상세';
+  accountActions.append(accountDetail);accountHead.append(accountLabel,accountActions);account.append(accountHead);
+  const accountTable=el('table',undefined,'dashboard-table account-table'),accountThead=el('thead'),accountTitles=el('tr');
+  for(const name of ['AI','한도 사용률','초기화'])accountTitles.append(el('th',name));
+  accountThead.append(accountTitles);const accountRows=el('tbody');accountTable.append(accountThead,accountRows);account.append(accountTable);
+  function accountPlaceholder(client,text){const row=el('tr');row.append(el('td',client),el('td',text),el('td','—'));return row;}
+  accountRows.append(accountPlaceholder('Codex','조회 중…'),accountPlaceholder('Claude','미수집'));
   const metrics=el('dialog',undefined,'session-drawer');
   const metricsHead=el('div',undefined,'account-dialog-header');
   const metricsClose=button('×',async()=>metrics.close(),'account-dialog-close');metricsClose.setAttribute('aria-label','사용량 닫기');
@@ -123,22 +140,30 @@
   usageDetails.hidden=false;toggleUsage.remove();
   menu.append(button('사용량 대시보드',async()=>metrics.showModal()));
   const sessionsPanel=el('section',undefined,'compact-session-panel');
-  const sessionsHead=el('div',undefined,'compact-panel-head');sessionsHead.append(el('h2','AI 세션'),alerts,button('상세',async()=>metrics.showModal()));
+  const sessionsHead=el('div',undefined,'compact-panel-head'),sessionActions=el('div',undefined,'section-header-actions');
+  sessionActions.append(alerts,button('상세',async()=>metrics.showModal()));sessionsHead.append(el('h2','AI 세션'),sessionActions);
   const table=el('table',undefined,'compact-session-table'),thead=el('thead'),tr=el('tr');
   for(const name of ['AI / 채팅','상태','컨텍스트','누적 토큰','실행 모델'])tr.append(el('th',name));
   thead.append(tr);const sessionRows=el('tbody');table.append(thead,sessionRows);sessionsPanel.append(sessionsHead,table);
-  const environment=el('section',undefined,'compact-environment');environment.append(el('h2','실행 환경'));
-  const envProject=el('p','프로젝트를 선택하세요.','hint');environment.append(envProject);
-  const envValues=el('dl'),envFields={};for(const name of ['Git','포트','Docker']){const value=el('dd','프로젝트 선택 대기');envFields[name]=value;envValues.append(el('dt',name),value);}environment.append(envValues);
-  let envBusy=false,envProjectKey=null;
+  const environment=el('section',undefined,'compact-environment'),envHead=el('div',undefined,'compact-panel-head');
+  envHead.append(el('h2','실행 환경'),el('div',undefined,'section-header-actions'));environment.append(envHead);
+  const envProject=el('span','프로젝트를 선택하세요.','environment-project');envHead.insertBefore(envProject,envHead.lastChild);
+  const envValues=el('table',undefined,'dashboard-table environment-table'),envTitles=el('tr'),envThead=el('thead'),envRows=el('tbody'),envFields={},envStates={};
+  for(const name of ['항목','상태','값'])envTitles.append(el('th',name));envThead.append(envTitles);envValues.append(envThead,envRows);
+  for(const name of ['Git','포트','Docker']){const row=el('tr'),value=el('td','—','environment-value'),state=el('td','● 선택 대기','environment-state');envFields[name]=value;envStates[name]=state;row.append(el('td',name),state,value);envRows.append(row);}environment.append(envValues);
+  function environmentState(name,text,kind='idle'){envStates[name].textContent='● '+text;envStates[name].dataset.state=kind;}
+  let envBusy=false,envProjectKey=null,envTicket=0;
+  const envStatus=queryStatus(environment,'실행 환경',refreshEnvironment);
   async function refreshEnvironment(){
     const projectName=$('project').value;
-    if(projectName!==envProjectKey){envProjectKey=projectName;for(const value of Object.values(envFields))value.textContent=projectName?'조회 중…':'프로젝트 선택 대기';}
+    if(projectName!==envProjectKey){envProjectKey=projectName;envTicket++;envBusy=false;envProject.textContent=projectName||'프로젝트를 선택하세요.';for(const [name,value] of Object.entries(envFields)){value.textContent='—';value.title='';environmentState(name,projectName?'확인 중':'선택 대기',projectName?'loading':'idle');}}
     projectGit.textContent='Git · '+envFields.Git.textContent;
-    if(!projectName||envBusy)return;envBusy=true;
+    if(!projectName){envStatus('idle','프로젝트 선택 대기');return;}if(envBusy)return;envBusy=true;
+    envStatus('loading','실행 환경 확인 중');
+    const ticket=++envTicket;
     try{
       const data=await api('/projects/'+encodeURIComponent(projectName)+'/environment');
-      if($('project').value!==projectName)return;
+      if($('project').value!==projectName||ticket!==envTicket)return;
       const state={not_installed:'미설치',not_repository:'저장소 아님',error:'조회 실패',unavailable:'엔진 연결 불가'};
       envFields.Git.textContent=data.git.state==='available'?(data.git.branch||'브랜치 미확인')+' · '+(data.git.changed_entries?'변경 '+data.git.changed_entries+'건':'변경 없음'):state[data.git.state]||'확인 불가';
       projectGit.textContent='Git · '+envFields.Git.textContent;
@@ -147,24 +172,39 @@
       envFields.Docker.title='선택 프로젝트 경로와 Compose 작업 경로가 정확히 일치하는 컨테이너만 표시';
       envFields['포트'].textContent=data.ports.values.length?data.ports.values.join(', '):'호스트 미수집';
       envFields['포트'].title='Docker 포트: '+(data.ports.values.join(', ')||'확인된 포트 없음')+' · 일반 개발 서버 포트는 아직 미수집';
+      for(const [name,result] of [['Git',data.git],['Docker',data.docker]]){
+        const ok=result.state==='available';environmentState(name,ok?'정상':state[result.state]||'미확인',ok?'ready':['error','unavailable'].includes(result.state)?'error':'idle');
+        if(!ok)envFields[name].textContent='—';
+      }
+      environmentState('포트',data.ports.values.length?'Docker':'미수집',data.ports.values.length?'ready':'idle');
+      if(!data.ports.values.length)envFields['포트'].textContent='—';
       for(const field of [envFields.Git,envFields['포트']])field.title=field.title||field.textContent;
-    }catch(error){if($('project').value===projectName){for(const field of Object.values(envFields))field.textContent='조회 실패';projectGit.textContent='Git · 조회 실패';}}finally{envBusy=false;if($('project').value!==projectName)refreshEnvironment();}
+      const failed=['error','unavailable'].includes(data.git.state)||['error','unavailable'].includes(data.docker.state);
+      envStatus(failed?'error':'ready',failed?'일부 조회 실패 · 다시 조회하세요.':'확인 '+new Date().toLocaleTimeString());
+    }catch(error){if($('project').value===projectName&&ticket===envTicket){for(const name of Object.keys(envStates))environmentState(name,'조회 실패','error');projectGit.textContent='Git · '+envFields.Git.textContent;envStatus('error','조회 실패 · 다시 조회하세요.');}}finally{if(ticket===envTicket)envBusy=false;}
   }
   setInterval(()=>{if(!document.hidden)refreshEnvironment();},15000);
   top.replaceChildren(sessionsPanel,account,environment);
   let statusBusy=false;
+  const accountStatus=queryStatus(account,'계정 정보',refreshAccount);
   async function refreshAccount(){
     if(statusBusy)return;statusBusy=true;
+    accountStatus('loading','계정 정보 확인 중');
     try{
-      const data=await api('/clients/codex/status');accountBody.replaceChildren();
-      const primary=data.limits.find(row=>row.bucket==='codex');
+      const data=await api('/clients/codex/status');
+      if(data.state==='error')throw Error('계정 조회 실패');
+      accountBody.replaceChildren();
+      accountStatus(data.state==='error'?'error':'ready',data.state==='error'?'조회 실패 · 다시 조회할 수 있습니다.':'확인 '+new Date(data.checked_at).toLocaleTimeString());
       const duration=minutes=>minutes===10080?'주간':minutes===300?'5시간':minutes?minutes+'분':'기간 미제공';
-      accountValue.textContent=primary?duration(primary.windowDurationMins)+' 사용 '+primary.usedPercent+'%':data.state==='not_installed'?'CLI 미설치':data.state==='error'?'조회 실패':'한도 미제공';
-      accountPreview.replaceChildren();
-      if(primary&&typeof primary.usedPercent==='number'){
-        const bar=el('progress');bar.max=100;bar.value=Math.max(0,Math.min(100,primary.usedPercent));bar.setAttribute('aria-label','Codex 계정 사용률');accountPreview.append(bar);
-        accountPreview.append(el('p','초기화 · '+(primary.resetsAt?new Date(primary.resetsAt*1000).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'미제공'),'hint'));
+      accountRows.replaceChildren();
+      for(const limit of data.limits.filter(row=>row.bucket==='codex')){
+        const row=el('tr'),known=typeof limit.usedPercent==='number'&&Number.isFinite(limit.usedPercent);
+        const value=el('td',duration(limit.windowDurationMins)+' '+(known?limit.usedPercent+'%':'미수신'));
+        const reset=limit.resetsAt?new Date(limit.resetsAt*1000):null;
+        row.append(el('td','Codex'),value,el('td',reset&&!Number.isNaN(reset.getTime())?reset.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'미제공'));accountRows.append(row);
       }
+      if(!accountRows.children.length)accountRows.append(accountPlaceholder('Codex',data.state==='not_installed'?'CLI 미설치':'한도 미제공'));
+      accountRows.append(accountPlaceholder('Claude','미수집'));
       const limits=el('div',undefined,'account-limits');
       for(const row of [...data.limits].sort((a,b)=>(a.bucket==='codex'?0:1)-(b.bucket==='codex'?0:1))){
         const card=el('section',undefined,'account-limit');
@@ -183,7 +223,7 @@
       for(const model of data.models)accountBody.append(el('p',(model.displayName||model.model)+(model.isDefault?' · 목록 기본값':'')));
       if(!data.models.length)accountBody.append(el('p','모델 목록을 받지 못했습니다.'));
       accountBody.append(el('p','목록 기본값은 실제 실행 모델을 뜻하지 않습니다. 실행 모델·컨텍스트는 아직 미수집입니다.','hint'),el('p','계정 범위 · '+data.source+' · 확인 '+new Date(data.checked_at).toLocaleString()+' · 최대 60초 캐시','hint'));
-    }catch(error){accountValue.textContent='조회 실패';accountPreview.replaceChildren();accountBody.replaceChildren(el('p','조회 정보를 불러오지 못했습니다.'));}finally{statusBusy=false;}
+    }catch(error){if(accountRows.textContent.includes('조회 중…'))accountRows.replaceChildren(accountPlaceholder('Codex','조회 실패'),accountPlaceholder('Claude','미수집'));accountStatus('error','조회 실패 · 다시 조회하세요.');}finally{statusBusy=false;}
   }
   refreshAccount();setInterval(()=>{if(!document.hidden)refreshAccount();},60000);
   const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='이 화면을 연 이후 실행 종료 알림이 표시됩니다.';top.after(alertBox);
@@ -205,6 +245,7 @@
     }
   },true);
   let snapshot={sessions:[],running:[]},previous=null,notifications=0,inFlight=false;
+  const sessionStatus=queryStatus(sessionsPanel,'세션 현황',refresh);
   async function openChat(projectName,task){
     if(metrics.open)metrics.close();
     if($('project').value!==projectName){$('project').value=projectName;await loadProject();}
@@ -268,13 +309,15 @@
   };
   async function refresh(){
     if(inFlight)return;inFlight=true;
+    sessionStatus('loading','세션 현황 확인 중');
     try{
       const next=await api('/session-overview');snapshot=next;list.replaceChildren();
       for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+run.project+' / '+(run.command.task||'미분류')+' · '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트 윈도우 사용량 · 미수집','hint'));list.append(item);}
       if(!next.running.length)list.append(el('p','실행 중인 세션이 없습니다.','hint'));
       if(previous){for(const run of previous.filter(old=>!next.running.some(r=>r.id===old.id))){notifications++;alertBox.prepend(el('p',run.project+' · '+(run.command.task||'미분류')+' 실행 상태가 변경되었습니다. 기록을 확인하세요.'));}}
       previous=next.running;alerts.textContent='알림 '+notifications;renderNative();renderUsage();
-    }catch(error){list.replaceChildren(el('p','세션 현황을 불러오지 못했습니다. '+error.message,'error'));sessionRows.replaceChildren();const row=el('tr'),cell=el('td','세션 조회 실패 · 다음 갱신에서 재시도합니다.');cell.colSpan=5;row.append(cell);sessionRows.append(row);}finally{inFlight=false;}
+      sessionStatus('ready','확인 '+new Date().toLocaleTimeString());
+    }catch(error){sessionStatus('error','조회 실패 · 다시 조회하세요.');}finally{inFlight=false;}
   }
   $('project').addEventListener('change',()=>{refreshEnvironment();for(const c of ['codex','claude'])$('usage-'+c).textContent='수집된 토큰 정보 없음';});
   $('welcome-start').onclick=()=>openSection(projectTools);
