@@ -1,6 +1,9 @@
 /* Familiar action icons retain Korean accessible names and hover descriptions. */
 (()=>{
   const paths={
+    pin:'<path d="m8 3 8 0-1 6 4 4v2H5v-2l4-4-1-6zM12 15v6"/>',
+    archive:'<path d="M3 4h18v4H3zM5 8v12h14V8M9 12h6"/>',
+    edit:'<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6z"/>',
     plus:'<path d="M12 5v14M5 12h14"/>',
     importDocument:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M20 15H10m3-3-3 3 3 3"/>',
     folder:'<path d="M3 7V5h6l2 2h10v12H3z"/><path d="M3 11h18"/>',
@@ -29,12 +32,7 @@
     'pick-folder':['folder','폴더 선택'],
     'register-folder':['plus','선택한 워크스페이스 추가'],
     'cancel-workspace':['close','워크스페이스 추가 취소'],
-    'open-editor':['file','문서 탐색 · 편집 열기'],
-    'new-document':['plus','새 문서'],
-    'read':['file','경로의 문서 열기'],
-    'write':['save','문서 저장 (Ctrl+S)'],
     'save-settings':['save','실행 설정 저장'],
-    'update-task':['check','작업 변경 적용'],
     'probe-clients':['plug','CLI 설치·연결 확인'],
     'delete-project':['trash','선택한 프로젝트 삭제'],
     'send':['send','요청 보내기'],

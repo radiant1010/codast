@@ -172,7 +172,7 @@ def create_task(name: str, body: ChatCreate, request: Request):
 def update_task(name: str, body: TaskUpdate, request: Request):
     s = service(request)
     s.projects.select(name)
-    s.storage.update_task(name, body.task, body.title, body.status)
+    s.storage.update_task(name, body.task, body.title, body.status, pinned=body.pinned, archived=body.archived)
     return {'updated': True}
 
 

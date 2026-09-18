@@ -23,7 +23,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 5:
+            if version > 6:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -112,6 +112,19 @@ class Storage:
                         updated_at TEXT NOT NULL
                     );
                     PRAGMA user_version=5;
+                    COMMIT;
+                """)
+
+            if version < 6:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE IF NOT EXISTS chat_preferences (
+                        project TEXT NOT NULL, task TEXT NOT NULL,
+                        pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1)),
+                        archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),
+                        PRIMARY KEY(project,task)
+                    );
+                    PRAGMA user_version=6;
                     COMMIT;
                 """)
 
@@ -238,10 +251,12 @@ class Storage:
         with self.connect() as db:
             return [dict(row) for row in db.execute("""WITH names AS (
                 SELECT task FROM messages WHERE project=? UNION SELECT task FROM task_states WHERE project=?)
-                SELECT n.task, COUNT(m.id) AS count, COALESCE(s.status,'active') AS status
+                SELECT n.task, COUNT(m.id) AS count, COALESCE(s.status,'active') AS status,
+                    COALESCE(p.pinned,0) AS pinned, COALESCE(p.archived,0) AS archived
                 FROM names n LEFT JOIN messages m ON m.project=? AND m.task=n.task
                 LEFT JOIN task_states s ON s.project=? AND s.task=n.task
-                GROUP BY n.task ORDER BY MAX(m.created_at) DESC,n.task""", (project,)*4)]
+                LEFT JOIN chat_preferences p ON p.project=? AND p.task=n.task
+                GROUP BY n.task ORDER BY pinned DESC, MAX(m.created_at) DESC,n.task""", (project,)*5)]
 
     def messages(self, project, task, limit, offset):
         where = "m.project=?"
@@ -343,25 +358,30 @@ class Storage:
         with self.connect() as db:
             db.execute("INSERT OR REPLACE INTO client_config VALUES (?,?)", (client,path))
 
-    def update_task(self, project, task, title=None, status=None):
+    def update_task(self, project, task, title=None, status=None, *, pinned=None, archived=None):
         task = task.strip()
         title = title.strip() if title else task
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
+            if (title != task or status is not None) and db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError("실행이 끝난 뒤 작업을 변경하세요.")
             if not self._task_exists(db, project, task):
                 raise FileNotFoundError("작업을 찾을 수 없습니다.")
             old = db.execute("SELECT status FROM task_states WHERE project=? AND task=?", (project,task)).fetchone()
             if title != task:
-                merging = self._task_exists(db, project, title)
+                if self._task_exists(db, project, title):
+                    raise FileExistsError('같은 이름의 채팅이 있습니다. 다른 이름을 입력하세요.')
                 db.execute("UPDATE messages SET task=? WHERE project=? AND task=?", (title,project,task))
-                if merging:
-                    db.execute("DELETE FROM client_sessions WHERE project=? AND task IN (?,?)", (project,task,title))
-                else:
-                    db.execute("UPDATE client_sessions SET task=? WHERE project=? AND task=?", (title,project,task))
+                db.execute("UPDATE client_sessions SET task=? WHERE project=? AND task=?", (title,project,task))
+                db.execute("UPDATE chat_preferences SET task=? WHERE project=? AND task=?", (title,project,task))
                 db.execute("DELETE FROM task_states WHERE project=? AND task=?", (project,task))
             db.execute("INSERT OR REPLACE INTO task_states VALUES (?,?,?)", (project,title,status or (old[0] if old else 'active')))
+            if pinned is not None or archived is not None:
+                db.execute('INSERT OR IGNORE INTO chat_preferences(project,task) VALUES (?,?)', (project,title))
+                if pinned is not None:
+                    db.execute('UPDATE chat_preferences SET pinned=? WHERE project=? AND task=?', (int(pinned),project,title))
+                if archived is not None:
+                    db.execute('UPDATE chat_preferences SET archived=? WHERE project=? AND task=?', (int(archived),project,title))
 
     def set_task_status(self, project, task, status):
         # Notes can change the backlog status without modifying a live native session.

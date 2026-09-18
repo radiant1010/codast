@@ -20,7 +20,6 @@
   const workspaceHeader=el('div',undefined,'account-dialog-header');
   const workspaceTitle=$('workspace-dialog-title');workspaceTitle.before(workspaceHeader);workspaceHeader.append(workspaceTitle,$('cancel-workspace'));
   $('cancel-workspace').textContent='×';$('cancel-workspace').className='account-dialog-close';$('cancel-workspace').setAttribute('aria-label','프로젝트 연결 닫기');$('cancel-workspace').title='닫기';
-  $('close-editor').textContent='×';$('close-editor').classList.add('account-dialog-close');
   function openSection(node){drawer.showModal();node.open=true;node.scrollIntoView({block:'start'});}
   const project=$('project-panel');project.querySelector('summary').textContent='프로젝트';
   const chats=el('section',undefined,'chat-navigation');
@@ -40,16 +39,15 @@
   chats.append(button('＋ 새 채팅',async()=>{
     if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');
     chatInput.value='';createChat.showModal();chatInput.focus();
-  },'new-chat'),$('task-list'),$('task-controls'));
+  },'new-chat'),$('task-list'),$('chat-archive'));
   project.querySelector('.side-title').remove();
   const projectTools=el('details');projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));drawer.append(projectTools);
   const path=el('p','프로젝트를 선택하세요.','project-location');const projectGit=el('p','Git · 프로젝트 선택 대기','hint');project.append(path,projectGit);
   const menu=el('nav',undefined,'workspace-menu');menu.setAttribute('aria-label','작업실 메뉴');
-  for(const [id,label] of [['settings-panel','실행 설정'],['clients-panel','에이전트 연결'],['history-panel','실행 기록'],['files-panel','참고 파일'],['setup-guide','시작 도움말']]){
+  for(const [id,label] of [['settings-panel','실행 설정'],['clients-panel','에이전트 연결'],['history-panel','실행 기록'],['rules-panel','작업 룰북'],['setup-guide','시작 도움말']]){
     const node=$(id);drawer.append(node);menu.append(button(label,async()=>id==='clients-panel'&&window.openConnections?window.openConnections():openSection(node)));
   }
-  const editorButton=$('open-editor');editorButton.className='';editorButton.textContent='문서 탐색';
-  menu.append(button('프로젝트 관리',async()=>openSection(projectTools)),editorButton);
+  menu.append(button('프로젝트 관리',async()=>openSection(projectTools)));
   const overview=$('overview').closest('details');drawer.append(overview);
   side.replaceChildren(project,chats,menu);$('setup-guide').open=false;
   const importDialog=el('dialog',undefined,'session-drawer');
@@ -99,8 +97,6 @@
   }
   const findThreads=button('',async()=>{if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');importProject=$('project').value;importScope.textContent='조회 범위 · '+importProject+' 프로젝트';importCursor=null;importPreview.replaceChildren();importList.replaceChildren();importDialog.showModal();await loadThreads();});
   window.actionIcon(findThreads,'importDocument','세션 내용 불러오기');titleActions.append(findThreads);
-  $('task-controls').querySelector('summary').textContent='채팅 관리';
-  $('task-title').previousElementSibling.textContent='채팅 이름 변경 · 합치기';
   const top=el('section',undefined,'session-dashboard');top.setAttribute('aria-label','에이전트와 실행 중인 세션');
   const usage=el('section',undefined,'usage-panel');
   const usageHeading=el('div',undefined,'usage-heading');usageHeading.append(el('h2','토큰 사용량 · 누적 합계'));usage.append(usageHeading);

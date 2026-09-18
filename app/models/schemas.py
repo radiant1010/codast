@@ -58,6 +58,8 @@ class TaskUpdate(StrictModel):
     task: str = Field(min_length=1, max_length=120, pattern=r'\S')
     title: str | None = Field(default=None, min_length=1, max_length=120, pattern=r'\S')
     status: Literal['active', 'paused', 'done'] | None = None
+    pinned: bool | None = None
+    archived: bool | None = None
 
 
 class ChatCreate(StrictModel):

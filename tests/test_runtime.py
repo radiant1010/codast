@@ -145,15 +145,17 @@ def test_permission_sessions_receive_intervening_results(tmp_path, monkeypatch):
         assert any(h['result']=='workspace-write result' for h in calls[-1][0]['history'])
 
 
-def test_task_merge_and_completed_topic_is_not_silently_reopened(tmp_path):
+def test_duplicate_rename_rejected_and_completed_topic_is_not_silently_reopened(tmp_path):
     with TestClient(create_app(tmp_path/'ws')) as c:
         c.post('/api/projects',json={'name':'one'})
         base='/api/projects/one'
         for task in ('로그인','인증 개선'):
             c.post(base+'/messages',json={'text':'내용','task':task})
-        assert c.patch(base+'/tasks',json={'task':'로그인','title':'인증 개선','status':'done'}).status_code==200
+        assert c.patch(base+'/tasks',json={'task':'로그인','title':'인증 개선','status':'done'}).status_code==409
+        for task in ('로그인','인증 개선'):
+            assert c.patch(base+'/tasks',json={'task':task,'status':'done'}).status_code==200
         tasks=c.get(base+'/tasks').json()['tasks']
-        assert len(tasks)==1 and tasks[0]['count']==2 and tasks[0]['status']=='done'
+        assert len(tasks)==2 and all(t['count']==1 and t['status']=='done' for t in tasks)
         r=c.post(base+'/route',json={'text':'인증 문제 수정'}).json()
         assert r['kind']=='new'
 

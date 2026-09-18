@@ -88,7 +88,7 @@
   }
   window.openConnections=open;
   client.onchange=()=>act(async()=>{const chosen=client.value;projectStep.hidden=true;path.value='';status.textContent='선택한 에이전트의 연결을 다시 확인하세요.';commands.textContent='';const data=await api('/clients');if(client.value===chosen)path.value=data.clients.find(c=>c.client===chosen)?.path||'';});
-  window.refreshSetup=()=>{const chosen=!!$('project').value;$('welcome').hidden=chosen;$('messages').hidden=!chosen;$('composer').hidden=!chosen;$('delete-project').disabled=!chosen;};
+  window.refreshSetup=()=>{const chosen=!!$('project').value;$('welcome').hidden=chosen;$('messages').hidden=!chosen;$('composer').hidden=!chosen||!filter;$('messages-prev').closest('.pagination').hidden=!chosen||!filter;$('delete-project').disabled=!chosen;};
   window.setupSettingsSaved=()=>{};window.setupRequestSent=()=>{};
   $('setup-steps').replaceChildren();$('setup-progress').textContent='서버에 진행 상태 저장';$('setup-detail').textContent='STEP 1 · 에이전트별 연결 확인 → STEP 2 · 프로젝트 생성 또는 선택 → 모델 선택';
   $('setup-next').onclick=()=>act(open);window.actionIcon($('setup-next'),'plug','초기 연결 설정 열기');

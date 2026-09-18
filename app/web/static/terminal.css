@@ -3,8 +3,16 @@
 body,#workspace,#console{background:#0b0b0b;color:#d4d4d4}
 button,input,select,textarea,dialog,.task,.account-limit,.session-drawer{border-radius:0;box-shadow:none;font-family:inherit}
 #workspace button,#workspace input,#workspace select,#workspace textarea,dialog button,dialog input,dialog select{border-radius:0}
+.action-icon,.icon-button,.account-dialog-close{border-radius:0}
+select::picker(select),select option{border-radius:0;box-shadow:none}
 button,input,select,textarea{background:#151515;border-color:var(--terminal-border);color:#d4d4d4}
 button{padding:4px 8px}
+/* Form controls share one height, including controls moved into drawers. */
+:is(dialog,#settings-panel,#create) input:not([type=checkbox]):not([type=radio]),
+:is(dialog,#settings-panel,#create) select,
+:is(dialog,#settings-panel,#create) button:not(.editor-file){height:var(--control-height);min-height:var(--control-height);box-sizing:border-box;padding:0 10px;line-height:normal}
+:is(dialog,#settings-panel,#create) :is(.action-icon,.icon-button,.account-dialog-close){width:var(--control-height)!important;min-width:var(--control-height);max-width:var(--control-height);height:var(--control-height);flex:0 0 var(--control-height);padding:8px!important}
+:is(dialog,#settings-panel,#create) :is(.row,.control-row,.field-action-row,.client-path-row,.folder-picker-row){align-items:center;gap:var(--form-action-gap)}
 button:hover{background:#252525;border-color:#767676}
 button:focus-visible,input:focus,select:focus,textarea:focus{outline:1px solid var(--terminal-accent);outline-offset:2px}
 pre,textarea,#messages{font-family:inherit;font-size:12px;line-height:1.55}
@@ -13,6 +21,9 @@ h1,h2,h3{font-family:inherit}
 .brand{height:40px;padding:8px 12px;gap:8px;border-bottom:1px dashed #454545}
 .brand strong{font-size:13px;letter-spacing:0;color:#0b0b0b;background:var(--terminal-accent);padding:2px 5px}
 .brand strong::before{content:"> ";color:inherit}
+.brand a{color:inherit;text-decoration:none;white-space:nowrap}
+.brand a:hover strong{background:#ffd0a7}
+.brand a:focus-visible{outline:1px solid var(--terminal-accent);outline-offset:3px}
 .brand span{font-size:10px;color:var(--terminal-muted)}
 .side-content{padding:0 12px 12px}
 .side-content>#project-panel{padding:10px 0}
@@ -26,6 +37,21 @@ summary,label,.hint,.project-location,.native-session,#connection,#status,.meta{
 .task{padding:4px 6px;margin:1px 0;font-size:11px}
 #task-list .task.active{background:#d3d3c5;border-color:transparent;color:#111}
 #workspace #task-list .task{border-radius:0;padding:4px 6px}
+.chat-list-row{position:relative;display:flex;align-items:center;min-width:0;min-height:28px}
+#workspace .chat-list-row>.task{flex:1;min-width:0;width:auto;margin:0;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-row-actions{position:absolute;right:0;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:0}
+#workspace .chat-list-row:hover>.task,#workspace .chat-list-row:focus-within>.task{padding-right:70px}
+#workspace .chat-list-row:has(.is-pinned)>.task{padding-right:70px}
+#sidebar .chat-list-row:has(.task.active) .chat-row-actions .action-icon{color:#333}
+#sidebar .chat-row-actions .action-icon{box-sizing:border-box;width:22px!important;min-width:22px;max-width:22px;height:24px;min-height:24px;flex:0 0 22px;margin:0;padding:4px!important;visibility:hidden;background:transparent;border:0}
+#sidebar .chat-row-actions .action-icon svg{width:14px;height:14px}
+#sidebar .chat-list-row:hover .action-icon,#sidebar .chat-list-row:focus-within .action-icon,#sidebar .chat-row-actions .is-pinned{visibility:visible}
+#sidebar .chat-row-actions .is-pinned{color:var(--terminal-accent)}
+.archived-chat-row{display:flex;align-items:center;gap:8px;font-size:11px}
+.archived-chat-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
+#chat-archive{margin:8px 0;border-bottom:0}
+#chat-archive summary{font-size:11px}
+@media(hover:none){#sidebar .chat-row-actions .action-icon{visibility:visible}#workspace .chat-list-row>.task{padding-right:70px}}
 #sidebar .action-icon{background:transparent;border-color:transparent;color:#bcbcbc}
 #sidebar .action-icon:hover{background:#282828}
 .new-chat{padding:4px 0;margin:6px 0;background:transparent;border:0;text-align:left;color:var(--terminal-accent)}

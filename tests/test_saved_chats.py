@@ -15,12 +15,12 @@ def test_empty_chat_persists_without_synthetic_messages(tmp_path):
         assert c.get('/api/projects/one/messages').json()['messages'] == []
         assert c.get('/api/projects/one/runs').json()['runs'] == []
     with TestClient(create_app(root)) as c:
-        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'task':'empty','count':0,'status':'active'}]
+        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'task':'empty','count':0,'status':'active','pinned':0,'archived':0}]
         assert c.patch('/api/projects/one/tasks', json={'task':'empty','title':'renamed','status':'paused'}).status_code == 200
-        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'task':'renamed','count':0,'status':'paused'}]
+        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'task':'renamed','count':0,'status':'paused','pinned':0,'archived':0}]
 
 
-def test_rename_preserves_native_links_but_merge_resets_both(tmp_path):
+def test_rename_preserves_native_links_and_duplicate_is_rejected(tmp_path):
     app = create_app(tmp_path/'ws')
     s = app.state.harness.storage
     with TestClient(app) as c:
@@ -35,10 +35,11 @@ def test_rename_preserves_native_links_but_merge_resets_both(tmp_path):
             assert s.session('one','source',client,cwd,'read-only') is None
         c.post('/api/projects/one/tasks', json={'task':'target'})
         s.save_session('one','target','codex',cwd,'read-only','target-fixture')
-        assert c.patch('/api/projects/one/tasks', json={'task':'renamed','title':'target'}).status_code == 200
-        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'task':'target','count':0,'status':'active'}]
+        assert c.patch('/api/projects/one/tasks', json={'task':'renamed','title':'target'}).status_code == 409
+        assert {row['task'] for row in c.get('/api/projects/one/tasks').json()['tasks']} == {'renamed','target'}
         for client in ('codex','claude'):
-            assert s.session('one','target',client,cwd,'read-only') is None
+            assert s.session('one','renamed',client,cwd,'read-only') == client+'-fixture'
+        assert s.session('one','target','codex',cwd,'read-only') == 'target-fixture'
 
 
 def test_empty_chat_is_a_duplicate_for_native_attach(tmp_path):

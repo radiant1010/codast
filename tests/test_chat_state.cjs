@@ -54,13 +54,13 @@ test('broken browser storage does not prevent in-tab switching',async()=>{
   await open(ui,'constructor','A');assert.equal(ui.nodes.text.value,'recoverable');
 });
 
-test('status changes keep the draft; rename moves it and merge protects two drafts',async()=>{
+test('rename moves the draft and duplicate draft names are rejected',async()=>{
   const ui=screen();await open(ui,'one','A');ui.nodes.text.value='draft';
   ui.state.rename('one','A','A');await open(ui,'one','A');assert.equal(ui.nodes.text.value,'draft');
   ui.state.rename('one','A','renamed');await open(ui,'one','renamed');assert.equal(ui.nodes.text.value,'draft');
   assert.ok(!ui.state.drafts('one').includes('A'));
   await open(ui,'one','B');ui.nodes.text.value='other';ui.state.save();
-  assert.throws(()=>ui.state.checkRename('one','renamed','B'),/작성 중/);
+  assert.throws(()=>ui.state.checkRename('one','renamed','B'),/같은 이름/);
 });
 
 test('request retries retain identity across reload and acknowledgement rotates it',async()=>{

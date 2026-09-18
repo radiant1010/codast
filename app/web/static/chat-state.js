@@ -42,8 +42,8 @@
     },
     finish(result){if(!result||active!==result.current)return;ready=true;$('messages').scrollTop=result.state.scroll;actionHint();save();},
     seed(name,task,state){project(name).chats[id(task)]={...state,text:'',offset:0,scroll:0};persist();},
-    checkRename(name,oldTask,newTask){save();const p=project(name);if(oldTask!==newTask&&p.chats[id(oldTask)]?.text&&p.chats[id(newTask)]?.text)throw Error('두 채팅에 작성 중인 내용이 있습니다. 먼저 전송하거나 비운 뒤 합쳐 주세요.');},
-    rename(name,oldTask,newTask){save();if(oldTask===newTask)return;const p=project(name);if(!p.chats[id(newTask)]?.text)p.chats[id(newTask)]=p.chats[id(oldTask)];delete p.chats[id(oldTask)];ready=false;persist();},
+    checkRename(name,oldTask,newTask){save();const p=project(name);if(oldTask!==newTask&&Object.hasOwn(p.chats,id(newTask)))throw Error('같은 이름의 채팅 초안이 있습니다. 다른 이름을 입력하세요.');},
+    rename(name,oldTask,newTask){save();if(oldTask===newTask)return;const p=project(name);p.chats[id(newTask)]=p.chats[id(oldTask)];delete p.chats[id(oldTask)];if(p.selected===oldTask)p.selected=newTask;ready=false;persist();},
     sent(name,task,text){const draft=project(name).chats[id(task)];if(draft?.text===text){draft.text='';draft.fresh=false;persist();}}
   };
   document.addEventListener('input',save);document.addEventListener('change',save);
