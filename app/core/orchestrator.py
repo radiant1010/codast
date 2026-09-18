@@ -1,3 +1,4 @@
+from app.core.questions import parse_question
 import asyncio
 import json
 import hashlib
@@ -71,7 +72,7 @@ class Orchestrator:
         self.storage.save_rulebook_settings(name, settings.model_dump())
         return {'saved': True}
 
-    def prepare(self, name, command, request_id=None):
+    def prepare(self, name, command, request_id=None, reply_to=None):
         root = self.projects.select(name)
         cwd = self.policy.file_path(root, command.cwd)
         if not cwd.is_dir():
@@ -97,7 +98,7 @@ class Orchestrator:
         context.history = list(reversed(history))
         while context.history and len(context.model_dump_json()) > self.context.max_chars:
             context.history.pop(0)
-        run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id)
+        run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id, reply_to=reply_to)
         if command.fresh:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
         return run_id, command, context, cwd, adapter, session
@@ -128,6 +129,9 @@ class Orchestrator:
         native_session = result.session_id or session
         self.storage.save_session(name, command.task, command.client, str(cwd), command.mode, native_session, chat_id=command.chat_id)
         metadata.update(session_id=native_session, usage=result.usage, execution_model=result.execution_model, elapsed_seconds=round(time.monotonic()-started, 2))
+        question = parse_question(result.output)
+        if question:
+            metadata['question'] = question
         self.storage.finish_run(run_id, "completed", output=result.output, adapter=result.adapter, metadata=metadata)
         return result.model_copy(update={"run_id": run_id})
 
@@ -140,9 +144,9 @@ class Orchestrator:
         finally:
             self.active.pop(run_id, None)
 
-    def submit(self, name, command, request_id=None):
+    def submit(self, name, command, request_id=None, reply_to=None):
         try:
-            prepared = self.prepare(name, command, request_id)
+            prepared = self.prepare(name, command, request_id, reply_to=reply_to)
         except ExistingRun as prior:
             return prior.run_id
         run_id = prepared[0]
@@ -163,6 +167,17 @@ class Orchestrator:
                 self.storage.finish_run(run_id, 'interrupted', error='서버가 실행을 종료했습니다.')
         task.add_done_callback(finished)
         return run_id
+
+    def reply(self, name, run_id, answer, request_id):
+        from app.models.schemas import Command
+        record = self.storage.run(name, run_id)
+        question = record['metadata'].get('question')
+        if record['status'] != 'completed' or not question:
+            raise FileExistsError('답변할 수 있는 질문이 아닙니다.')
+        original = Command.model_validate(record['command'])
+        text = '질문 출처 실행: '+run_id+'\n이전 질문: '+question['question']+'\n사용자 답변: '+answer+'\n이 답변을 반영하여 기존 작업을 이어가세요. 기존 권한과 요청 범위를 유지하세요.'
+        command = original.model_copy(update={'text':text,'raw_text':answer,'fresh':False})
+        return self.submit(name, command, request_id, reply_to=run_id)
 
     async def cancel(self, name, run_id):
         record = self.storage.run(name, run_id)

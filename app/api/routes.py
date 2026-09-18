@@ -1,3 +1,4 @@
+from app.models.schemas import QuestionReply
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import StreamingResponse
 import asyncio
@@ -185,6 +186,20 @@ def run_detail(name: str, run_id: str, request: Request):
     result = s.storage.run(name, run_id)
     result['cancellable'] = run_id in s.active
     return result
+
+
+@router.get('/projects/{name}/questions')
+def pending_questions(name: str, request: Request, chat_id: str = Query(pattern=r'^[a-f0-9]{32}$')):
+    s = service(request)
+    s.projects.select(name)
+    return {'messages': s.storage.pending_questions(name, chat_id)}
+
+
+@router.post('/projects/{name}/runs/{run_id}/reply')
+async def reply_to_question(name: str, run_id: str, body: QuestionReply, request: Request):
+    s = service(request)
+    s.projects.select(name)
+    return {'run_id': s.reply(name, run_id, body.answer, body.request_id)}
 
 
 @router.post('/projects/{name}/runs/{run_id}/cancel')

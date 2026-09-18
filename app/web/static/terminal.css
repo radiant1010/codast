@@ -257,3 +257,11 @@ select,input:not([type=checkbox]):not([type=radio]),.archived-chat-row>span,.rul
 }
 .project-picker select{flex:1;width:0}
 #chat-title{flex:1}
+
+.user-question{margin:12px 0;padding:16px;border:1px solid var(--terminal-accent);background:#17130e}
+.user-question h3{margin:0 0 12px;color:var(--terminal-accent)}
+.user-question>p{white-space:pre-wrap;overflow-wrap:anywhere}
+.user-question textarea{margin:12px 0;min-height:64px}
+.question-choices{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.question-choices button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.user-question>button{color:var(--terminal-accent);min-height:36px}

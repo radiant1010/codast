@@ -135,3 +135,19 @@ class RulebookSettings(StrictModel):
             if any(b.folder and b.folder not in self.folders for b in self.books):
                 raise ValueError('룰북 폴더를 찾을 수 없습니다.')
         return self
+
+
+class UserQuestion(StrictModel):
+    question: str = Field(min_length=1, max_length=2000, pattern=r'\S')
+    choices: list[str] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode='after')
+    def valid_choices(self):
+        if any(not value.strip() or len(value)>200 for value in self.choices):
+            raise ValueError('선택지는 1~200자로 입력하세요.')
+        return self
+
+
+class QuestionReply(StrictModel):
+    answer: str = Field(min_length=1, max_length=4000, pattern=r'\S')
+    request_id: str = Field(min_length=1, max_length=128, pattern=r'^[a-zA-Z0-9_-]+$')

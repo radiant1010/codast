@@ -229,7 +229,7 @@ class Storage:
                 ON CONFLICT(project) DO UPDATE SET settings=excluded.settings, updated_at=excluded.updated_at""",
                 (project, json.dumps(settings, ensure_ascii=False), now()))
 
-    def start_run(self, project, command, adapter, *, exclusive=False, request_id=None):
+    def start_run(self, project, command, adapter, *, exclusive=False, request_id=None, reply_to=None):
         run_id = hashlib.sha256(json.dumps([project, request_id]).encode()).hexdigest() if request_id else uuid4().hex
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -254,6 +254,24 @@ class Storage:
                     raise ExistingRun(run_id)
             if exclusive and db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError("이 프로젝트에 실행 중이거나 종료 확인이 필요한 작업이 있습니다.")
+            if reply_to:
+                source = db.execute("SELECT r.metadata,r.status,m.chat_id FROM runs r JOIN messages m ON m.run_id=r.id WHERE r.project=? AND r.id=?", (project,reply_to)).fetchone()
+                if not source or source['chat_id'] != command.chat_id:
+                    raise FileNotFoundError('질문을 찾을 수 없습니다.')
+                metadata = json.loads(source['metadata'])
+                if source['status'] != 'completed' or not metadata.get('question') or metadata.get('reply_run_id'):
+                    raise FileExistsError('이미 답변했거나 답변할 수 없는 질문입니다.')
+                latest = db.execute('SELECT run_id FROM messages WHERE project=? AND chat_id=? AND run_id IS NOT NULL ORDER BY created_at DESC,id DESC LIMIT 1', (project,command.chat_id)).fetchone()
+                if not latest or latest['run_id'] != reply_to:
+                    raise FileExistsError('이 질문 이후 새 실행이 있습니다. 현재 대화에서 계속해 주세요.')
+                metadata['reply_run_id'] = run_id
+                db.execute('UPDATE runs SET metadata=? WHERE id=?', (json.dumps(metadata,ensure_ascii=False),reply_to))
+            if command.chat_id:
+                db.execute("""UPDATE runs SET metadata=json_set(metadata,'$.superseded_by',?)
+                    WHERE id IN (SELECT run_id FROM messages WHERE project=? AND chat_id=?)
+                    AND json_extract(metadata,'$.question') IS NOT NULL
+                    AND json_extract(metadata,'$.reply_run_id') IS NULL
+                    AND json_extract(metadata,'$.superseded_by') IS NULL""", (run_id,project,command.chat_id))
             db.execute("""INSERT INTO runs(id,project,command,adapter,status,started_at)
                 VALUES (?,?,?,?, 'running',?)""", (run_id, project, command.model_dump_json(), adapter, now()))
             db.execute("INSERT INTO messages(id,project,task,text,created_at,run_id,chat_id) VALUES (?,?,?,?,?,?,?)",
@@ -347,6 +365,17 @@ class Storage:
                 (*args, limit, offset)).fetchall()
         return [dict(row) for row in rows]
 
+    def pending_questions(self, project, chat_id):
+        self.resolve_chat(project, chat_id=chat_id)
+        with self.connect() as db:
+            return [dict(row) for row in db.execute("""SELECT m.*,r.adapter,r.status,r.output,r.error,r.metadata
+                FROM messages m JOIN runs r ON r.id=m.run_id
+                WHERE m.project=? AND m.chat_id=? AND r.status='completed'
+                  AND json_extract(r.metadata,'$.question') IS NOT NULL
+                  AND json_extract(r.metadata,'$.reply_run_id') IS NULL
+                  AND json_extract(r.metadata,'$.superseded_by') IS NULL
+                ORDER BY m.created_at DESC LIMIT 1""", (project,chat_id))]
+
     def finish_run(self, run_id, status, *, output=None, error=None, adapter=None, metadata=None):
         with self.connect() as db:
             changed = db.execute("""UPDATE runs SET status=?, finished_at=?, output=?, error=?,
@@ -364,7 +393,8 @@ class Storage:
         placeholders = ','.join('?' for _ in projects)
         with self.connect() as db:
             rows = db.execute(f"""SELECT e.seq, e.run_id, e.created_at, r.project, r.status,
-                    COALESCE(m.task,'') AS task, m.chat_id
+                    COALESCE(m.task,'') AS task, m.chat_id,
+                    (json_extract(r.metadata,'$.question') IS NOT NULL AND json_extract(r.metadata,'$.reply_run_id') IS NULL AND json_extract(r.metadata,'$.superseded_by') IS NULL) AS awaiting_answer
                 FROM run_events e JOIN runs r ON r.id=e.run_id
                 LEFT JOIN messages m ON m.run_id=r.id
                 WHERE e.seq>? AND e.kind='status' AND e.text=r.status

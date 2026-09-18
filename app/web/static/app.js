@@ -80,9 +80,10 @@ function routeView(route){$('routing').replaceChildren(el('span',(route.task?'�
 function metadata(value){try{return typeof value==='string'?JSON.parse(value):value||{};}catch{return {};}}
 function messageCard(m,b){
   const card=el('article',undefined,'message'),meta=el('div',undefined,'meta');
+  const questionInfo=metadata(m.metadata),awaitingAnswer=questionInfo.question&&!questionInfo.reply_run_id&&!questionInfo.superseded_by;
   const runningLabel=m.cancellable?'실행 중':'종료 확인 필요';
   meta.append(el('span',m.task||'미분류'),el('span',new Date(m.created_at).toLocaleString()));card.append(meta,el('h3','요청'),el('pre',m.text,'user'));
-  if(m.run_id){const answer=el('div',undefined,'answer');answer.append(el('h3',m.status==='running'?'진행':'결과'),el('span',(m.adapter||'클라이언트')+' · '+(m.status==='running'?runningLabel:statusNames[m.status]),'state '+m.status),el('pre',m.output||m.error||(m.cancellable?'에이전트가 작업 중입니다. 아래에서 실행 과정을 펼쳐 볼 수 있습니다.':'서버가 이 실행을 관리하고 있지 않습니다. 프로세스가 종료됐는지 확인해 주세요.')));const info=metadata(m.metadata);if(info.elapsed_seconds!==undefined)answer.append(el('p',info.elapsed_seconds+'초 · '+(info.resumed?'세션 이어짐':'새 세션')+' · 참고 대화 '+info.history_count+'개','hint'));if(info.usage){const d=el('details');d.append(el('summary','사용량'),el('pre',JSON.stringify(info.usage,null,2)));answer.append(d);}if(m.status==='running')answer.append(button(m.cancellable?'실행 취소':'종료 확인 후 기록 정리',async()=>{
+  if(m.run_id){const answer=el('div',undefined,'answer');answer.append(el('h3',m.status==='running'?'진행':'결과'),el('span',(m.adapter||'클라이언트')+' · '+(m.status==='running'?runningLabel:awaitingAnswer?'답변 대기':statusNames[m.status]),'state '+m.status),el('pre',m.output||m.error||(m.cancellable?'에이전트가 작업 중입니다. 아래에서 실행 과정을 펼쳐 볼 수 있습니다.':'서버가 이 실행을 관리하고 있지 않습니다. 프로세스가 종료됐는지 확인해 주세요.')));const info=metadata(m.metadata);if(info.elapsed_seconds!==undefined)answer.append(el('p',info.elapsed_seconds+'초 · '+(info.resumed?'세션 이어짐':'새 세션')+' · 참고 대화 '+info.history_count+'개','hint'));if(info.usage){const d=el('details');d.append(el('summary','사용량'),el('pre',JSON.stringify(info.usage,null,2)));answer.append(d);}if(m.status==='running')answer.append(button(m.cancellable?'실행 취소':'종료 확인 후 기록 정리',async()=>{
       const run=await api(b+'/runs/'+m.run_id);if(!valid(b))return;
       if(run.status!=='running'){await conversation();return;}
       if(run.cancellable!==m.cancellable){await conversation();notice('실행 상태가 바뀌었습니다. 표시된 동작을 다시 확인하세요.');return;}
@@ -92,13 +93,15 @@ function messageCard(m,b){
     if(m.status==='running'){const detail=el('details'),log=el('div',undefined,'stream');detail.append(el('summary',m.cancellable?'실행 과정 보기 · 실시간':'실행 과정 보기 · 저장된 기록'),log);answer.append(detail);queueMicrotask(()=>{if(log.isConnected)streamRun(m.run_id,b,log,m.cancellable);});}
     else{const detail=el('details'),log=el('div',undefined,'stream');detail.append(el('summary','실행 과정 보기'),log);let loaded=false;detail.ontoggle=()=>{if(detail.open&&!loaded){loaded=true;streamRun(m.run_id,b,log,false);}};answer.append(detail);}
   }
+  if(m.status==='completed'){const question=window.questionCard?.(m,b,conversation);if(question){const output=card.querySelector('.answer>pre');if(output)output.hidden=true;card.append(question);}}
   return card;
 }
 async function conversation(b=base()){
   const ticket=++conversationTicket,e=epoch,chatId=window.chatState.identity($('project').value,filter),query=chatId?'&chat_id='+chatId:'&task='+encodeURIComponent(filter||'');
-  const [t,d,r]=await Promise.all([api(b+'/tasks'),filter?api(b+'/messages?limit=20&offset='+offset+query):Promise.resolve({messages:[]}),api(b+'/runs?limit=20')]);
+  const [t,d,r,q]=await Promise.all([api(b+'/tasks'),filter?api(b+'/messages?limit=20&offset='+offset+query):Promise.resolve({messages:[]}),api(b+'/runs?limit=20'),chatId?api(b+'/questions?chat_id='+chatId):Promise.resolve({messages:[]})]);
   if(!valid(b,e)||ticket!==conversationTicket)return;const follow=atBottom(),scroll=$('messages').scrollTop;closeStreams();groups=t.tasks;window.chatState.bind($('project').value,groups);if(chatId){filter=groups.find(g=>g.id===chatId)?.task||filter;$('task-name').value=filter||'';}drawTasks();$('messages').replaceChildren();
   for(const m of [...d.messages].reverse())$('messages').append(messageCard(m,b));
+  for(const pending of q.messages||[])if(!d.messages.some(m=>m.run_id===pending.run_id))$('messages').append(messageCard(pending,b));
   if(!d.messages.length)$('messages').append(el('div',filter?'아직 대화가 없습니다. 아래에서 시작하세요.':'왼쪽에서 채팅을 선택하거나 새 채팅을 만드세요.','empty'));
   $('messages-prev').disabled=offset===0;$('messages-next').disabled=d.messages.length<20;$('page-number').textContent=d.messages.length?(offset+1)+'–'+(offset+d.messages.length):'0개';
   const running=r.runs.filter(x=>x.status==='running');$('activity').textContent=running.length?'실행 중인 작업 '+running.length+'개':'';

@@ -10,6 +10,7 @@ import threading
 import time
 
 from app.models.schemas import AgentResult
+from app.core.questions import QUESTION_INSTRUCTION
 
 
 def discovery_candidates(client):
@@ -168,7 +169,7 @@ class CliAdapter:
         return args
 
     async def execute(self, context, cwd, mode, session=None):
-        prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + context
+        prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + QUESTION_INSTRUCTION + context
         options = {'on_line': self.stream_line} if self.on_event else {}
         code, stdout, stderr = await self.runner.run(self.arguments(mode, session), cwd, prompt, **options)
         if code:

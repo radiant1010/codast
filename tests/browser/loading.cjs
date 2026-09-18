@@ -2,12 +2,12 @@ const fs=require('node:fs');
 const assert=require('node:assert/strict');
 const {chromium}=require('playwright');
 (async()=>{
- const browser=await chromium.launch({headless:true,channel:"msedge"});const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ const browser=await chromium.launch({headless:true,channel:"msedge",args:["--unsafely-treat-insecure-origin-as-secure=http://harness.test"]});const page=await browser.newPage({viewport:{width:1440,height:1000}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  let fail=false,hold=true,releaseEnvironment;const waiting=[];
  const chats={one:[{task:'one-chat',count:0,status:'active',pinned:0,archived:0}],two:[{task:'regular',count:0,status:'active',pinned:0,archived:0},{task:'other',count:0,status:'active',pinned:0,archived:0}]};
  for(const rows of Object.values(chats))for(const row of rows)row.id=require('node:crypto').randomBytes(16).toString('hex');
- const rulebooks={};let notificationRows=[],notificationOffline=false;
+ const rulebooks={};let notificationRows=[],notificationOffline=false,questionMessage=null,replyAttempts=[];
  let unfilteredMessages=0,fileRequests=0;
  const account={state:'available',limits:[{bucket:'codex',windowDurationMins:300,usedPercent:25,resetsAt:1790000000},{bucket:'codex',windowDurationMins:10080,usedPercent:63,resetsAt:1790100000}],models:[],source:'fixture',checked_at:new Date().toISOString()};
  await page.route('http://harness.test/**',async route=>{
@@ -28,6 +28,13 @@ const {chromium}=require('playwright');
   const project=path.match(/^\/api\/projects\/(one|two)\/(.*)$/);
   if(project){
    const [,name,resource]=project;
+   if(resource==='questions')return route.fulfill({json:{messages:questionMessage&&!questionMessage.metadata.reply_run_id?[questionMessage]:[]}});
+   if(resource==='messages'&&questionMessage)return route.fulfill({json:{messages:[questionMessage]}});
+   if(resource==='runs/question-fixture/reply'){
+    const payload=route.request().postDataJSON();replyAttempts.push(payload);
+    if(replyAttempts.length===1)return route.fulfill({status:503,json:{detail:'temporary reply failure'}});
+    questionMessage.metadata.reply_run_id='reply-fixture';return route.fulfill({json:{run_id:'reply-fixture'}});
+   }
    if(resource==='rules'){
     if(route.request().method()==='PUT'){rulebooks[name]=route.request().postDataJSON();return route.fulfill({json:{saved:true}});}
     return route.fulfill({json:{settings:rulebooks[name]||{enabled:true,include_project_rules:true,content:null},default_content:'기본 규정',rules:[]}});
@@ -313,6 +320,18 @@ const {chromium}=require('playwright');
  notificationOffline=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
  await page.waitForFunction(()=>document.querySelector('#session-notifications').textContent==='알림 1');
  assert.equal(await page.locator('#session-alerts button').count(),2);
+ questionMessage={id:'question-fixture',run_id:'question-fixture',task:'renamed',status:'completed',adapter:'codex',created_at:new Date().toISOString(),text:'ask',output:'question protocol',metadata:{question:{question:'파일 형식을 선택해 주세요.',choices:['CSV','JSON']}}};
+ await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+ await page.getByRole('heading',{name:'사용자 답변 대기',exact:true}).waitFor();
+ await page.locator('.question-choices').getByRole('button',{name:'CSV',exact:true}).click();
+ await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+ assert.equal(await page.getByRole('textbox',{name:'질문에 대한 답변',exact:true}).inputValue(),'CSV');
+ await page.getByRole('button',{name:'답변하고 계속',exact:true}).click();
+ await page.getByText('temporary reply failure',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('textbox',{name:'질문에 대한 답변',exact:true}).inputValue(),'CSV');
+ await page.getByRole('button',{name:'답변하고 계속',exact:true}).click();
+ await page.getByRole('heading',{name:'답변 접수됨',exact:true}).waitFor();
+ assert.equal(replyAttempts.length,2);assert.equal(replyAttempts[0].request_id,replyAttempts[1].request_id);assert.equal(replyAttempts[1].answer,'CSV');
  assert.deepEqual(errors,[]);console.log('PASS: pending account does not block workspace; failure retains data; retry recovers; pending environment does not block input or project switching; stale response ignored; narrow viewport has no horizontal overflow; no JS errors.');
  await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

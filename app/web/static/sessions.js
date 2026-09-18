@@ -339,7 +339,7 @@
   }
   function renderNotifications(){
     const state=window.runNotifications.snapshot();alerts.textContent='알림 '+state.unread;alerts.title='저장된 종료 알림 · 최근 100개';alertBox.replaceChildren();
-    for(const row of [...state.events].reverse()){alertBox.append(button(row.project+' · '+(row.task||'미분류')+' · '+statusNames[row.status],async()=>{
+    for(const row of [...state.events].reverse()){alertBox.append(button(row.project+' · '+(row.task||'미분류')+' · '+(row.awaiting_answer?'답변 대기':statusNames[row.status]),async()=>{
       const tasks=await api('/projects/'+encodeURIComponent(row.project)+'/tasks');
       const current=tasks.tasks.find(t=>row.chat_id?t.id===row.chat_id:t.task===row.task);
       if(!current)throw Error('알림에 연결된 채팅을 찾을 수 없습니다.');
