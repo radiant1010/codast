@@ -12,6 +12,7 @@
     return (state,text)=>{retry.dataset.state=state;retry.title=label+' 다시 조회 · '+text;retry.setAttribute('aria-description',text);retry.disabled=state==='loading';};
   }
   const side=$('sidebar').querySelector('.side-content');
+  $('sidebar').querySelector('.brand span')?.remove();
   function closeIcon(label,handler){const node=button('',handler,'account-dialog-close');window.actionIcon(node,'close',label);return node;}
   const sectionDialogs=new Map();
   function sectionDialog(node,label){
@@ -25,8 +26,9 @@
   const workspaceHeader=el('div',undefined,'account-dialog-header');
   const workspaceTitle=$('workspace-dialog-title');workspaceTitle.before(workspaceHeader);workspaceHeader.append(workspaceTitle,$('cancel-workspace'));
   $('cancel-workspace').textContent='×';$('cancel-workspace').className='account-dialog-close';$('cancel-workspace').setAttribute('aria-label','프로젝트 연결 닫기');$('cancel-workspace').title='닫기';
-  function openSection(node){const dialog=sectionDialogs.get(node);node.open=true;dialog.showModal();dialog.scrollTop=0;if(node.id==='rules-panel')act(()=>window.openRulebook?.());}
+  function openSection(node){if(node.dataset.settingsKey){window.settingsPage.open(node.dataset.settingsKey);return;}const dialog=sectionDialogs.get(node);node.open=true;dialog.showModal();dialog.scrollTop=0;if(node.id==='rules-panel')act(()=>window.openRulebook?.());}
   const project=$('project-panel');project.querySelector('summary').textContent='프로젝트';
+  project.querySelector('label[for=project]').remove();$('project').setAttribute('aria-label','프로젝트 선택');
   const chats=el('section',undefined,'chat-navigation');
   const title=el('div',undefined,'side-title');const titleActions=el('div',undefined,'section-header-actions');titleActions.append($('reload'));title.append(el('h2','채팅 세션'),titleActions);chats.append(title);
   const createChat=el('dialog',undefined,'session-drawer'),chatForm=el('form');
@@ -46,15 +48,26 @@
     chatInput.value='';createChat.showModal();chatInput.focus();
   },'new-chat'),$('task-list'),$('chat-archive'));
   project.querySelector('.side-title').remove();
-  const projectTools=el('details');projectTools.id='project-tools';projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));sectionDialog(projectTools,'프로젝트 관리');
-  const path=el('p','프로젝트를 선택하세요.','project-location');const projectGit=el('p','Git · 프로젝트 선택 대기','hint');project.append(path,projectGit);
+  const projectTools=el('details');projectTools.id='project-tools';projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));projectTools.dataset.settingsKey='projects';
+  const path=el('p','프로젝트를 선택하세요.','project-location');project.append(path);
   const menu=el('nav',undefined,'workspace-menu');menu.setAttribute('aria-label','작업실 메뉴');
-  for(const [id,label] of [['settings-panel','실행 설정'],['clients-panel','에이전트 연결'],['history-panel','실행 기록'],['rules-panel','작업 룰북'],['setup-guide','시작 도움말']]){
-    const node=$(id);sectionDialog(node,label);menu.append(button(label,async()=>id==='clients-panel'&&window.openConnections?window.openConnections():openSection(node)));
+  for(const [id,label] of [['setup-guide','시작 도움말'],['rules-panel','작업 룰북']]){
+    const node=$(id);sectionDialog(node,label);menu.append(button(label,async()=>openSection(node)));
   }
-  menu.append(button('프로젝트 관리',async()=>openSection(projectTools)));
+  const settingsButton=button('설정',()=>window.settingsPage.open());settingsButton.id='open-settings';menu.append(settingsButton);
+  for(const [key,label,node] of [['execution','실행 설정',$('settings-panel')],['agents','에이전트 연결',$('clients-panel')],['projects','프로젝트 관리',projectTools],['history','실행 기록',$('history-panel')]]){
+    node.dataset.settingsKey=key;window.settingsPage.register(key,label,node);
+  }
+  $('clients-panel').append(button('에이전트 연결 도우미',()=>window.openConnections()));
   const overview=$('overview').closest('details');projectTools.append(overview);
   side.replaceChildren(project,chats,menu);$('setup-guide').open=false;
+  // Keep the sidebar footer level with the resizable chat composer.
+  const footerSize=new ResizeObserver(()=>{
+    const height=$('composer').getBoundingClientRect().height;
+    if(height)menu.style.height=height+'px';else menu.style.removeProperty('height');
+  });
+  footerSize.observe($('composer'));
+
   const importDialog=el('dialog',undefined,'session-drawer');
   const importHead=el('div',undefined,'account-dialog-header'),importClose=button('',async()=>importDialog.close());
   window.actionIcon(importClose,'close','세션 내용 불러오기 닫기');importHead.append(el('h2','세션 내용 불러오기'),importClose);
@@ -103,6 +116,12 @@
   const findThreads=button('',async()=>{if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');importProject=$('project').value;importScope.textContent='조회 범위 · '+importProject+' 프로젝트';importCursor=null;importPreview.replaceChildren();importList.replaceChildren();importDialog.showModal();await loadThreads();});
   window.actionIcon(findThreads,'importDocument','세션 내용 불러오기');titleActions.append(findThreads);
   const top=el('section',undefined,'session-dashboard');top.setAttribute('aria-label','에이전트와 실행 중인 세션');
+  const projectSize=new ResizeObserver(()=>{
+    const height=top.getBoundingClientRect().bottom-side.getBoundingClientRect().top;
+    if(height>0)project.style.height=height+'px';else project.style.removeProperty('height');
+  });
+  projectSize.observe(top);projectSize.observe($('sidebar').querySelector('.brand'));
+
   const usage=el('section',undefined,'usage-panel');
   const usageHeading=el('div',undefined,'usage-heading');usageHeading.append(el('h2','토큰 사용량 · 누적 합계'));usage.append(usageHeading);
   for(const client of ['codex','claude']){
@@ -134,15 +153,13 @@
   accountThead.append(accountTitles);const accountRows=el('tbody');accountTable.append(accountThead,accountRows);account.append(accountTable);
   function accountPlaceholder(client,text){const row=el('tr');row.append(el('td',client),el('td',text),el('td','—'));return row;}
   accountRows.append(accountPlaceholder('Codex','조회 중…'),accountPlaceholder('Claude','미수집'));
-  const metrics=el('dialog',undefined,'session-drawer');
-  const metricsHead=el('div',undefined,'account-dialog-header');
-  const metricsClose=button('×',async()=>metrics.close(),'account-dialog-close');metricsClose.setAttribute('aria-label','사용량 닫기');
-  metricsHead.append(el('h2','세션 · 사용량 상세'),metricsClose);metrics.append(metricsHead,usage,running);document.body.append(metrics);
+  const metrics=el('section');
+  metrics.append(usage,running);window.settingsPage.register('usage','사용량',metrics);
   usageDetails.hidden=false;toggleUsage.remove();
-  menu.append(button('사용량 대시보드',async()=>metrics.showModal()));
+
   const sessionsPanel=el('section',undefined,'compact-session-panel');
   const sessionsHead=el('div',undefined,'compact-panel-head'),sessionActions=el('div',undefined,'section-header-actions');
-  sessionActions.append(alerts,button('상세',async()=>metrics.showModal()));sessionsHead.append(el('h2','AI 세션'),sessionActions);
+  sessionActions.append(alerts,button('상세',async()=>window.settingsPage.open('usage')));sessionsHead.append(el('h2','AI 세션'),sessionActions);
   const table=el('table',undefined,'compact-session-table'),thead=el('thead'),tr=el('tr');
   for(const name of ['AI / 채팅','상태','컨텍스트','누적 토큰','실행 모델'])tr.append(el('th',name));
   thead.append(tr);const sessionRows=el('tbody');table.append(thead,sessionRows);sessionsPanel.append(sessionsHead,table);
@@ -158,7 +175,7 @@
   async function refreshEnvironment(){
     const projectName=$('project').value;
     if(projectName!==envProjectKey){envProjectKey=projectName;envTicket++;envBusy=false;envProject.textContent=projectName||'프로젝트를 선택하세요.';for(const [name,value] of Object.entries(envFields)){value.textContent='—';value.title='';environmentState(name,projectName?'확인 중':'선택 대기',projectName?'loading':'idle');}}
-    projectGit.textContent='Git · '+envFields.Git.textContent;
+
     if(!projectName){envStatus('idle','프로젝트 선택 대기');return;}if(envBusy)return;envBusy=true;
     envStatus('loading','실행 환경 확인 중');
     const ticket=++envTicket;
@@ -167,7 +184,7 @@
       if($('project').value!==projectName||ticket!==envTicket)return;
       const state={not_installed:'미설치',not_repository:'저장소 아님',error:'조회 실패',unavailable:'엔진 연결 불가'};
       envFields.Git.textContent=data.git.state==='available'?(data.git.branch||'브랜치 미확인')+' · '+(data.git.changed_entries?'변경 '+data.git.changed_entries+'건':'변경 없음'):state[data.git.state]||'확인 불가';
-      projectGit.textContent='Git · '+envFields.Git.textContent;
+
       envFields.Git.title=envFields.Git.textContent;
       envFields.Docker.textContent=data.docker.state==='available'?(data.docker.containers.length?data.docker.containers.filter(c=>c.state==='running').length+'개 실행 / '+data.docker.containers.length+'개 연결':'연결된 Compose 없음'):state[data.docker.state]||'확인 불가';
       envFields.Docker.title='선택 프로젝트 경로와 Compose 작업 경로가 정확히 일치하는 컨테이너만 표시';
@@ -182,7 +199,7 @@
       for(const field of [envFields.Git,envFields['포트']])field.title=field.title||field.textContent;
       const failed=['error','unavailable'].includes(data.git.state)||['error','unavailable'].includes(data.docker.state);
       envStatus(failed?'error':'ready',failed?'일부 조회 실패 · 다시 조회하세요.':'확인 '+new Date().toLocaleTimeString());
-    }catch(error){if($('project').value===projectName&&ticket===envTicket){for(const name of Object.keys(envStates))environmentState(name,'조회 실패','error');projectGit.textContent='Git · '+envFields.Git.textContent;envStatus('error','조회 실패 · 다시 조회하세요.');}}finally{if(ticket===envTicket)envBusy=false;}
+    }catch(error){if($('project').value===projectName&&ticket===envTicket){for(const name of Object.keys(envStates))environmentState(name,'조회 실패','error');envStatus('error','조회 실패 · 다시 조회하세요.');}}finally{if(ticket===envTicket)envBusy=false;}
   }
   setInterval(()=>{if(!document.hidden)refreshEnvironment();},15000);
   top.replaceChildren(sessionsPanel,account,environment);
@@ -248,12 +265,12 @@
   let snapshot={sessions:[],running:[]},previous=null,notifications=0,inFlight=false;
   const sessionStatus=queryStatus(sessionsPanel,'세션 현황',refresh);
   async function openChat(projectName,task){
-    if(metrics.open)metrics.close();
+    window.settingsPage.close();
     if($('project').value!==projectName){$('project').value=projectName;await loadProject();}
     await switchChat(task);
   }
   function renderNative(){
-    path.textContent=$('workspace-root').value||'프로젝트를 선택하세요.';
+    path.textContent=$('workspace-root').value||'프로젝트를 선택하세요.';path.title=path.textContent;
     native.replaceChildren();const rows=snapshot.sessions.filter(s=>s.project===$('project').value&&s.task===filter);
     if(!rows.length){native.textContent=filter?'연결된 네이티브 세션 없음 · Codex/Claude 성공 실행 후 표시됩니다.':'채팅을 선택하면 연결된 에이전트 세션이 표시됩니다.';return;}
     for(const s of rows){const item=el('span',s.client+' · '+s.session_id+' · '+s.mode);item.title=s.cwd;native.append(item);}

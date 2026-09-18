@@ -141,6 +141,8 @@ def route(name: str, body: RouteRequest, request: Request):
 async def chat(name: str, body: ChatRequest, request: Request):
     s = service(request)
     s.projects.select(name)
+    if body.chat_id:
+        body = body.model_copy(update={'task': s.storage.resolve_chat(name, chat_id=body.chat_id)['task']})
     client, text = parse_command(body.text)
     if client:
         body = body.model_copy(update={'text': text, 'raw_text': body.text, 'client': client, 'action': 'run'})
@@ -149,7 +151,7 @@ async def chat(name: str, body: ChatRequest, request: Request):
     if body.action == 'run' and decision['kind'] == 'ambiguous':
         return {'needs_selection': True, 'routing': decision}
     if body.action == 'note':
-        message_id = s.storage.add_message(name, body.text, decision['task'])
+        message_id = s.storage.add_message(name, body.text, decision['task'], chat_id=body.chat_id)
         if decision['task']:
             import re
             if re.search(r'(나중에\s*(하자|하죠|해줘)|보류(하자|해줘|로\s*(하자|해줘)))\s*[.!?]*$', body.text):
@@ -172,7 +174,7 @@ def create_task(name: str, body: ChatCreate, request: Request):
 def update_task(name: str, body: TaskUpdate, request: Request):
     s = service(request)
     s.projects.select(name)
-    s.storage.update_task(name, body.task, body.title, body.status, pinned=body.pinned, archived=body.archived)
+    s.storage.update_task(name, body.task, body.title, body.status, pinned=body.pinned, archived=body.archived, chat_id=body.chat_id)
     return {'updated': True}
 
 
@@ -236,7 +238,7 @@ def reconcile_run(name: str, run_id: str, request: Request):
     if record['status'] == 'running':
         command = record['command']
         cwd = s.policy.file_path(s.projects.select(name), command.get('cwd', '.'))
-        s.storage.forget_session(name, command.get('task',''), command.get('client','mock'), str(cwd), command.get('mode','read-only'))
+        s.storage.forget_session(name, command.get('task',''), command.get('client','mock'), str(cwd), command.get('mode','read-only'), chat_id=command.get('chat_id'))
         s.storage.finish_run(run_id, 'interrupted', error='사용자가 프로세스 종료 확인 후 기록을 정리했습니다.')
     return {'reconciled': True}
 
@@ -263,11 +265,11 @@ def session_overview(request: Request):
 
 
 @router.get("/projects/{name}/messages")
-def messages(name: str, request: Request, task: str | None = Query(None, max_length=120),
+def messages(name: str, request: Request, chat_id: str | None = Query(None, pattern=r'^[a-f0-9]{32}$'), task: str | None = Query(None, max_length=120),
              limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
     s = service(request)
     s.projects.select(name)
-    rows = s.storage.messages(name, task, limit, offset)
+    rows = s.storage.messages(name, task, limit, offset, chat_id=chat_id)
     for row in rows:
         row['cancellable'] = row['status'] == 'running' and row['run_id'] in s.active
     return {"messages": rows}

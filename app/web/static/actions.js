@@ -46,3 +46,11 @@
   for(const [id,[kind,label]] of Object.entries(actions)){const button=document.getElementById(id);if(button)icon(button,kind,label);}
   const create=document.querySelector('#create button');if(create)icon(create,'plus','빈 프로젝트 생성');
 })();
+
+// Resolve the current full label on demand, including dynamically populated controls.
+for(const event of ['mouseover','focusin','change'])document.addEventListener(event,({target})=>{
+  if(!(target instanceof Element))return;
+  const node=target.closest('select,input:not([type=checkbox]):not([type=radio]),.archived-chat-row>span,.rulebook-select,.rulebook-trash-row>span,.settings-context,#chat-title');
+  if(!node||node.matches('input[type=password]'))return;
+  node.title=node instanceof HTMLSelectElement?node.selectedOptions[0]?.textContent||'':node instanceof HTMLInputElement?node.value:node.textContent.trim();
+});

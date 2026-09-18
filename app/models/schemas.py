@@ -15,6 +15,7 @@ class WorkspaceRegister(ProjectCreate):
 
 
 class Command(StrictModel):
+    chat_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
     text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
     raw_text: str | None = Field(default=None, max_length=8000)
     cwd: str = "."
@@ -55,6 +56,7 @@ class ChatRequest(Command):
 
 
 class TaskUpdate(StrictModel):
+    chat_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
     task: str = Field(min_length=1, max_length=120, pattern=r'\S')
     title: str | None = Field(default=None, min_length=1, max_length=120, pattern=r'\S')
     status: Literal['active', 'paused', 'done'] | None = None

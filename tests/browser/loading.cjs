@@ -6,13 +6,14 @@ const {chromium}=require('playwright');
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  let fail=false,hold=true,releaseEnvironment;const waiting=[];
  const chats={one:[{task:'one-chat',count:0,status:'active',pinned:0,archived:0}],two:[{task:'regular',count:0,status:'active',pinned:0,archived:0},{task:'other',count:0,status:'active',pinned:0,archived:0}]};
+ for(const rows of Object.values(chats))for(const row of rows)row.id=require('node:crypto').randomBytes(16).toString('hex');
  const rulebooks={};
  let unfilteredMessages=0,fileRequests=0;
  const account={state:'available',limits:[{bucket:'codex',windowDurationMins:300,usedPercent:25,resetsAt:1790000000},{bucket:'codex',windowDurationMins:10080,usedPercent:63,resetsAt:1790100000}],models:[],source:'fixture',checked_at:new Date().toISOString()};
  await page.route('http://harness.test/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path.endsWith('/files')||path.endsWith('/file'))fileRequests++;
-  if(path.endsWith('/messages')&&!new URL(route.request().url()).searchParams.get('task'))unfilteredMessages++;
+  if(path.endsWith('/messages')&&!new URL(route.request().url()).searchParams.get('task')&&!new URL(route.request().url()).searchParams.get('chat_id'))unfilteredMessages++;
   if(path==='/')return route.fulfill({contentType:'text/html',body:fs.readFileSync('app/web/templates/index.html','utf8')});
   if(path.startsWith('/static/'))return route.fulfill({contentType:path.endsWith('.css')?'text/css':'application/javascript',body:fs.readFileSync('app/web'+path)});
   if(path==='/api/clients/codex/status'){
@@ -28,7 +29,7 @@ const {chromium}=require('playwright');
    }
    if(resource==='tasks'){
     if(route.request().method()==='PATCH'){
-     const payload=route.request().postDataJSON(),chat=chats[name].find(row=>row.task===payload.task);
+     const payload=route.request().postDataJSON(),chat=chats[name].find(row=>payload.chat_id?row.id===payload.chat_id:row.task===payload.task);
      if(payload.title)chat.task=payload.title;
      for(const field of ['pinned','archived'])if(field in payload)chat[field]=Number(payload[field]);
      return route.fulfill({json:{updated:true}});
@@ -113,7 +114,8 @@ const {chromium}=require('playwright');
   });
   assert.equal(result.before,result.after);assert.ok(result.moved>0);
  }
- await page.getByRole('button',{name:'실행 설정',exact:true}).click();
+ await page.getByRole('button',{name:'설정',exact:true}).click();
+ await page.locator('#settings-page').waitFor({state:'visible'});
 
  for(const selector of ['#workspace-root','#choose-workspace','#cwd','#mode','#save-settings']){
   const box=await page.locator(selector).boundingBox();assert.equal(box.height,40,selector);
@@ -121,9 +123,10 @@ const {chromium}=require('playwright');
  }
  await page.screenshot({path:'work/control-sizes-wide.png',fullPage:true});
  await page.setViewportSize({width:600,height:900});
- assert.equal(await page.locator('#settings-panel-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth),true);
+ assert.equal(await page.locator('#settings-page').evaluate(n=>n.scrollWidth<=n.clientWidth),true);
  await page.screenshot({path:'work/control-sizes-narrow.png',fullPage:true});
- await page.getByRole('button',{name:'실행 설정 닫기',exact:true}).click();
+ await page.getByRole('button',{name:'← 작업실',exact:true}).click();
+ await page.locator('#settings-page').waitFor({state:'hidden'});
  await page.setViewportSize({width:1440,height:1000});
  await page.screenshot({path:'work/loading-ui-wide.png',fullPage:true});
  await page.setViewportSize({width:600,height:900});
@@ -247,7 +250,7 @@ const {chromium}=require('playwright');
  await page.screenshot({path:'work/rulebook-library-narrow.png',fullPage:true});
  await page.setViewportSize({width:1440,height:1000});
  await page.getByRole('button',{name:'작업 룰북 닫기',exact:true}).click();
- for(const [label,id] of [['실행 설정','settings-panel'],['실행 기록','history-panel'],['작업 룰북','rules-panel'],['시작 도움말','setup-guide'],['프로젝트 관리','project-tools']]){
+ for(const [label,id] of [['작업 룰북','rules-panel'],['시작 도움말','setup-guide']]){
   await page.getByRole('button',{name:label,exact:true}).click();
   const dialog=page.getByRole('dialog',{name:label,exact:true});assert.equal(await dialog.isVisible(),true);
   assert.equal(await page.locator('dialog[open]').count(),1);
@@ -259,6 +262,38 @@ const {chromium}=require('playwright');
   }
   await page.keyboard.press('Escape');assert.equal(await dialog.isVisible(),false);
  }
+ assert.deepEqual(await page.locator('.workspace-menu>button').allTextContents(),['시작 도움말','작업 룰북','설정']);
+ await page.fill('#text','settings navigation draft');
+ const savedScroll=await page.locator('#messages').evaluate(n=>{const block=document.createElement('div');block.style.height='1800px';n.append(block);n.scrollTop=240;return n.scrollTop;});
+
+ await page.getByRole('button',{name:'설정',exact:true}).click();
+ await page.locator('#settings-page').waitFor({state:'visible'});
+ for(const [label,id] of [['실행 설정','settings-panel'],['에이전트 연결','clients-panel'],['프로젝트 관리','project-tools'],['실행 기록','history-panel'],['사용량',null]]){
+   await page.getByRole('link',{name:label,exact:true}).click();
+   await page.getByRole('heading',{name:label,exact:true}).waitFor();
+   if(id)assert.equal(await page.locator('#'+id).isVisible(),true);
+   assert.equal(await page.locator('dialog[open]').count(),0);
+ }
+ await page.screenshot({path:'work/settings-page-wide.png',fullPage:true});
+ await page.goBack();await page.getByRole('heading',{name:'실행 기록',exact:true}).waitFor();
+ await page.setViewportSize({width:600,height:900});
+ assert.equal(await page.locator('#settings-page').evaluate(n=>n.scrollWidth<=n.clientWidth),true);
+ await page.screenshot({path:'work/settings-page-narrow.png',fullPage:true});
+ await page.getByRole('button',{name:'← 작업실',exact:true}).click();
+ await page.locator('#settings-page').waitFor({state:'hidden'});
+ assert.equal(await page.locator('#text').inputValue(),'settings navigation draft');
+ assert.equal(await page.locator('#messages').evaluate(n=>n.scrollTop),savedScroll);
+ await page.setViewportSize({width:1440,height:1000});
+ await page.fill('#text','stable identity draft');
+ const originalId=chats.two.find(row=>row.task==='renamed').id;
+ chats.two.find(row=>row.id===originalId).task='external rename';
+ chats.two.push({id:'f'.repeat(32),task:'renamed',count:0,status:'active',pinned:0,archived:0});
+ await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+ assert.equal(await page.locator('#chat-title').textContent(),'external rename');
+ assert.equal(await page.locator('#text').inputValue(),'stable identity draft');
+ assert.equal(await page.evaluate(()=>window.chatState.identity('two','external rename')),originalId);
+ await chatRow('renamed').locator('button.task').click();await page.waitForFunction(()=>document.querySelector('#send').disabled===false);
+ assert.equal(await page.locator('#text').inputValue(),'');
  assert.deepEqual(errors,[]);console.log('PASS: pending account does not block workspace; failure retains data; retry recovers; pending environment does not block input or project switching; stale response ignored; narrow viewport has no horizontal overflow; no JS errors.');
  await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

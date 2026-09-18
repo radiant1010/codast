@@ -85,3 +85,21 @@ test('legacy mock drafts retain text but restore a real agent and clear mock mod
   const fallback=await ui.state.restore('one','B',{...defaults,client:'mock'});ui.state.finish(fallback);
   assert.equal(ui.nodes.client.value,'codex');
 });
+
+
+test('stable IDs migrate drafts and retries, survive external rename and old title reuse',async()=>{
+  const ui=screen();ui.context.crypto=require('node:crypto').webcrypto;
+  await open(ui,'one','A');ui.nodes.text.value='keep';ui.state.save();
+  const payload={text:'run',task:'A',client:'claude'};
+  const request=ui.state.request('one','A',payload);
+  ui.state.bind('one',[{id:'identity-one',task:'A'}]);
+  assert.equal(ui.state.request('one','A',{...payload,chat_id:'identity-one'}),request);
+  const reloaded=screen(ui.storage);reloaded.context.crypto=require('node:crypto').webcrypto;
+  reloaded.state.bind('one',[{id:'identity-one',task:'renamed'},{id:'identity-two',task:'A'}]);
+  assert.equal(reloaded.state.selected('one'),'renamed');
+  await open(reloaded,'one','renamed');assert.equal(reloaded.nodes.text.value,'keep');
+  assert.equal(reloaded.state.request('one','renamed',{...payload,task:'renamed',chat_id:'identity-one'}),request);
+  await open(reloaded,'one','A');assert.equal(reloaded.nodes.text.value,'');
+  reloaded.state.bind('two',[{id:'other-project',task:'renamed'}]);
+  await open(reloaded,'two','renamed');assert.equal(reloaded.nodes.text.value,'');
+});

@@ -23,7 +23,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 7:
+            if version > 8:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -136,6 +136,40 @@ class Storage:
                     COMMIT;
                 """)
 
+            if version < 8:
+                db.execute('BEGIN IMMEDIATE')
+                db.execute('CREATE TABLE IF NOT EXISTS chats (id TEXT PRIMARY KEY, project TEXT NOT NULL, task TEXT NOT NULL, UNIQUE(project,task))')
+                for table in ('messages','client_sessions'):
+                    if 'chat_id' not in {row[1] for row in db.execute('PRAGMA table_info('+table+')')}:
+                        db.execute('ALTER TABLE '+table+' ADD COLUMN chat_id TEXT')
+                db.execute("""INSERT OR IGNORE INTO chats(id,project,task)
+                    SELECT lower(hex(randomblob(16))),project,task FROM (
+                      SELECT project,task FROM messages UNION SELECT project,task FROM task_states
+                      UNION SELECT project,task FROM client_sessions UNION SELECT project,task FROM chat_preferences
+                    ) WHERE task<>''""")
+                for table in ('messages','client_sessions'):
+                    db.execute('UPDATE '+table+' SET chat_id=(SELECT id FROM chats WHERE chats.project='+table+'.project AND chats.task='+table+'.task) WHERE chat_id IS NULL')
+                db.execute('CREATE INDEX IF NOT EXISTS messages_chat_id ON messages(chat_id,created_at)')
+                db.execute('CREATE UNIQUE INDEX IF NOT EXISTS client_sessions_chat_id ON client_sessions(chat_id,client,cwd,mode)')
+                db.execute('PRAGMA user_version=8')
+                db.commit()
+
+    @staticmethod
+    def _chat_id(db, project, task):
+        if not task:
+            return None
+        db.execute('INSERT OR IGNORE INTO chats VALUES (?,?,?)', (uuid4().hex,project,task))
+        return db.execute('SELECT id FROM chats WHERE project=? AND task=?',(project,task)).fetchone()[0]
+
+    def resolve_chat(self, project, task='', chat_id=None):
+        with self.connect() as db:
+            if chat_id:
+                row = db.execute('SELECT id,task FROM chats WHERE project=? AND id=?',(project,chat_id)).fetchone()
+                if not row:
+                    raise FileNotFoundError('채팅을 찾을 수 없습니다.')
+                return dict(row)
+            return {'id':self._chat_id(db,project,task.strip()),'task':task.strip()}
+
     def rulebook_settings(self, project):
         with self.connect() as db:
             row = db.execute('SELECT settings FROM rulebook_settings WHERE project=?', (project,)).fetchone()
@@ -199,27 +233,46 @@ class Storage:
         run_id = hashlib.sha256(json.dumps([project, request_id]).encode()).hexdigest() if request_id else uuid4().hex
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if command.chat_id:
+                chat = db.execute('SELECT task FROM chats WHERE project=? AND id=?', (project, command.chat_id)).fetchone()
+                if not chat:
+                    raise FileNotFoundError('채팅을 찾을 수 없습니다.')
+                command = command.model_copy(update={'task': chat['task']})
+            else:
+                command = command.model_copy(update={'task': command.task.strip(), 'chat_id': self._chat_id(db, project, command.task.strip())})
             if request_id:
                 prior = db.execute('SELECT command, adapter FROM runs WHERE id=? AND project=?', (run_id, project)).fetchone()
                 if prior:
-                    if json.loads(prior['command']) != command.model_dump() or prior['adapter'] != adapter:
+                    previous = json.loads(prior['command'])
+                    if 'chat_id' not in previous:
+                        message = db.execute('SELECT chat_id FROM messages WHERE run_id=?', (run_id,)).fetchone()
+                        previous['chat_id'] = message['chat_id'] if message else None
+                    if previous.get('chat_id') == command.chat_id and command.chat_id:
+                        previous['task'] = command.task
+                    if previous != command.model_dump() or prior['adapter'] != adapter:
                         raise FileExistsError('같은 요청 ID에 다른 실행 내용을 사용할 수 없습니다.')
                     raise ExistingRun(run_id)
             if exclusive and db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError("이 프로젝트에 실행 중이거나 종료 확인이 필요한 작업이 있습니다.")
             db.execute("""INSERT INTO runs(id,project,command,adapter,status,started_at)
                 VALUES (?,?,?,?, 'running',?)""", (run_id, project, command.model_dump_json(), adapter, now()))
-            db.execute("INSERT INTO messages VALUES (?,?,?,?,?,?)",
-                       (run_id, project, command.task.strip(), command.raw_text or command.text, now(), run_id))
+            db.execute("INSERT INTO messages(id,project,task,text,created_at,run_id,chat_id) VALUES (?,?,?,?,?,?,?)",
+                       (run_id, project, command.task.strip(), command.raw_text or command.text, now(), run_id, command.chat_id))
             db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
                        (run_id, 'status', f'{adapter} 실행 시작', now()))
         return run_id
 
-    def add_message(self, project, text, task):
+    def add_message(self, project, text, task, *, chat_id=None):
         message_id = uuid4().hex
         with self.connect() as db:
-            db.execute("INSERT INTO messages VALUES (?,?,?,?,?,NULL)",
-                       (message_id, project, task.strip(), text, now()))
+            db.execute('BEGIN IMMEDIATE')
+            if chat_id:
+                chat = db.execute('SELECT task FROM chats WHERE project=? AND id=?', (project, chat_id)).fetchone()
+                if not chat:
+                    raise FileNotFoundError('채팅을 찾을 수 없습니다.')
+                task = chat['task']
+            db.execute("INSERT INTO messages(id,project,task,text,created_at,chat_id) VALUES (?,?,?,?,?,?)",
+                       (message_id, project, task.strip(), text, now(),self._chat_id(db,project,task.strip())))
         return message_id
 
     def attach_native_thread(self, project, task, cwd, session_id, client="codex"):
@@ -231,10 +284,10 @@ class Storage:
                 raise FileExistsError('실행 중이거나 종료 확인이 필요한 작업이 있습니다.')
             if self._task_exists(db, project, task):
                 raise FileExistsError('같은 이름의 채팅이 있습니다. 다른 이름을 사용하세요.')
-            db.execute('INSERT INTO client_sessions VALUES (?,?,?,?,?,?)',
-                       (project, task, client, cwd, 'read-only', session_id))
-            db.execute('INSERT INTO messages VALUES (?,?,?,?,?,NULL)',
-                       (uuid4().hex, project, task, f'기존 {client} 세션을 연결했습니다. 이전 대화는 네이티브 세션에 보관됩니다.', now()))
+            db.execute('INSERT INTO client_sessions VALUES (?,?,?,?,?,?,?)',
+                       (project, task, client, cwd, 'read-only', session_id,self._chat_id(db,project,task)))
+            db.execute('INSERT INTO messages(id,project,task,text,created_at,chat_id) VALUES (?,?,?,?,?,?)',
+                       (uuid4().hex, project, task, f'기존 {client} 세션을 연결했습니다. 이전 대화는 네이티브 세션에 보관됩니다.', now(),self._chat_id(db,project,task)))
     def move_message(self, project, message_id, task):
         with self.connect() as db:
             old = db.execute("SELECT task FROM messages WHERE project=? AND id=?", (project,message_id)).fetchone()
@@ -242,16 +295,17 @@ class Storage:
                 raise FileExistsError("실행이 끝난 뒤 메시지를 이동하세요.")
             if old:
                 db.execute("DELETE FROM client_sessions WHERE project=? AND task IN (?,?)", (project,old['task'],task.strip()))
-            result = db.execute("UPDATE messages SET task=? WHERE project=? AND id=?",
-                                (task.strip(), project, message_id))
+            result = db.execute("UPDATE messages SET task=?,chat_id=? WHERE project=? AND id=?",
+                                (task.strip(), self._chat_id(db,project,task.strip()),project, message_id))
             if not result.rowcount:
                 raise FileNotFoundError("메시지를 찾을 수 없습니다.")
 
     @staticmethod
     def _task_exists(db, project, task):
         return db.execute('SELECT 1 FROM messages WHERE project=? AND task=? UNION ALL '
-                          'SELECT 1 FROM task_states WHERE project=? AND task=? LIMIT 1',
-                          (project, task, project, task)).fetchone() is not None
+                          'SELECT 1 FROM task_states WHERE project=? AND task=? UNION ALL '
+                          'SELECT 1 FROM chats WHERE project=? AND task=? LIMIT 1',
+                          (project, task, project, task, project, task)).fetchone() is not None
 
     def create_task(self, project, task):
         task = task.strip()
@@ -261,24 +315,29 @@ class Storage:
             db.execute('BEGIN IMMEDIATE')
             if self._task_exists(db, project, task):
                 raise FileExistsError('같은 이름의 채팅이 있습니다.')
+            chat_id = self._chat_id(db,project,task)
             db.execute('INSERT INTO task_states VALUES (?,?,?)', (project, task, 'active'))
-        return {'task': task, 'count': 0, 'status': 'active'}
+        return {'id': chat_id, 'task': task, 'count': 0, 'status': 'active'}
 
     def tasks(self, project):
         with self.connect() as db:
             return [dict(row) for row in db.execute("""WITH names AS (
-                SELECT task FROM messages WHERE project=? UNION SELECT task FROM task_states WHERE project=?)
-                SELECT n.task, COUNT(m.id) AS count, COALESCE(s.status,'active') AS status,
+                SELECT task FROM messages WHERE project=? UNION SELECT task FROM task_states WHERE project=? UNION SELECT task FROM chats WHERE project=?)
+                SELECT c.id, n.task, COUNT(m.id) AS count, COALESCE(s.status,'active') AS status,
                     COALESCE(p.pinned,0) AS pinned, COALESCE(p.archived,0) AS archived
-                FROM names n LEFT JOIN messages m ON m.project=? AND m.task=n.task
+                FROM names n LEFT JOIN chats c ON c.project=? AND c.task=n.task LEFT JOIN messages m ON m.project=? AND m.task=n.task
                 LEFT JOIN task_states s ON s.project=? AND s.task=n.task
                 LEFT JOIN chat_preferences p ON p.project=? AND p.task=n.task
-                GROUP BY n.task ORDER BY pinned DESC, MAX(m.created_at) DESC,n.task""", (project,)*5)]
+                GROUP BY n.task ORDER BY pinned DESC, MAX(m.created_at) DESC,n.task""", (project,)*7)]
 
-    def messages(self, project, task, limit, offset):
+    def messages(self, project, task, limit, offset, chat_id=None):
         where = "m.project=?"
         args = [project]
-        if task is not None:
+        if chat_id:
+            self.resolve_chat(project,chat_id=chat_id)
+            where += " AND m.chat_id=?"
+            args.append(chat_id)
+        elif task is not None:
             where += " AND m.task=?"
             args.append(task)
         with self.connect() as db:
@@ -348,20 +407,26 @@ class Storage:
                     group[kind + '_reports'] += 1
         return list(groups.values())
 
-    def session(self, project, task, client, cwd, mode):
+    def session(self, project, task, client, cwd, mode, *, chat_id=None):
+        if chat_id:
+            task = self.resolve_chat(project,chat_id=chat_id)['task']
         if not task:
             return None
         with self.connect() as db:
-            row = db.execute("SELECT session_id FROM client_sessions WHERE project=? AND task=? AND client=? AND cwd=? AND mode=?",
-                (project,task,client,cwd,mode)).fetchone()
+            row = db.execute("SELECT session_id FROM client_sessions WHERE project=? AND chat_id=(SELECT id FROM chats WHERE project=? AND task=?) AND client=? AND cwd=? AND mode=?",
+                (project,project,task,client,cwd,mode)).fetchone()
         return row[0] if row else None
 
-    def save_session(self, project, task, client, cwd, mode, session_id):
+    def save_session(self, project, task, client, cwd, mode, session_id, *, chat_id=None):
+        if chat_id:
+            task = self.resolve_chat(project,chat_id=chat_id)['task']
         if task and session_id:
             with self.connect() as db:
-                db.execute("INSERT OR REPLACE INTO client_sessions VALUES (?,?,?,?,?,?)", (project,task,client,cwd,mode,session_id))
+                db.execute("INSERT OR REPLACE INTO client_sessions VALUES (?,?,?,?,?,?,?)", (project,task,client,cwd,mode,session_id,self._chat_id(db,project,task)))
 
-    def forget_session(self, project, task, client, cwd, mode):
+    def forget_session(self, project, task, client, cwd, mode, *, chat_id=None):
+        if chat_id:
+            task = self.resolve_chat(project,chat_id=chat_id)['task']
         with self.connect() as db:
             db.execute("DELETE FROM client_sessions WHERE project=? AND task=? AND client=? AND cwd=? AND mode=?",
                 (project,task,client,cwd,mode))
@@ -375,19 +440,26 @@ class Storage:
         with self.connect() as db:
             db.execute("INSERT OR REPLACE INTO client_config VALUES (?,?)", (client,path))
 
-    def update_task(self, project, task, title=None, status=None, *, pinned=None, archived=None):
+    def update_task(self, project, task, title=None, status=None, *, pinned=None, archived=None, chat_id=None):
         task = task.strip()
-        title = title.strip() if title else task
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if chat_id:
+                chat = db.execute('SELECT task FROM chats WHERE project=? AND id=?', (project, chat_id)).fetchone()
+                if not chat:
+                    raise FileNotFoundError('채팅을 찾을 수 없습니다.')
+                task = chat['task']
+            title = title.strip() if title else task
             if (title != task or status is not None) and db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError("실행이 끝난 뒤 작업을 변경하세요.")
             if not self._task_exists(db, project, task):
                 raise FileNotFoundError("작업을 찾을 수 없습니다.")
             old = db.execute("SELECT status FROM task_states WHERE project=? AND task=?", (project,task)).fetchone()
+            self._chat_id(db,project,task)
             if title != task:
                 if self._task_exists(db, project, title):
                     raise FileExistsError('같은 이름의 채팅이 있습니다. 다른 이름을 입력하세요.')
+                db.execute("UPDATE chats SET task=? WHERE project=? AND task=?", (title,project,task))
                 db.execute("UPDATE messages SET task=? WHERE project=? AND task=?", (title,project,task))
                 db.execute("UPDATE client_sessions SET task=? WHERE project=? AND task=?", (title,project,task))
                 db.execute("UPDATE chat_preferences SET task=? WHERE project=? AND task=?", (title,project,task))
@@ -403,4 +475,5 @@ class Storage:
     def set_task_status(self, project, task, status):
         # Notes can change the backlog status without modifying a live native session.
         with self.connect() as db:
+            self._chat_id(db,project,task)
             db.execute('INSERT OR REPLACE INTO task_states VALUES (?,?,?)', (project,task,status))

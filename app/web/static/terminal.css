@@ -19,7 +19,7 @@ pre,textarea,#messages{font-family:inherit;font-size:12px;line-height:1.55}
 h1,h2,h3{font-family:inherit}
 #sidebar{width:200px;min-width:200px;background:#0b0b0b;border-right:1px dashed #454545}
 .brand{height:40px;padding:8px 12px;gap:8px;border-bottom:1px dashed #454545}
-.brand strong{font-size:13px;letter-spacing:0;color:#0b0b0b;background:var(--terminal-accent);padding:2px 5px}
+.brand strong{font-size:20px;letter-spacing:0;color:#0b0b0b;background:var(--terminal-accent);padding:2px 5px}
 .brand strong::before{content:"> ";color:inherit}
 .brand a{color:inherit;text-decoration:none;white-space:nowrap}
 .brand a:hover strong{background:#ffd0a7}
@@ -207,3 +207,53 @@ select option::checkmark,select::picker-icon,.agent-picker select{color:var(--te
 
 #rulebook-trash{margin-top:16px;border-top:1px dashed var(--terminal-border);padding-top:8px}
 .rulebook-trash-row{display:flex;align-items:center;gap:8px}.rulebook-trash-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
+
+/* Bottom controls share the composer boundary; long chat lists scroll above them. */
+#sidebar .side-content{min-height:0;overflow:hidden;padding-bottom:0}
+#sidebar .side-content>#project-panel{flex-shrink:0}
+#sidebar .chat-navigation{flex:1;min-height:0;overflow-y:auto}
+#sidebar .workspace-menu{flex:none;min-height:0;overflow-y:auto;align-content:start;padding-bottom:12px;border-top:1px dashed #565656}
+
+#sidebar .side-content>#project-panel{margin:0;min-height:0;overflow-y:auto;border-bottom:1px dashed #565656}
+
+#project-panel .project-location{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.settings-page{height:100dvh;display:flex;flex-direction:column;background:#0b0b0b}
+.settings-page[hidden]{display:none}
+.settings-page>header{flex:none;min-height:60px;padding:12px 24px;border-bottom:1px dashed #565656}
+.settings-page>header strong{font-size:20px;color:var(--terminal-accent)}
+.settings-page>header button{margin-left:auto}
+.settings-layout{display:grid;grid-template-columns:220px minmax(0,1fr);flex:1;min-height:0}
+.settings-layout>nav{padding:24px 16px;border-right:1px dashed #454545;overflow:auto}
+.settings-context{font-size:11px;color:var(--terminal-muted);overflow-wrap:anywhere;margin-bottom:20px}
+.settings-layout>nav a{display:block;padding:12px;color:inherit;text-decoration:none;border-left:2px solid transparent}
+.settings-layout>nav a:hover{background:#202020}
+.settings-layout>nav a[aria-current=page]{color:var(--terminal-accent);border-color:var(--terminal-accent);background:#2e2419}
+.settings-layout>main{padding:28px;overflow:auto;min-width:0}
+.settings-layout>main>h1{font-size:20px;margin-bottom:24px}
+.settings-content{max-width:900px;margin:0;padding:0;border:0}
+.settings-content[hidden]{display:none!important}
+.settings-content>summary{display:none}
+.settings-content .control-row,.settings-content .client-path-row{display:flex;gap:12px}
+.settings-content input:not([type=checkbox]),.settings-content select,.settings-content button{min-height:40px;border-radius:0}
+.settings-content .usage-panel{display:block;margin-bottom:20px}
+.settings-content label{margin-top:20px;margin-bottom:8px}
+.settings-content .client-card{margin-bottom:24px}
+.settings-page>#status{flex:none;border-top:1px dashed #454545;padding:8px 24px}
+@media(max-width:700px){.settings-layout{grid-template-columns:150px minmax(0,1fr)}.settings-layout>nav{padding:16px 8px}.settings-layout>main{padding:20px 14px}.settings-page>header{padding:12px 14px}.settings-content .control-row{flex-wrap:wrap}}
+
+.settings-content .usage-panel,.settings-content .running-panel{background:#111;border:1px dashed #454545;border-radius:0;padding:20px}
+
+/* Inset focus stays inside the scrollable project panel instead of being clipped. */
+#project-panel .project-picker{align-items:center}
+#project-panel .project-picker select{height:28px;min-height:28px;padding:3px 6px;border:1px solid #454545}
+#project-panel .project-picker .action-icon{height:28px;min-height:28px;width:28px;min-width:28px}
+#project-panel .project-picker select:focus{outline:0;border-color:var(--terminal-accent)}
+#project-panel .project-picker .action-icon:focus-visible{outline-offset:-1px}
+
+/* Compact names stay within their allocated width; prose and editors still wrap. */
+select,input:not([type=checkbox]):not([type=radio]),.archived-chat-row>span,.rulebook-row .rulebook-select,.rulebook-trash-row>span,.settings-context,#chat-title{
+  min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.project-picker select{flex:1;width:0}
+#chat-title{flex:1}

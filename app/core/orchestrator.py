@@ -76,15 +76,16 @@ class Orchestrator:
         cwd = self.policy.file_path(root, command.cwd)
         if not cwd.is_dir():
             raise FileNotFoundError('작업 디렉터리를 찾을 수 없습니다.')
-        command = command.model_copy(update={'task': command.task.strip()})
         rules = self.rules.load(root, command.cwd, self.rulebook_preferences(name))
         selected = [ContextPart(path=p, content=self.read_file(name, p)) for p in dict.fromkeys(command.context_paths)]
-        context = self.context.build(command, rules, selected)
         adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))
         if command.client != 'mock':
             adapter.model = command.model
-        session = None if command.fresh else self.storage.session(name, command.task, command.client, str(cwd), command.mode)
-        rows = self.storage.messages(name, command.task, 30, 0) if command.task else []
+        chat = self.storage.resolve_chat(name, command.task, command.chat_id)
+        command = command.model_copy(update={'task': chat['task'], 'chat_id': chat['id']})
+        context = self.context.build(command, rules, selected)
+        session = None if command.fresh else self.storage.session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
+        rows = self.storage.messages(name, command.task, 30, 0, chat_id=command.chat_id) if command.task else []
         history = []
         for row in rows:
             # On resume, the native client already holds its previous successful turn.
@@ -98,13 +99,13 @@ class Orchestrator:
             context.history.pop(0)
         run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id)
         if command.fresh:
-            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode)
+            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
         return run_id, command, context, cwd, adapter, session
 
     async def perform(self, name, prepared):
         run_id, command, context, cwd, adapter, session = prepared
         started = time.monotonic()
-        metadata = {'client': command.client, 'mode': command.mode, 'resumed': bool(session),
+        metadata = {'chat_id': command.chat_id, 'client': command.client, 'mode': command.mode, 'resumed': bool(session),
                     'requested_model': command.model,
                     'history_count': len(context.history),
                     'rules': [{'path': rule.path, 'sha256': hashlib.sha256(rule.content.encode('utf-8')).hexdigest()}
@@ -116,16 +117,16 @@ class Orchestrator:
                 adapter.on_event = lambda kind, text: self.storage.append_event(run_id, kind, text)
                 result = await adapter.execute(context.model_dump_json(), str(cwd), command.mode, session)
         except asyncio.CancelledError:
-            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode)
+            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
             self.storage.finish_run(run_id, "interrupted", error="실행이 취소되었습니다.", metadata=metadata)
             raise
         except Exception as exc:
             # A failed native turn may have partially changed its own conversation.
-            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode)
+            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
             self.storage.finish_run(run_id, "failed", error=str(exc), metadata=metadata)
             raise
         native_session = result.session_id or session
-        self.storage.save_session(name, command.task, command.client, str(cwd), command.mode, native_session)
+        self.storage.save_session(name, command.task, command.client, str(cwd), command.mode, native_session, chat_id=command.chat_id)
         metadata.update(session_id=native_session, usage=result.usage, execution_model=result.execution_model, elapsed_seconds=round(time.monotonic()-started, 2))
         self.storage.finish_run(run_id, "completed", output=result.output, adapter=result.adapter, metadata=metadata)
         return result.model_copy(update={"run_id": run_id})
@@ -158,7 +159,7 @@ class Orchestrator:
             self.active.pop(run_id, None)
             if self.storage.run(name, run_id)['status'] == 'running':
                 _, cmd, _, cwd, _, _ = prepared
-                self.storage.forget_session(name, cmd.task, cmd.client, str(cwd), cmd.mode)
+                self.storage.forget_session(name, cmd.task, cmd.client, str(cwd), cmd.mode, chat_id=cmd.chat_id)
                 self.storage.finish_run(run_id, 'interrupted', error='서버가 실행을 종료했습니다.')
         task.add_done_callback(finished)
         return run_id
@@ -178,7 +179,7 @@ class Orchestrator:
         if self.storage.run(name, run_id)['status'] == 'running':
             command = record['command']
             cwd = self.policy.file_path(self.projects.select(name), command['cwd'])
-            self.storage.forget_session(name, command['task'], command['client'], str(cwd), command['mode'])
+            self.storage.forget_session(name, command['task'], command['client'], str(cwd), command['mode'], chat_id=command.get('chat_id'))
             self.storage.finish_run(run_id, 'interrupted', error='시작 전에 취소되었습니다.')
 
     async def shutdown(self):
