@@ -24,12 +24,12 @@
     try{
       const imported=[];
       for(const file of chosen){
-        if(!/\.(md|txt)$/i.test(file.name)||file.size>96000)throw Error('96KB 이하의 Markdown·텍스트 파일을 선택하세요.');
+        if(!/\.(md|txt)$/i.test(file.name)||file.size>96000)throw Error('96KB 이하의 Markdown 또는 텍스트 파일을 선택하세요.');
         const text=await file.text();if(text.length>24000||text.includes('\0'))throw Error('파일 내용은 24,000자 이내의 텍스트여야 합니다.');
         imported.push({id:'file-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),name:file.name.slice(0,80),folder:current()?.folder||'',enabled:false,content:text});
       }
       if(project!==$('project').value)return;books.push(...imported);selected=imported[0].id;renderTree();renderEditor();dirty();status.textContent='파일 내용을 추가했습니다. 적용할 룰북을 체크하고 저장하세요. 원본 파일은 변경하지 않습니다.';
-    }catch(error){status.textContent='파일 추가 실패 · '+error.message;}finally{busy=false;fieldset.disabled=false;}
+    }catch(error){status.textContent='파일 추가 실패, '+error.message;}finally{busy=false;fieldset.disabled=false;}
   };
   function payload(){return {include_project_rules:false,folders:[...folders],books:books.map(b=>({...b}))};}
   const signature=()=>JSON.stringify(payload());
@@ -78,7 +78,7 @@
           const affected=folders.filter(v=>v===f||v.startsWith(f+'/'));
           const moved=affected.map(v=>next+v.slice(f.length));const remaining=folders.filter(v=>!affected.includes(v));
           const candidate=[...remaining,...moved];
-          if(!validFolders(candidate)){status.textContent='상위 폴더·중복 이름·최대 3단계를 확인하세요.';return;}
+          if(!validFolders(candidate)){status.textContent='상위 폴더와 이름을 확인하세요. 이름이 겹치거나 폴더 깊이가 3단계를 넘으면 저장할 수 없습니다.';return;}
           folders=folders.map(v=>affected.includes(v)?next+v.slice(f.length):v);
           books.forEach(book=>{if(affected.includes(book.folder))book.folder=next+book.folder.slice(f.length);});dirty();renderTree();renderEditor();
         }),icon('trash',f+' 폴더 삭제',async()=>{
@@ -94,7 +94,7 @@
   function addFolder(parent=''){
     const value=prompt(parent?'하위 폴더 이름':'인덱스 폴더 이름')?.trim();if(!value)return;
     const path=parent?parent+'/'+value:value;
-    if(value.includes('/')||!validFolders([...folders,path])){status.textContent='폴더 이름·중복·최대 3단계를 확인하세요.';return;}
+    if(value.includes('/')||!validFolders([...folders,path])){status.textContent='폴더 이름이 겹치는지 확인하세요. 폴더는 최대 3단계까지 만들 수 있습니다.';return;}
     folders.push(path);dirty();renderTree();renderEditor();
   }
   toolbar.append(icon('folderPlus','룰북 폴더 추가',async()=>addFolder()),icon('plus','룰북 추가',async()=>{
@@ -103,7 +103,7 @@
   }));
   const trash=el('details');trash.id='rulebook-trash';const trashTitle=el('summary','삭제한 룰북'),trashList=el('div');trash.append(trashTitle,trashList);
   function renderTrash(){
-    const deleted=books.filter(b=>b.trashed);trashTitle.textContent='삭제한 룰북 · '+deleted.length;trashList.replaceChildren();
+    const deleted=books.filter(b=>b.trashed);trashTitle.textContent='삭제한 룰북, '+deleted.length;trashList.replaceChildren();
     if(!deleted.length)trashList.append(el('p','삭제한 룰북이 없습니다.','hint'));
     for(const book of deleted){const row=el('div',undefined,'rulebook-trash-row');row.append(el('span',book.name),icon('restore',book.name+' 룰북 복원',async()=>{
       book.trashed=false;book.enabled=false;if(book.folder&&!folders.includes(book.folder))book.folder='';selected=book.id;dirty();renderTree();renderEditor();
@@ -117,7 +117,7 @@
     if(books.some(b=>!b.name.trim())){status.textContent='룰북 이름을 입력하세요.';return;}
     const b=base(),project=loadedProject;busy=true;fieldset.disabled=true;
     try{await api(b+'/rules','PUT',payload());if(project!==$('project').value)return;original=signature();status.textContent='저장했습니다. 다음 요청부터 적용됩니다.';}
-    catch(error){status.textContent='저장 실패 · '+error.message;}
+    catch(error){status.textContent='저장 실패, '+error.message;}
     finally{busy=false;fieldset.disabled=false;}
   });save.id='save-rulebook';
   name.oninput=()=>{if(current()){current().name=name.value;dirty();}};name.onchange=renderTree;
@@ -135,7 +135,7 @@
   window.openRulebook=async()=>{
     busy=true;fieldset.disabled=true;
     if(!$('project').value){books=[];folders=[];selected=null;original='';renderTree();renderEditor();status.textContent='프로젝트를 먼저 선택하세요.';busy=false;loadedProject='';return;}
-    status.textContent='룰북을 불러오는 중…';try{await loadRules();busy=false;fieldset.disabled=false;status.textContent='변경 후 저장 버튼을 누르세요.';}catch(error){status.textContent='조회 실패 · '+error.message;}finally{busy=false;}
+    status.textContent='룰북을 불러오는 중…';try{await loadRules();busy=false;fieldset.disabled=false;status.textContent='변경 후 저장 버튼을 누르세요.';}catch(error){status.textContent='조회 실패, '+error.message;}finally{busy=false;}
   };
   function guard(event){if(original&&signature()!==original&&!confirm('저장하지 않은 변경사항을 닫을까요?')){event.preventDefault();event.stopImmediatePropagation();}}
   dialog.addEventListener('cancel',guard);dialog.querySelector('header button').addEventListener('click',guard,true);

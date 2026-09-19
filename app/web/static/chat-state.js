@@ -9,11 +9,11 @@
   };
   const chatId=(name,task)=>Object.entries(project(name).identities||{}).find(([,title])=>title===task)?.[0];
   const id=(name,task)=>chatId(name,task)?'@'+chatId(name,task):JSON.stringify(task);
-  const fingerprint=payload=>JSON.stringify(Object.fromEntries(Object.entries(payload.chat_id?{...payload,task:''}:payload).sort(([a],[b])=>a.localeCompare(b))));
+  const fingerprint=payload=>JSON.stringify(Object.fromEntries(Object.entries({material_ids:[],...payload,...(payload.chat_id?{task:''}:{})}).sort(([a],[b])=>a.localeCompare(b))));
   function persist(){try{localStorage.setItem(key,JSON.stringify(data));sessionStorage.removeItem(key);}catch{notice('브라우저 저장이 불가능합니다. 이 탭에서만 작성 내용을 유지합니다.',true);}}
   function capture(){return {text:$('text').value,client:$('client').value,model:window.selectedConfiguredModel?.()||null,
     cwd:$('cwd').value,mode:$('mode').value,paths:selectedPaths(),fresh:$('fresh').checked,
-    action:$('action').value,offset,scroll:$('messages').scrollTop};}
+    material_ids:window.materialGuard?.selected()||[],action:$('action').value,offset,scroll:$('messages').scrollTop};}
   function save(){if(!ready||!active)return;const state=capture();if(pendingScroll!==null)state.scroll=pendingScroll;project(active.project).chats[id(active.project,active.task)]=state;persist();}
   window.chatState={
     save,
@@ -53,8 +53,9 @@
       if(!['codex','claude'].includes(state.client)){state.client=['codex','claude'].includes(defaults.client)?defaults.client:'codex';state.model=null;}
       p.chats[id(name,task)]=state;persist();
       $('text').value=state.text;$('task-name').value=task||'';$('client').value=state.client;
-      $('cwd').value=state.cwd;$('mode').value=state.mode;$('fresh').checked=state.fresh;$('action').value=state.action;
+      $('cwd').value=state.cwd;$('mode').value=state.mode;$('fresh').checked=state.fresh;$('action').value='run';
       offset=state.offset;
+      window.materialGuard?.restore(name,state.material_ids||[]);
       window.loadModelChoices?.(state.model);
       if(active!==current)return null;
       pendingScroll=state.scroll;ready=true;

@@ -5,6 +5,7 @@
     archive:'<path d="M3 4h18v4H3zM5 8v12h14V8M9 12h6"/>',
     edit:'<path d="m15 4 5 5M4 20l5-1L21 7l-5-5L4 14v6z"/>',
     plus:'<path d="M12 5v14M5 12h14"/>',
+    paperclip:'<path d="m21 11-8.5 8.5a6 6 0 0 1-8.5-8.5l9-9a4 4 0 0 1 5.7 5.7l-9 9a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
     importDocument:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M20 15H10m3-3-3 3 3 3"/>',
     folderPlus:'<path d="M3 7V5h6l2 2h10v12H3zM9 13h6M12 10v6"/>',
     folder:'<path d="M3 7V5h6l2 2h10v12H3z"/><path d="M3 11h18"/>',
@@ -24,17 +25,17 @@
     button.classList.add('action-icon');button.setAttribute('aria-label',label);button.title=label;
     button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+paths[kind]+'</svg>';
   }
-  const dynamic={'열기':'file','경로 저장':'folder','경로 등록':'folder','복원':'restore','이 에이전트로 준비':'check','CLI 설치·연결 확인 열기':'plug','이동':'route'};
+  const dynamic={'열기':'file','경로 저장':'folder','경로 등록':'folder','복원':'restore','이 에이전트로 준비':'check','CLI 설치 및 연결 확인 열기':'plug','이동':'route'};
   window.decorateAction=(button,label)=>{if(dynamic[label])icon(button,dynamic[label],label);};
   window.actionIcon=icon;
   const actions={
     'add-workspace':['folder','프로젝트 폴더 선택'],
-    'choose-workspace':['folder','폴더 선택 · 워크스페이스 추가'],
+    'choose-workspace':['folder','작업 폴더 연결'],
     'pick-folder':['folder','폴더 선택'],
     'register-folder':['plus','선택한 워크스페이스 추가'],
     'cancel-workspace':['close','워크스페이스 추가 취소'],
     'save-settings':['save','실행 설정 저장'],
-    'probe-clients':['plug','CLI 설치·연결 확인'],
+    'probe-clients':['plug','CLI 설치 및 연결 확인'],
     'delete-project':['trash','선택한 프로젝트 삭제'],
     'send':['send','요청 보내기'],
     'preview-route':['route','작업 분류 확인'],

@@ -16,7 +16,7 @@
     }
     if(!wasOpen){window.chatState.save();workspaceScroll=$('messages').scrollTop;statusHome={parent:$('status').parentNode,next:$('status').nextSibling};shell.append($('status'));}
     wasOpen=true;last=match[1];$('workspace').style.display='none';shell.hidden=false;
-    context.textContent=$('project').value?'프로젝트 · '+$('project').value:'프로젝트 선택 전';heading.textContent=selected.label;heading.tabIndex=-1;
+    context.textContent=$('project').value?'프로젝트, '+$('project').value:'프로젝트 선택 전';heading.textContent=selected.label;heading.tabIndex=-1;
     for(const [key,page] of pages){page.node.hidden=key!==last;page.link.setAttribute('aria-current',key===last?'page':'false');}
     if(selected.node.tagName==='DETAILS')selected.node.open=true;
     if(last==='history'&&$('project').value)act(()=>history());

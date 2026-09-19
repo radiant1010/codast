@@ -9,12 +9,12 @@
   let modelClient='',ticket=0;
   window.loadModelChoices=async(selected=null)=>{
     const client=$('client').value,request=++ticket;
-    modelClient=client;model.replaceChildren(new Option('CLI 기본 모델',''));if(selected){model.add(new Option(selected+' (저장됨 · 확인 중)',selected));model.value=selected;}model.disabled=true;
+    modelClient=client;model.replaceChildren(new Option('CLI 기본 모델',''));if(selected){model.add(new Option(selected+' (저장됨, 확인 중)',selected));model.value=selected;}model.disabled=true;
     if(client!=='codex'){model.disabled=false;return;}
     try{
       const data=await api('/clients/codex/status');if(request!==ticket||client!==$('client').value)return;
       model.replaceChildren(new Option('CLI 기본 모델',''));for(const row of data.models||[])if(row.model)model.add(new Option(row.displayName||row.model,row.model));
-      if(selected&&!Array.from(model.options).some(o=>o.value===selected))model.add(new Option(selected+' (저장됨 · 사용 가능 여부 미확인)',selected));
+      if(selected&&!Array.from(model.options).some(o=>o.value===selected))model.add(new Option(selected+' (저장됨, 사용 가능 여부 미확인)',selected));
       model.value=selected||'';
     }catch(error){if(request===ticket)notice('모델 목록 조회 실패: '+error.message,true);}
     finally{if(request===ticket)model.disabled=false;}
@@ -33,9 +33,9 @@
   const tabs=el('div',undefined,'agent-segment');tabs.setAttribute('role','group');tabs.setAttribute('aria-label','에이전트별 연결');
   const observations={},draftPaths={};
   const connectionLabel=row=>!row?'미확인':row.state!=='installed'?(row.state==='missing'?'찾지 못함':'확인 실패'):row.auth==='ready'?'인증 확인':row.auth==='check_required'?'로그인 필요':'인증 미확인';
-  function renderTabs(){for(const tab of tabs.children){const selected=tab.dataset.client===client.value;tab.setAttribute('aria-pressed',String(selected));tab.textContent=(tab.dataset.client==='codex'?'Codex':'Claude')+' · '+connectionLabel(observations[tab.dataset.client]);}}
+  function renderTabs(){for(const tab of tabs.children){const selected=tab.dataset.client===client.value;tab.setAttribute('aria-pressed',String(selected));tab.textContent=(tab.dataset.client==='codex'?'Codex':'Claude')+', '+connectionLabel(observations[tab.dataset.client]);}}
   for(const value of ['codex','claude']){const tab=button(value==='codex'?'Codex':'Claude',()=>runConnection(async()=>{draftPaths[client.value]=path.value;client.value=value;path.value=draftPaths[value]??observations[value]?.path??'';renderTabs();await inspect();}));tab.dataset.client=value;tabs.append(tab);}
-  const path=el('input');path.id='onboarding-cli-path';path.setAttribute('aria-label','CLI 실행 파일 경로');path.placeholder='자동으로 찾습니다 · 찾지 못하면 실행 파일 선택';
+  const path=el('input');path.id='onboarding-cli-path';path.setAttribute('aria-label','CLI 실행 파일 경로');path.placeholder='자동으로 찾지 못하면 실행 파일을 선택하세요';
   const status=el('p');status.setAttribute('role','status');const commands=el('pre');commands.style.whiteSpace='pre-wrap';
   const pathRow=el('div',undefined,'client-path-row');pathRow.append(path,icon('folder','CLI 실행 파일 선택',async()=>{status.textContent='● Windows 파일 선택 창에서 '+(client.value==='codex'?'codex.exe':'claude.exe')+'를 선택하세요. 최대 60초 후 대기를 종료합니다.';status.style.color='#7ab8ff';const chosen=await api('/clients/'+client.value+'/executable-picker','POST');if(!chosen.path){status.textContent='● 파일 선택을 취소했습니다. 기존 연결은 유지됩니다.';return;}path.value=chosen.path;draftPaths[client.value]=chosen.path;await api('/clients/'+client.value,'PUT',{path:chosen.path});await inspect();}));
   const pathLabel=el('label','CLI 실행 파일');pathLabel.htmlFor=path.id;
@@ -45,13 +45,13 @@
   const finishRow=el('div',undefined,'client-path-row');finishRow.append(icon('check','선택한 프로젝트에서 시작',finish));
   const projectRow=el('div',undefined,'client-path-row');project.style.flex='1';project.style.minWidth='0';
   projectRow.append(project,icon('folder','프로젝트 등록 열기',async()=>{await api('/onboarding','PUT',selection());dialog.close();$('add-workspace').click();}));
-  const projectStep=el('section');projectStep.append(el('h3','STEP 2 · 프로젝트 생성 또는 선택'),projectRow);
+  const projectStep=el('section');projectStep.append(el('h3','2. 프로젝트를 만들거나 선택하세요'),projectRow);
   const newProject=el('input');newProject.placeholder='새 프로젝트 이름';newProject.setAttribute('aria-label','새 프로젝트 이름');
   const createRow=el('div',undefined,'client-path-row');createRow.append(newProject,icon('plus','새 프로젝트 생성',async()=>{
     const name=newProject.value.trim();await api('/projects','POST',{name});project.add(new Option(name,name));project.value=name;newProject.value='';await inspect();
   }));projectStep.append(createRow);
   dialog.append(head,el('p','Codex와 Claude를 각각 연결할 수 있습니다. 설치 경로와 기존 로그인을 자동으로 확인하며, 하나만 연결해도 시작할 수 있습니다.','hint'),
-    el('h3','STEP 1 · 에이전트 로그인 및 연결'),tabs,pathField,el('p','자동 검색은 PATH와 기본 설치 위치를 확인합니다. 직접 입력했다면 연결 아이콘으로 저장하세요.','hint'),status,commands,controls,projectStep,finishRow);
+    el('h3','1. 에이전트에 로그인하고 연결하세요'),tabs,pathField,el('p','자동 검색은 PATH와 기본 설치 위치를 확인합니다. 직접 입력했다면 연결 아이콘으로 저장하세요.','hint'),status,commands,controls,projectStep,finishRow);
   renderTabs();
   projectStep.hidden=true;
   document.body.append(dialog);
@@ -64,7 +64,7 @@
     await api('/onboarding','PUT',selection());
     state=await api('/onboarding/check','POST');
     observations[client.value]=state.connection;renderTabs();const ok=state.status==='completed';projectStep.hidden=state.connection?.auth!=='ready';status.style.color=ok?'#9bd4b9':'#e5bf72';
-    status.textContent='● '+(ok?'인증 확인 완료 · 시작할 수 있습니다.':{project:'에이전트 연결 완료 · STEP 2에서 프로젝트를 생성하거나 선택하세요.',client:state.connection?.detail||'CLI를 자동으로 찾지 못했습니다. 파일 선택 또는 자동 검색을 이용하세요.',authentication:'CLI 로그인이 필요하거나 인증을 확인할 수 없습니다.'}[state.step]);
+    status.textContent='● '+(ok?'로그인을 확인했습니다. 이제 시작할 수 있습니다.':{project:'에이전트를 연결했습니다. 아래에서 프로젝트를 만들거나 선택하세요.',client:state.connection?.detail||'CLI를 자동으로 찾지 못했습니다. 파일 선택 또는 자동 검색을 이용하세요.',authentication:'CLI 로그인이 필요하거나 인증을 확인할 수 없습니다.'}[state.step]);
     if(state.connection?.path){path.value=state.connection.path;draftPaths[client.value]=path.value;}
     if(state.step==='authentication'){
       const data=await api('/clients/'+client.value+'/login-instructions');

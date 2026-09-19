@@ -14,7 +14,7 @@ async function initializeWorkspace(){
 }
 
 async function checkInitialConnection(){
-  notice('에이전트 연결 확인 중 · 프로젝트를 선택하거나 등록할 수 있습니다.');
+  notice('에이전트 연결을 확인하고 있습니다. 기다리는 동안 프로젝트를 선택하거나 등록할 수 있습니다.');
   let connections;
   try{connections=await api('/clients');}
   catch{if(!$('project').value)notice('연결 상태를 확인하지 못했습니다. 에이전트 연결 메뉴에서 다시 확인하세요.',true);return;}

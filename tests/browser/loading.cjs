@@ -315,7 +315,7 @@ const {chromium}=require('playwright');
  assert.equal(await page.locator('#session-alerts button').count(),1);
  notificationOffline=true;notificationRows.push({seq:2,run_id:'offline-failure',project:'two',task:'renamed',status:'failed'});
  await page.evaluate(()=>window.dispatchEvent(new Event('online')));
- await page.waitForFunction(()=>document.querySelector('#session-notifications').title.includes('조회 실패'));
+ await page.waitForFunction(()=>document.querySelector('#session-notifications').title.includes('알림을 불러오지 못했습니다'));
  assert.equal(await page.locator('#session-notifications').textContent(),'알림 0');
  notificationOffline=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
  await page.waitForFunction(()=>document.querySelector('#session-notifications').textContent==='알림 1');

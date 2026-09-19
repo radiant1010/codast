@@ -100,7 +100,7 @@ summary,label,.hint,.project-location,.native-session,#connection,#status,.meta{
 .agent-picker select{width:140px;padding:3px 4px;font-size:11px;border:0;background:#0b0b0b;color:#acd8b4}
 .command-entry{gap:8px;align-items:flex-start;border-left:2px solid var(--terminal-accent);padding-left:10px}
 .command-entry::before{content:">";font-size:18px;line-height:32px;color:var(--terminal-accent)}
-.command-entry textarea,.command-entry #text{min-height:48px;padding:5px 0;background:transparent;border:0;font-size:13px;line-height:1.5;resize:vertical}
+.command-entry textarea,.command-entry #text{min-height:48px;max-height:min(200px,30dvh);padding:5px 0;background:transparent;border:0;font-size:13px;line-height:1.5;resize:none;overflow-y:auto}
 .command-entry #text:focus{outline:0;background:#111}
 .command-entry:focus-within{border-left-color:#fff}
 #send{background:transparent;color:var(--terminal-accent);border:0;min-width:32px}
@@ -265,3 +265,18 @@ select,input:not([type=checkbox]):not([type=radio]),.archived-chat-row>span,.rul
 .question-choices{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .question-choices button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .user-question>button{color:var(--terminal-accent);min-height:36px}
+
+/* Attachments belong to the message input; settings contain only guard policy. */
+.attachment-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.attachment-toolbar .hint{margin:0;overflow-wrap:anywhere}
+.attachment-toolbar>.action-icon{border:0;background:transparent}
+.attachment-toolbar>.action-icon:hover{background:#262626}
+.attachment-drop-hint{display:none}
+#composer.attachment-dragover .attachment-drop-hint{display:inline}
+.attachment-chips{display:flex;gap:8px;flex-wrap:wrap;max-height:120px;overflow:auto;margin-bottom:8px}
+.attachment-chips:empty{display:none}
+.attachment-chip{display:flex;align-items:center;min-width:0;max-width:100%;border:1px solid var(--terminal-border);background:#202020}
+.attachment-title{min-width:0;border:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.attachment-chip .action-icon{flex-shrink:0;border:0}
+#composer.attachment-dragover{outline:2px dashed var(--terminal-accent);outline-offset:-4px;background:#262219}
+#attachment-dialog pre{max-height:240px;overflow:auto}
