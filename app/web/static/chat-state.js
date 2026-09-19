@@ -1,7 +1,7 @@
 /* Browser-local drafts. No credentials or native conversation copies are stored. */
 (()=>{
   const key='codast.chat-state.v1';
-  let data={projects:{},lastProject:''},active=null,ready=false;
+  let data={projects:{},lastProject:''},active=null,ready=false,pendingScroll=null;
   try{const saved=JSON.parse(localStorage.getItem(key)||sessionStorage.getItem(key));if(saved?.projects&&typeof saved.projects==='object')data=saved;}catch{}
   const project=name=>{
     if(!Object.hasOwn(data.projects,name)||!data.projects[name]?.chats)data.projects[name]={chats:{},selected:null};
@@ -14,7 +14,7 @@
   function capture(){return {text:$('text').value,client:$('client').value,model:window.selectedConfiguredModel?.()||null,
     cwd:$('cwd').value,mode:$('mode').value,paths:selectedPaths(),fresh:$('fresh').checked,
     action:$('action').value,offset,scroll:$('messages').scrollTop};}
-  function save(){if(!ready||!active)return;project(active.project).chats[id(active.project,active.task)]=capture();persist();}
+  function save(){if(!ready||!active)return;const state=capture();if(pendingScroll!==null)state.scroll=pendingScroll;project(active.project).chats[id(active.project,active.task)]=state;persist();}
   window.chatState={
     save,
     identity:chatId,
@@ -40,7 +40,7 @@
       const key=crypto.randomUUID();p.requests[id(name,task)]={fingerprint:signature,key};persist();return key;
     },
     acknowledge(name,task,key){const p=project(name);if(p.requests?.[id(name,task)]?.key===key){delete p.requests[id(name,task)];persist();}},
-    pause(){save();ready=false;},
+    pause(){save();ready=false;pendingScroll=null;},
     lastProject:()=>data.lastProject,
     selected:name=>project(name).selected,
     drafts:name=>Object.keys(project(name).chats).map(key=>key.startsWith('@')?project(name).identities?.[key.slice(1)]:JSON.parse(key)).filter(task=>typeof task==='string'&&task),
@@ -57,9 +57,10 @@
       offset=state.offset;
       window.loadModelChoices?.(state.model);
       if(active!==current)return null;
+      pendingScroll=state.scroll;ready=true;
       return {state,current};
     },
-    finish(result){if(!result||active!==result.current)return;ready=true;$('messages').scrollTop=result.state.scroll;actionHint();save();},
+    finish(result){if(!result||active!==result.current)return;ready=true;$('messages').scrollTop=result.state.scroll;pendingScroll=null;actionHint();save();},
     seed(name,task,state){project(name).chats[id(name,task)]={...state,text:'',offset:0,scroll:0};persist();},
     checkRename(name,oldTask,newTask){save();const p=project(name);if(oldTask!==newTask&&Object.hasOwn(p.chats,id(name,newTask)))throw Error('같은 이름의 채팅 초안이 있습니다. 다른 이름을 입력하세요.');},
     rename(name,oldTask,newTask){

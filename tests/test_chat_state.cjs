@@ -103,3 +103,15 @@ test('stable IDs migrate drafts and retries, survive external rename and old tit
   reloaded.state.bind('two',[{id:'other-project',task:'renamed'}]);
   await open(reloaded,'two','renamed');assert.equal(reloaded.nodes.text.value,'');
 });
+
+test('edits during remote restoration survive failure without losing the saved scroll',async()=>{
+  for(const client of ['codex','claude']){
+    const ui=screen();await open(ui,'one','A');ui.nodes.client.value=client;ui.nodes.messages.scrollTop=240;ui.state.save();ui.state.pause();
+    ui.nodes.messages.scrollTop=0;const pending=await ui.state.restore('one','A',defaults);
+    ui.nodes.text.value='typed before remote reads finish';ui.state.save();
+    await open(ui,'one','B');await open(ui,'one','A');
+    assert.equal(ui.nodes.text.value,'typed before remote reads finish');assert.equal(ui.nodes.client.value,client);
+    assert.equal(ui.nodes.messages.scrollTop,240);
+    ui.state.finish(pending);assert.equal(ui.nodes.text.value,'typed before remote reads finish');
+  }
+});

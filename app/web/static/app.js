@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let projectDefaults={}, chatLoading=false;
+let projectDefaults={}, chatLoading=false, projectReady=false;
 let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false, pollTimer;
 const statusNames={running:'실행 중 / 종료 미확인',completed:'완료',failed:'실패',interrupted:'중단'};
 const taskStates={active:'진행',paused:'보류',done:'완료'};
@@ -110,22 +110,32 @@ async function conversation(b=base()){
 }
 function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개 기준 · 작업을 선택하면 관련 대화와 결과를 함께 볼 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+' · '+taskStates[g.status],async()=>{await switchChat(g.task);},'task'));}
 async function switchChat(task){
+  if(!projectReady){notice('프로젝트를 먼저 불러와야 합니다. 대화 새로고침으로 다시 시도하세요.',true);return false;}
   window.chatState.pause();epoch++;conversationTicket++;closeStreams();chatLoading=true;$('send').disabled=true;
-  $('routing').replaceChildren();$('new-output').hidden=true;
+  $('routing').replaceChildren();$('new-output').hidden=true;$('messages').replaceChildren(el('div','대화를 불러오는 중…','empty'));
   task=task||null;filter=task;const b=base(),e=epoch;
   try{const restored=await window.chatState.restore($('project').value,task,projectDefaults);
     if(!valid(b,e)||!restored)return;
-    try{await loadRules(b);}catch(error){if(valid(b,e))notice('룰북 조회 실패 · 작업 경로를 확인하세요: '+error.message,true);}
+    // Draft capture must stay active even while remote reads fail or remain pending.
+    $('composer').inert=false;actionHint();drawTasks();
+    const results=await Promise.allSettled([loadRules(b),conversation(b)]);
     if(!valid(b,e))return;
-    await conversation(b);if(valid(b,e))window.chatState.finish(restored);
-  }finally{if(valid(b,e)){chatLoading=false;$('send').disabled=busy;}}
+    if(results[1].status==='fulfilled')window.chatState.finish(restored);
+    const failures=results.map((result,index)=>result.status==='rejected'?(index===0?'룰북':'대화')+' 조회 실패: '+result.reason.message:null).filter(Boolean);
+    chatLoading=failures.length>0;$('send').disabled=busy||chatLoading;
+    if(failures.length){if(results[1].status==='rejected')$('messages').replaceChildren(el('div','대화를 불러오지 못했습니다. 대화 새로고침으로 다시 시도하세요.','empty'));notice(failures.join(' · ')+' · 대화 새로고침으로 다시 시도하세요. 작성 내용은 유지됩니다.',true);return false;}
+    notice('프로젝트와 채팅의 작성 상태를 복원했습니다.');return true;
+  }catch(error){if(valid(b,e)){notice('채팅 복원 실패: '+error.message+' · 대화 새로고침으로 다시 시도하세요.',true);return false;}}
 }
 async function loadProject(){
-  window.chatState.pause();chatLoading=true;$('send').disabled=true;
+  window.chatState.pause();projectReady=false;projectDefaults={};chatLoading=true;$('send').disabled=true;$('composer').inert=true;
   epoch++;conversationTicket++;closeStreams();clearTimeout(pollTimer);filter=null;offset=0;historyOffset=0;groups=[];$('text').value='';$('task-name').value='';$('routing').replaceChildren();$('messages').replaceChildren();$('history').replaceChildren();$('rules').textContent='프로젝트 선택 대기';$('workspace-root').value='';drawTasks();window.refreshSetup?.();
   if(!$('project').value){chatLoading=false;notice('프로젝트를 선택하세요.');return;}
-  const b=base(),e=epoch,[s,workspace,t]=await Promise.all([api(b+'/settings'),api(b+'/workspace'),api(b+'/tasks')]);if(!valid(b,e))return;$('workspace-root').value=workspace.path;projectDefaults=s;groups=t.tasks;window.chatState.bind($('project').value,groups);
-  await switchChat(window.chatState.selected($('project').value));window.refreshSetup?.();notice('프로젝트와 채팅의 작성 상태를 복원했습니다.');
+  const b=base(),e=epoch;
+  try{
+    const [s,workspace,t]=await Promise.all([api(b+'/settings'),api(b+'/workspace'),api(b+'/tasks')]);if(!valid(b,e))return;$('workspace-root').value=workspace.path;projectDefaults=s;groups=t.tasks;window.chatState.bind($('project').value,groups);projectReady=true;
+    await switchChat(window.chatState.selected($('project').value));if(valid(b))window.refreshSetup?.();
+  }catch(error){if(valid(b,e))notice('프로젝트 조회 실패: '+error.message+' · 대화 새로고침으로 다시 시도하거나 다른 프로젝트를 선택하세요. 저장된 초안은 유지됩니다.',true);}
 }
 async function loadRules(b=base()){
   const e=epoch,rules=await api(b+'/rules?cwd='+encodeURIComponent($('cwd').value));if(!valid(b,e))return;
@@ -155,7 +165,7 @@ $('home').onclick=event=>{event.preventDefault();act(async()=>{
   window.chatState.pause();$('project').value='';await loadProject();window.refreshSessionView?.();
 });};
 $('create').onsubmit=e=>{e.preventDefault();act(async()=>{const name=$('name').value;await api('/projects','POST',{name});await projects(name);await loadProject();});};
-$('reload').onclick=()=>act(()=>conversation());$('reload-rules').onclick=()=>act(()=>loadRules());
+$('reload').onclick=()=>act(()=>projectReady?switchChat(filter):loadProject());$('reload-rules').onclick=()=>act(()=>loadRules());
 $('messages-prev').onclick=()=>act(async()=>{offset=Math.max(0,offset-20);await conversation();});$('messages-next').onclick=()=>act(async()=>{offset+=20;await conversation();});
 $('history-prev').onclick=()=>act(async()=>{historyOffset=Math.max(0,historyOffset-20);await history();});$('history-next').onclick=()=>act(async()=>{historyOffset+=20;await history();});
 $('save-settings').onclick=()=>act(async()=>{projectDefaults=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
