@@ -1,5 +1,17 @@
 # 통합 작업실과 클라이언트 실행 계약
 
+## DB 백업·복원 검증 — 2026-09-19
+
+[백업·복원 검사](../tests/test_backup_restore.py)는 임시 경로의 가짜 데이터만 사용한다. 열린 WAL에 커밋된 변경이 있는 원본 DB를 Python SQLite `Connection.backup()`으로 별도 스냅샷에 저장하고, 다시 다른 DB로 복원하여 `create_app(..., db_path=...)`로 연다. 백업·복원 DB의 integrity_check와 foreign_key_check를 확인한다. 원본 DB의 백업 이후 변경은 복원본에 반영되지 않는다.
+
+고유 채팅 ID·이름 변경·고정·빈 채팅·대화·실행 결과/사용량 메타데이터·이벤트·룰북 설정·대기 질문이 유지됨을 확인했다. Codex·Claude 모의 어댑터 각각에서 복원 후 답변이 같은 에이전트·작업 경로·읽기 전용 권한·네이티브 세션 ID로 전달되고, 기존 요청과 답변 재전송은 중복 실행하지 않는다. 복원본을 다시 열어도 답변 연결이 유지되며 원본 DB에는 복원본의 답변이 기록되지 않는다.
+
+실행 중 상태를 백업한 별도 검사에서는 복원 후 상태를 임의로 완료 처리하거나 CLI를 자동 실행하지 않는다. SSE는 저장된 진행 이벤트 후 detached를 반환하며 기존 종료 확인 계약을 유지한다.
+
+범위와 한계: 제품의 백업/복원 UI·API를 추가한 작업이 아니다. 프로젝트 파일과 등록 정보는 기존 작업 경로에 유지한 상태로 DB만 복원했다. DB 밖의 프로젝트 파일·외부 CLI 인증/세션 저장소·브라우저 초안은 이 백업에 포함되지 않는다. 실제 CLI 세션의 유효성, 다른 머신/작업 경로로의 이전, 실행 중 외부 프로세스의 복구는 검증하지 않았다.
+
+검증 명령: `uv --cache-dir work/uv-cache run pytest tests/test_backup_restore.py tests/test_questions.py tests/test_chat_identity.py tests/test_notifications.py -q --basetemp work/pytest-backup-20260919 --tb=short`. 결과: **12 passed**, 기존 의존성 deprecation 경고 2개. 신규 백업·복원 검사는 3개이며 제품 코드 변경은 필요하지 않았다.
+
 ## 사용자 질문·답변 후 이어가기 — 2026-09-18
 
 Codex·Claude 공통 실행 프롬프트에 명시적인 질문 반환 형식을 제공한다. 최종 응답 전체가 `codast-question` 코드 블록이고 question/choices 스키마 검증을 통과할 때만 대화 질문으로 처리한다. 일반 질문 문장·인용·잘못된 JSON을 추정 분류하지 않는다. CLI 턴은 종료된 상태이며, 질문은 runs.metadata에 저장한다. 실행의 기술 상태 completed와 사용자 답변 대기를 구분해 화면에 표시한다. 자동 후속 실행은 없다.
