@@ -52,6 +52,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     for exception in (PermissionError, FileExistsError, FileNotFoundError, ValueError, IsADirectoryError, NotADirectoryError):
         app.add_exception_handler(exception, error)
     app.include_router(router)
+    from app.api.materials import router as materials_router
+    app.include_router(materials_router)
     app.mount("/static", StaticFiles(directory=BASE / "web/static"), name="static")
     templates = Jinja2Templates(directory=BASE / "web/templates")
 

@@ -19,6 +19,8 @@ class Orchestrator:
         self.rules = RuleLoader(policy, files)
         self.context = ContextBuilder()
         self.storage = storage
+        from app.core.materials import Materials
+        self.materials = Materials(storage)
         self.router = TaskRouter(storage)
         self.active = {}
 
@@ -79,6 +81,8 @@ class Orchestrator:
             raise FileNotFoundError('작업 디렉터리를 찾을 수 없습니다.')
         rules = self.rules.load(root, command.cwd, self.rulebook_preferences(name))
         selected = [ContextPart(path=p, content=self.read_file(name, p)) for p in dict.fromkeys(command.context_paths)]
+        materials, audit = self.materials.selected(name, command.material_ids)
+        selected.extend(materials)
         adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))
         if command.client != 'mock':
             adapter.model = command.model
@@ -98,7 +102,8 @@ class Orchestrator:
         context.history = list(reversed(history))
         while context.history and len(context.model_dump_json()) > self.context.max_chars:
             context.history.pop(0)
-        run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id, reply_to=reply_to)
+        run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id, reply_to=reply_to,
+                                        initial_metadata={'guard':audit} if audit else None)
         if command.fresh:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
         return run_id, command, context, cwd, adapter, session
@@ -112,6 +117,11 @@ class Orchestrator:
                     'rules': [{'path': rule.path, 'sha256': hashlib.sha256(rule.content.encode('utf-8')).hexdigest()}
                               for rule in context.rules]}
         try:
+            audit = self.storage.run(name, run_id)['metadata'].get('guard')
+            if audit:
+                audit['state'] = 'dispatch_attempted'
+                metadata['guard'] = audit
+                self.storage.mark_guard_dispatch(run_id, audit)
             if command.client == 'mock':
                 result = await adapter.run(context)
             else:

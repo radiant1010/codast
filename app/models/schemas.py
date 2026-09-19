@@ -20,6 +20,7 @@ class Command(StrictModel):
     raw_text: str | None = Field(default=None, max_length=8000)
     cwd: str = "."
     context_paths: list[str] = Field(default_factory=list, max_length=10)
+    material_ids: list[str] = Field(default_factory=list, max_length=10)
     task: str = Field(default="", max_length=120)
     client: Literal['mock', 'codex', 'claude'] = 'mock'
     mode: Literal['read-only', 'workspace-write'] = 'read-only'

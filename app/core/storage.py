@@ -23,7 +23,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 8:
+            if version > 9:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -154,6 +154,17 @@ class Storage:
                 db.execute('PRAGMA user_version=8')
                 db.commit()
 
+            if version < 9:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE IF NOT EXISTS guard_options (project TEXT PRIMARY KEY, options TEXT NOT NULL);
+                    CREATE TABLE IF NOT EXISTS materials (id TEXT PRIMARY KEY, project TEXT NOT NULL,
+                        fingerprint TEXT NOT NULL, report TEXT NOT NULL, content TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS materials_project ON materials(project);
+                    PRAGMA user_version=9;
+                    COMMIT;
+                """)
+
     @staticmethod
     def _chat_id(db, project, task):
         if not task:
@@ -229,7 +240,7 @@ class Storage:
                 ON CONFLICT(project) DO UPDATE SET settings=excluded.settings, updated_at=excluded.updated_at""",
                 (project, json.dumps(settings, ensure_ascii=False), now()))
 
-    def start_run(self, project, command, adapter, *, exclusive=False, request_id=None, reply_to=None):
+    def start_run(self, project, command, adapter, *, exclusive=False, request_id=None, reply_to=None, initial_metadata=None):
         run_id = hashlib.sha256(json.dumps([project, request_id]).encode()).hexdigest() if request_id else uuid4().hex
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -244,6 +255,7 @@ class Storage:
                 prior = db.execute('SELECT command, adapter FROM runs WHERE id=? AND project=?', (run_id, project)).fetchone()
                 if prior:
                     previous = json.loads(prior['command'])
+                    previous.setdefault('material_ids', [])
                     if 'chat_id' not in previous:
                         message = db.execute('SELECT chat_id FROM messages WHERE run_id=?', (run_id,)).fetchone()
                         previous['chat_id'] = message['chat_id'] if message else None
@@ -274,11 +286,18 @@ class Storage:
                     AND json_extract(metadata,'$.superseded_by') IS NULL""", (run_id,project,command.chat_id))
             db.execute("""INSERT INTO runs(id,project,command,adapter,status,started_at)
                 VALUES (?,?,?,?, 'running',?)""", (run_id, project, command.model_dump_json(), adapter, now()))
+            if initial_metadata:
+                db.execute('UPDATE runs SET metadata=? WHERE id=?', (json.dumps(initial_metadata,ensure_ascii=False),run_id))
             db.execute("INSERT INTO messages(id,project,task,text,created_at,run_id,chat_id) VALUES (?,?,?,?,?,?,?)",
                        (run_id, project, command.task.strip(), command.raw_text or command.text, now(), run_id, command.chat_id))
             db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
                        (run_id, 'status', f'{adapter} 실행 시작', now()))
         return run_id
+
+    def mark_guard_dispatch(self, run_id, audit):
+        with self.connect() as db:
+            db.execute("UPDATE runs SET metadata=json_set(metadata,'$.guard',json(?)) WHERE id=?",
+                       (json.dumps(audit,ensure_ascii=False),run_id))
 
     def add_message(self, project, text, task, *, chat_id=None):
         message_id = uuid4().hex
