@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CODAST · 작업 인계 A/B 데모</title><link rel="stylesheet" href="/static/workflow-demo.css"></head>
+<body>
+<header class="top"><a href="/">CODAST</a><span>작업 인계 실험</span><span class="badge">UI DEMO</span><button id="compare-open">체험 기록</button></header>
+<main>
+  <section class="experiment">
+    <div><p class="eyebrow">같은 작업, 두 가지 시작 방식</p><h1>자료에서 다음 작업까지</h1><p>로그인 화면과 요구사항을 연결하고, 결과를 검토한 뒤 테스트 케이스를 도출해 보세요.</p></div>
+    <div class="variants" role="group" aria-label="비교할 화면 선택"><button id="variant-a" aria-pressed="false">A · 순서 먼저 설정</button><button id="variant-b" aria-pressed="true">B · 결과 보고 지시</button></div>
+    <p class="demo-warning">예시 결과를 보여주는 시뮬레이션입니다. 파일 내용 분석, AI 호출, 서버 저장·전송은 하지 않습니다.</p>
+  </section>
+  <div class="workspace">
+    <aside class="context"><div class="section-head"><h2>이번 작업</h2><button id="reset"></button></div><p id="variant-description"></p>
+      <ol id="steps"></ol>
+      <div class="section-head"><h2>입력 자료</h2><button id="materials-open"></button></div><div id="material-summary"></div>
+      <details class="help"><summary>체험 방법</summary><ol><li>자료 추가 아이콘을 눌러 예시 자료를 채웁니다.</li><li>첫 분석을 시작하고 연결 결과를 검토합니다.</li><li>검토한 결과로 테스트 케이스를 만듭니다.</li><li>완료 후 다른 안도 체험해 봅니다.</li></ol><p>두 안의 결과는 같습니다. 작업을 준비하고 넘기는 과정만 비교합니다.</p></details>
+    </aside>
+    <section class="conversation" aria-label="작업 대화">
+      <div class="conversation-head"><div><span class="eyebrow">DEMO PROJECT</span><h2>로그인 기능 검토</h2></div><span id="phase" class="badge"></span></div>
+      <div id="messages" aria-live="polite"></div>
+      <div id="feedback" role="status"></div>
+      <form id="composer">
+        <div id="input-artifacts"></div>
+        <div class="agent-row"><label for="agent">담당 AI</label><select id="agent"><option value="Codex">Codex</option><option value="Claude">Claude</option></select><label for="model">모델</label><select id="model"><option>CLI 기본 모델 (데모)</option></select></div>
+        <label class="sr-only" for="prompt">작업 지시</label><textarea id="prompt" rows="3" placeholder="이번 단계에서 수행할 작업을 입력하세요." maxlength="4000"></textarea>
+        <div class="composer-tools"><button type="button" id="start-modal"></button><button type="button" id="fill-prompt"></button><span id="composer-hint"></span><button type="button" id="instruction-open"></button><button id="send" type="submit"></button></div>
+      </form>
+    </section>
+  </div>
+</main>
+<dialog id="setup-dialog" aria-labelledby="setup-title"><div class="dialog-head"><div><p class="eyebrow" id="setup-kicker"></p><h2 id="setup-title">작업 자료 등록</h2></div><button id="setup-close"></button></div>
+  <p class="hint">파일 형식보다 자료의 용도로 나눕니다. 각 항목에 여러 파일을 넣을 수 있습니다.</p>
+  <div class="section-head"><h3>입력 자료</h3><div class="sample-control"><span>예시 자료 채우기</span><button id="use-samples"></button></div></div><div id="upload-rows"></div>
+  <form id="setup-form" class="modal-form"><div class="form-field"><label for="goal">작업 목표</label><textarea id="goal" rows="2" required maxlength="4000" placeholder="로그인 화면과 요구사항을 연결하고 테스트 케이스를 도출한다."></textarea></div>
+    <section id="preset"><h3>작업 순서와 담당</h3><p class="hint">첫 결과를 검토한 뒤, 설정한 다음 담당에게 지시합니다.</p><div class="preset-row"><span>1. 화면 ↔ 요구사항 연결</span><label class="sr-only" for="first-agent">첫 단계 담당 AI</label><select id="first-agent"><option>Codex</option><option>Claude</option></select></div><p class="gate">사용자가 결과 확인 → 승인 또는 수정 요청</p><div class="preset-row"><span>2. 테스트 케이스 도출</span><label class="sr-only" for="second-agent">다음 단계 담당 AI</label><select id="second-agent"><option>Claude</option><option>Codex</option></select></div><p class="hint">모델: 각 CLI 기본 모델 (데모)</p></section>
+    <p id="setup-error" role="status"></p><div class="dialog-footer"><span id="setup-submit-label"></span><button id="setup-submit" type="submit"></button></div>
+  </form>
+</dialog>
+<dialog id="revision-dialog" aria-labelledby="revision-title"><div class="dialog-head"><h2 id="revision-title">결과 수정 요청</h2><button id="revision-close"></button></div>
+<p id="revision-base" class="hint"></p><p class="hint">이전 결과와 수정 의견을 선택한 AI에게 전달하는 흐름입니다. 데모에서는 의견을 새 버전에 기록하며, AI가 본문을 실제로 고치지는 않습니다.</p>
+<form id="revision-form" class="modal-form">
+<div class="form-field"><label for="revision-target">수정 대상</label><select id="revision-target"></select></div>
+<div class="form-field"><label for="revision-note">수정 의견</label><textarea id="revision-note" rows="4" maxlength="4000" required placeholder="예: TC-003에 공백만 입력하는 경우도 추가하고 기대 결과를 명시해 주세요."></textarea></div>
+<div class="form-field"><label for="revision-agent">수정 담당 AI</label><select id="revision-agent"><option>Codex</option><option>Claude</option></select></div>
+<details><summary>전달할 수정 지시서</summary><pre id="revision-instruction"></pre></details>
+<p id="revision-error" role="status"></p><div class="dialog-footer"><span>수정 요청 후 새 버전 검토 (데모)</span><button id="revision-submit" type="submit"></button></div>
+</form></dialog>
+<dialog id="instruction-dialog" aria-labelledby="instruction-title"><div class="dialog-head"><h2 id="instruction-title">전달할 작업 지시서</h2><button id="instruction-close"></button></div><p class="hint">선택한 자료와 버전, 사용자 지시를 묶습니다. 실제 에이전트에게 전송하지 않습니다.</p><pre id="instruction-text"></pre></dialog>
+<dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-head"><h2 id="source-title">자료 확인</h2><button id="source-close"></button></div><div id="source-content"></div></dialog>
+<dialog id="compare-dialog" aria-labelledby="compare-title"><div class="dialog-head"><h2 id="compare-title">체험 기록</h2><button id="compare-close"></button></div><p class="hint">이 탭에서 완료한 체험만 집계합니다. 실제 AI의 속도나 품질을 측정한 A/B 실험은 아닙니다. 새로고침하면 기록이 초기화됩니다.</p><div id="comparison"></div><p class="hint">시간은 첫 조작부터 완료까지 화면이 보이는 동안의 경과 시간입니다. 다른 안으로 전환하거나 탭이 숨겨진 시간은 제외합니다. 조작 수는 등록·선택·검토·전송 등 의미 있는 동작을 셉니다. 키 입력 수는 세지 않습니다.</p><div class="form-field"><label for="preference">직접 비교한 선호</label><select id="preference"><option value="">두 안을 사용한 후 선택하세요</option><option>A · 순서 먼저 설정</option><option>B · 결과 보고 지시</option><option>상황에 따라 다름</option></select></div><div class="dialog-footer"><span>개인 입력 없이 체험 수치만 내려받기</span><button id="download"></button></div></dialog>
+<script src="/static/actions.js"></script><script src="/static/workflow-demo.js?v=revision-2"></script>
+</body></html>

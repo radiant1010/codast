@@ -1,0 +1,94 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+(async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true});
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:1080}}),errors=[],apiRequests=[];
+  page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.url().includes('/api/'))apiRequests.push(r.url());});
+  await page.goto((process.env.VAULT_TEST_URL||'http://127.0.0.1:8769')+'/static/workflow-demo.html');
+  fs.mkdirSync('work/workflow-demo',{recursive:true});
+  // B: register once, review first result, then explicitly choose the next AI and instruction.
+  await page.getByRole('button',{name:'작업 시작 모달 열기',exact:true}).click();
+  assert.equal(await page.locator('#preset').isVisible(),false);
+  await page.getByRole('button',{name:'예시 자료 채우기',exact:true}).click();
+  assert.equal(await page.locator('.upload-row').count(),4);
+  await page.screenshot({path:'work/workflow-demo/B-upload.png',fullPage:true});
+  await page.getByRole('button',{name:'자료 적용 또는 첫 분석 시작',exact:true}).click();
+  await page.getByRole('button',{name:'이번 단계의 예시 지시 입력',exact:true}).click();
+  await page.getByRole('button',{name:'전달할 지시서 미리보기',exact:true}).click();
+  assert.match(await page.locator('#instruction-text').innerText(),/로그인_화면.png/);await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'작업 지시 전송',exact:true}).click();
+  await page.getByRole('button',{name:'연결 결과 수정 요청',exact:true}).click();
+  await page.fill('#revision-note','취소할 의견');await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.version').count(),1);
+  await page.getByRole('button',{name:'연결 결과 수정 요청',exact:true}).click();
+  assert.equal(await page.locator('#revision-note').inputValue(),'');
+  await page.fill('#revision-note','계정 잠금은 범위에서 제외해 주세요. <script>test</script>');
+  await page.selectOption('#revision-agent','Claude');
+  assert.match(await page.locator('#revision-instruction').textContent(),/ART-MAP-001 v1/);
+  await page.screenshot({path:'work/workflow-demo/revision-dialog.png',fullPage:true});
+  await page.getByRole('button',{name:'수정 요청 전송',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'연결 결과 승인',exact:true}).count(),0);
+
+  await page.getByRole('button',{name:'연결 결과 승인',exact:true}).click();
+  await page.selectOption('#agent','Claude');
+  await page.getByRole('button',{name:'이번 단계의 예시 지시 입력',exact:true}).click();
+  await page.getByLabel('연결표 v2 · 승인',{exact:true}).uncheck();
+  await page.getByRole('button',{name:'작업 지시 전송',exact:true}).click();
+  await page.locator('#feedback').filter({hasText:'승인된 연결표가 필요'}).waitFor();
+  await page.getByLabel('연결표 v2 · 승인',{exact:true}).check();
+  await page.screenshot({path:'work/workflow-demo/B-handoff.png',fullPage:true});
+  await page.getByRole('button',{name:'전달할 지시서 미리보기',exact:true}).click();
+  assert.match(await page.locator('#instruction-text').innerText(),/담당: Claude/);assert.match(await page.locator('#instruction-text').innerText(),/연결표 v2/);await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'작업 지시 전송',exact:true}).click();
+  await page.getByRole('button',{name:'테스트 결과 수정 요청',exact:true}).click();
+  await page.selectOption('#revision-target','TC-003');
+  await page.fill('#revision-note','공백만 입력하는 경우와 기대 결과를 추가해 주세요.');
+  await page.getByRole('button',{name:'수정 요청 전송',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'테스트 결과 확인 완료',exact:true}).count(),0);
+  await page.getByRole('button',{name:'테스트 결과 확인 완료',exact:true}).click();
+  assert.match(await page.locator('#messages').innerText(),/ART-TC-001 · v2/);
+  assert.equal(await page.locator('#messages script').count(),0);
+
+  assert.match(await page.locator('#messages').innerText(),/기존 1개 연결, 신규 3개/);
+  // A: preconfigure the two agents, then review and send the prepared next instruction.
+  await page.locator('#variant-a').click();
+  await page.getByRole('button',{name:'작업 시작 모달 열기',exact:true}).click();
+  assert.equal(await page.locator('#preset').isVisible(),true);
+  await page.getByRole('button',{name:'예시 자료 채우기',exact:true}).click();
+  await page.selectOption('#first-agent','Claude');await page.selectOption('#second-agent','Codex');
+  await page.screenshot({path:'work/workflow-demo/A-setup.png',fullPage:true});
+  await page.getByRole('button',{name:'자료 적용 또는 첫 분석 시작',exact:true}).click();
+  await page.getByRole('button',{name:'연결 결과 승인',exact:true}).click();
+  assert.equal(await page.locator('#agent').inputValue(),'Codex');assert.equal(await page.locator('#agent').isDisabled(),true);
+  assert.match(await page.locator('#prompt').inputValue(),/연결표 v1/);
+  await page.getByRole('button',{name:'작업 지시 전송',exact:true}).click();
+  await page.getByRole('button',{name:'테스트 결과 수정 요청',exact:true}).click();
+  await page.selectOption('#revision-target','TC-003');
+  await page.fill('#revision-note','공백만 입력하는 경우와 기대 결과를 추가해 주세요.');
+  await page.getByRole('button',{name:'수정 요청 전송',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'테스트 결과 확인 완료',exact:true}).count(),0);
+  await page.getByRole('button',{name:'테스트 결과 확인 완료',exact:true}).click();
+  assert.match(await page.locator('#messages').innerText(),/ART-TC-001 · v2/);
+  assert.equal(await page.locator('#messages script').count(),0);
+
+  await page.screenshot({path:'work/workflow-demo/revision-results.png',fullPage:true});
+  await page.getByRole('button',{name:'체험 기록',exact:true}).click();
+  const rows=await page.locator('#comparison tbody tr').allTextContents();
+  assert.match(rows[0],/A · 순서 먼저 설정1/);assert.match(rows[1],/B · 결과 보고 지시1/);
+  await page.screenshot({path:'work/workflow-demo/comparison.png',fullPage:true});await page.keyboard.press('Escape');
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:'work/workflow-demo/narrow.png',fullPage:true});
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'현재 안 처음부터 다시 체험',exact:true}).click();
+  await page.getByRole('button',{name:'작업 시작 모달 열기',exact:true}).click();
+  await page.getByRole('button',{name:'예시 자료 채우기',exact:true}).click();
+  await page.locator('.upload-row input[type=file]').nth(1).setInputFiles({name:'<script>screen.png',mimeType:'image/png',buffer:Buffer.from('not parsed')});
+  assert.equal(await page.locator('.upload-files script').count(),0);
+  assert.equal(await page.locator('#setup-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth+1),true);
+  await page.screenshot({path:'work/workflow-demo/upload-narrow.png',fullPage:true});
+  assert.deepEqual(errors,[]);assert.deepEqual(apiRequests,[]);
+  console.log('PASS: A/B flows, explicit version handoff, context omission gate, configured agent, metrics, escaping, narrow layout, no API requests');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

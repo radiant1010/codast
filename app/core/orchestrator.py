@@ -1,0 +1,224 @@
+from app.core.questions import parse_question
+import asyncio
+import json
+import hashlib
+import time
+from pathlib import Path
+from app.models.schemas import ContextPart, ProjectSettings, RulebookSettings
+from app.llm.base import AgentAdapter
+from app.core.context_builder import ContextBuilder
+from app.core.rule_loader import RuleLoader
+from app.core.routing import TaskRouter
+from app.core.storage import ExistingRun
+from app.llm.cli import CliAdapter, executable
+
+
+class Orchestrator:
+    def __init__(self, projects, policy, files, agent: AgentAdapter, storage):
+        self.projects, self.policy, self.files, self.agent = projects, policy, files, agent
+        self.rules = RuleLoader(policy, files)
+        self.context = ContextBuilder()
+        self.storage = storage
+        from app.core.materials import Materials
+        self.materials = Materials(storage)
+        self.router = TaskRouter(storage)
+        self.active = {}
+
+    def settings(self, name):
+        self.projects.select(name)
+        return ProjectSettings(**self.storage.settings(name))
+
+    def save_settings(self, name, settings):
+        root = self.projects.select(name)
+        cwd = self.policy.file_path(root, settings.cwd)
+        if not cwd.is_dir():
+            raise FileNotFoundError("작업 디렉터리를 찾을 수 없습니다.")
+        for path in settings.context_paths:
+            self.policy.file_path(root, path)
+        self.storage.save_settings(name, settings.model_dump())
+        return settings
+
+    def list_files(self, name):
+        root = self.projects.select(name)
+        result = []
+        for relative in self.files.list_candidates(root):
+            try:
+                self.policy.file_path(root, relative)
+                result.append(relative)
+            except PermissionError:
+                continue
+        return result
+
+    def read_file(self, name, relative):
+        return self.files.read(self.policy.file_path(self.projects.select(name), relative))
+
+    def write_file(self, name, relative, content):
+        self.files.write(self.policy.file_path(self.projects.select(name), relative, write=True), content)
+
+    def rulebook_preferences(self, name):
+        saved = self.storage.rulebook_settings(name)
+        if not saved:
+            path = Path(__file__).resolve().parents[1] / 'defaults' / 'rulebooks.json'
+            saved = json.loads(path.read_text(encoding='utf-8'))
+        return RulebookSettings(**saved)
+
+    def rulebook(self, name, cwd='.'):
+        from app.core.rule_loader import COMMON_GUIDE
+        root = self.projects.select(name)
+        settings = self.rulebook_preferences(name)
+        return {'settings': settings, 'default_content': self.files.read(COMMON_GUIDE),
+                'rules': self.rules.load(root, cwd, settings)}
+
+    def save_rulebook(self, name, settings):
+        self.projects.select(name)
+        self.storage.save_rulebook_settings(name, settings.model_dump())
+        return {'saved': True}
+
+    def prepare(self, name, command, request_id=None, reply_to=None, extra_context=None, include_history=True, parallel_scope=None, workflow_id=None):
+        root = self.projects.select(name)
+        cwd = self.policy.file_path(root, command.cwd)
+        if not cwd.is_dir():
+            raise FileNotFoundError('작업 디렉터리를 찾을 수 없습니다.')
+        rules = self.rules.load(root, command.cwd, self.rulebook_preferences(name))
+        selected = [ContextPart(path=p, content=self.read_file(name, p)) for p in dict.fromkeys(command.context_paths)]
+        materials, audit = self.materials.selected(name, command.material_ids)
+        selected.extend(materials)
+        selected.extend(extra_context or [])
+        adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))
+        if command.client != 'mock':
+            adapter.model = command.model
+        chat = self.storage.resolve_chat(name, command.task, command.chat_id)
+        command = command.model_copy(update={'task': chat['task'], 'chat_id': chat['id']})
+        context = self.context.build(command, rules, selected)
+        session = None if command.fresh else self.storage.session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
+        rows = self.storage.messages(name, command.task, 30, 0, chat_id=command.chat_id) if command.task and include_history else []
+        history = []
+        for row in rows:
+            # On resume, the native client already holds its previous successful turn.
+            prior_metadata = json.loads(row['metadata'] or '{}')
+            if session and row['adapter'] == command.client and row['status'] == 'completed' and prior_metadata.get('session_id') == session:
+                break
+            history.append({'user': row['text'][:4000], 'client': row['adapter'],
+                            'result': (row['output'] or row['error'] or '')[:6000]})
+        context.history = list(reversed(history))
+        while context.history and len(context.model_dump_json()) > self.context.max_chars:
+            context.history.pop(0)
+        initial = {'guard': audit} if audit else {}
+        if workflow_id:
+            initial['workflow_id'] = workflow_id
+        if parallel_scope:
+            initial.update(parallel_group=parallel_scope[0], parallel_role=parallel_scope[1])
+        run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id, reply_to=reply_to,
+                                        initial_metadata=initial, parallel_scope=parallel_scope)
+        if command.fresh:
+            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
+        return run_id, command, context, cwd, adapter, session
+
+    async def perform(self, name, prepared):
+        run_id, command, context, cwd, adapter, session = prepared
+        started = time.monotonic()
+        metadata = {'chat_id': command.chat_id, 'client': command.client, 'mode': command.mode, 'resumed': bool(session),
+                    'requested_model': command.model,
+                    'history_count': len(context.history),
+                    'rules': [{'path': rule.path, 'sha256': hashlib.sha256(rule.content.encode('utf-8')).hexdigest()}
+                              for rule in context.rules]}
+        scope = self.storage.run(name, run_id)['metadata']
+        metadata.update({k: scope[k] for k in ('parallel_group', 'parallel_role', 'workflow_id') if k in scope})
+        try:
+            audit = scope.get('guard')
+            if audit:
+                audit['state'] = 'dispatch_attempted'
+                metadata['guard'] = audit
+                self.storage.mark_guard_dispatch(run_id, audit)
+            if command.client == 'mock':
+                result = await adapter.run(context)
+            else:
+                adapter.on_event = lambda kind, text: self.storage.append_event(run_id, kind, text)
+                result = await adapter.execute(context.model_dump_json(), str(cwd), command.mode, session)
+        except asyncio.CancelledError:
+            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
+            self.storage.finish_run(run_id, "interrupted", error="실행이 취소되었습니다.", metadata=metadata)
+            raise
+        except Exception as exc:
+            # A failed native turn may have partially changed its own conversation.
+            self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
+            self.storage.finish_run(run_id, "failed", error=str(exc), metadata=metadata)
+            raise
+        native_session = result.session_id or session
+        self.storage.save_session(name, command.task, command.client, str(cwd), command.mode, native_session, chat_id=command.chat_id)
+        metadata.update(session_id=native_session, usage=result.usage, execution_model=result.execution_model, elapsed_seconds=round(time.monotonic()-started, 2))
+        question = parse_question(result.final_output if result.final_output is not None else result.output)
+        if question:
+            metadata['question'] = question
+        self.storage.finish_run(run_id, "completed", output=result.output, adapter=result.adapter, metadata=metadata)
+        return result.model_copy(update={"run_id": run_id})
+
+    async def execute(self, name, command):
+        prepared = self.prepare(name, command)
+        run_id = prepared[0]
+        self.active[run_id] = asyncio.current_task()
+        try:
+            return await self.perform(name, prepared)
+        finally:
+            self.active.pop(run_id, None)
+
+    def submit(self, name, command, request_id=None, reply_to=None, extra_context=None, include_history=True, parallel_scope=None, workflow_id=None):
+        try:
+            prepared = self.prepare(name, command, request_id, reply_to=reply_to, extra_context=extra_context, include_history=include_history, parallel_scope=parallel_scope, workflow_id=workflow_id)
+        except ExistingRun as prior:
+            return prior.run_id
+        run_id = prepared[0]
+
+        async def work():
+            try:
+                await self.perform(name, prepared)
+            except Exception:
+                pass  # Failure is persisted and retrieved by run ID.
+
+        task = asyncio.create_task(work())
+        self.active[run_id] = task
+        def finished(_):
+            self.active.pop(run_id, None)
+            if self.storage.run(name, run_id)['status'] == 'running':
+                _, cmd, _, cwd, _, _ = prepared
+                self.storage.forget_session(name, cmd.task, cmd.client, str(cwd), cmd.mode, chat_id=cmd.chat_id)
+                self.storage.finish_run(run_id, 'interrupted', error='서버가 실행을 종료했습니다.')
+        task.add_done_callback(finished)
+        return run_id
+
+    def reply(self, name, run_id, answer, request_id):
+        from app.models.schemas import Command
+        record = self.storage.run(name, run_id)
+        if record['metadata'].get('workflow_id') or record['metadata'].get('parallel_group'):
+            raise FileExistsError('워크플로 화면에서 해당 작업의 질문에 답변하세요.')
+        question = record['metadata'].get('question')
+        if record['status'] != 'completed' or not question:
+            raise FileExistsError('답변할 수 있는 질문이 아닙니다.')
+        original = Command.model_validate(record['command'])
+        text = '질문 출처 실행: '+run_id+'\n이전 질문: '+question['question']+'\n사용자 답변: '+answer+'\n이 답변을 반영하여 기존 작업을 이어가세요. 기존 권한과 요청 범위를 유지하세요.'
+        command = original.model_copy(update={'text':text,'raw_text':answer,'fresh':False})
+        return self.submit(name, command, request_id, reply_to=run_id)
+
+    async def cancel(self, name, run_id):
+        record = self.storage.run(name, run_id)
+        if record['status'] != 'running':
+            return
+        task = self.active.get(run_id)
+        if not task:
+            raise FileExistsError('현재 서버가 실행한 프로세스가 아닙니다. 종료 확인 후 기록을 정리하세요.')
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        if self.storage.run(name, run_id)['status'] == 'running':
+            command = record['command']
+            cwd = self.policy.file_path(self.projects.select(name), command['cwd'])
+            self.storage.forget_session(name, command['task'], command['client'], str(cwd), command['mode'], chat_id=command.get('chat_id'))
+            self.storage.finish_run(run_id, 'interrupted', error='시작 전에 취소되었습니다.')
+
+    async def shutdown(self):
+        tasks = list(self.active.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)

@@ -1,0 +1,93 @@
+/* Run against an isolated server: VAULT_TEST_URL=http://127.0.0.1:8769. */
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const {chromium}=require('playwright');
+(async()=>{
+ const origin=process.env.VAULT_TEST_URL||'http://127.0.0.1:8769';
+ const project='vault-test-'+Date.now(),base='/api/projects/'+project+'/document-vault';
+ async function api(path,method='GET',data){const r=await fetch(origin+path,{method,headers:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});const value=await r.json();assert.ok(r.ok,JSON.stringify(value));return value;}
+ await api('/api/projects','POST',{name:project});await api('/api/onboarding','PUT',{deferred:true});
+ const browser=await chromium.launch({headless:true,channel:'msedge'});
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin);await page.locator('#startup-loading').waitFor({state:'hidden'});
+  await page.selectOption('#project',project);
+  await page.getByRole('button',{name:'설정',exact:true}).click();
+  await page.getByRole('link',{name:'산출물 문서함',exact:true}).click();
+  await page.locator('#vault-path').filter({visible:true}).waitFor();
+  await page.waitForFunction(()=>document.getElementById('vault-path').value.endsWith('.codast-documents'));
+  await page.getByRole('button',{name:'문서함 생성 또는 연결',exact:true}).click();
+  await page.locator('#vault-status').filter({hasText:'0개 문서'}).waitFor();
+  await page.getByRole('button',{name:'새 산출물 작성',exact:true}).click();
+  await page.locator('#vault-editor input[type=file]').setInputFiles({name:'sample.md',mimeType:'text/markdown',buffer:Buffer.from('# 불러온 문서\n첫 내용')});
+  await page.locator('#vault-editor-status').filter({hasText:'내용을 불러왔습니다'}).waitFor();
+  assert.equal(await page.locator('#vault-title').inputValue(),'sample');
+  assert.equal(await page.locator('#vault-content').inputValue(),'# 불러온 문서\n첫 내용');
+  await page.fill('#vault-title','첨부 파일 크기 제한');
+  await page.fill('#vault-content','# CDS-REQ-001\n전체 파일 합계는 10MB 이하입니다.\n<script>window.unwanted=true</script>');
+  await page.getByRole('button',{name:'문서 초안 저장',exact:true}).click();
+  await page.locator('#vault-editor-status').filter({hasText:'초안을 저장'}).waitFor();
+  await page.fill('#vault-reason','최초 요구사항 검토');
+  await page.getByRole('button',{name:'저장된 초안 검토 요청',exact:true}).click();
+  await page.locator('#vault-comment').waitFor({state:'visible'});
+  assert.equal(await page.locator('#vault-content').isDisabled(),true);
+  assert.equal(await page.evaluate(()=>window.unwanted),undefined);
+  await page.fill('#vault-comment','최초 기준을 확인했습니다.');
+  await page.getByRole('button',{name:'선택한 버전 승인',exact:true}).click();
+  await page.locator('#vault-editor-status').filter({hasText:'승인 기준'}).waitFor();
+  await page.fill('#vault-content','# CDS-REQ-001\n각 파일은 10MB 이하입니다.');
+  assert.equal(await page.getByRole('button',{name:'저장된 초안 검토 요청',exact:true}).isDisabled(),true);
+  await page.getByRole('button',{name:'문서 초안 저장',exact:true}).click();
+  await page.locator('#vault-editor-status').filter({hasText:'초안을 저장'}).waitFor();
+  await page.fill('#vault-reason','여러 파일을 올릴 때 크기 제한을 파일별로 적용합니다.');
+  await page.getByRole('button',{name:'저장된 초안 검토 요청',exact:true}).click();
+  await page.locator('#vault-comment').waitFor({state:'visible'});
+  assert.match(await page.locator('.vault-comparison section').first().innerText(),/전체 파일 합계/);
+  assert.match(await page.locator('.vault-comparison section').last().innerText(),/각 파일은/);
+  fs.mkdirSync('work/document-vault-browser',{recursive:true});
+  await page.screenshot({path:'work/document-vault-browser/review-desktop.png',fullPage:true});
+  await page.fill('#vault-comment','예외 조건을 더 명확히 해주세요.');
+  await page.getByRole('button',{name:'선택한 버전 반려',exact:true}).click();
+  await page.locator('#vault-editor-status').filter({hasText:'반려했습니다'}).waitFor();
+  const settings=await api(base),id=settings.binding.connection_id;
+  let doc=await api(base+'/documents/CDS-DOC-001?connection_id='+id);
+  assert.equal(doc.approved,1);assert.equal(doc.reviews[1].decision,'rejected');
+  // Make the changed draft a fresh review and approve it.
+  await page.fill('#vault-reason','파일별 제한의 최종 확인');
+  await page.getByRole('button',{name:'저장된 초안 검토 요청',exact:true}).click();
+  await page.locator('#vault-comment').waitFor({state:'visible'});
+  await page.fill('#vault-comment','파일별 제한을 승인합니다.');
+  await page.getByRole('button',{name:'선택한 버전 승인',exact:true}).click();
+  await page.locator('#vault-editor-status').filter({hasText:'승인 기준'}).waitFor();
+  await page.keyboard.press('Escape');await page.locator('#vault-editor').waitFor({state:'hidden'});
+  await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+  // Direct settings reload must wait for the restored project automatically.
+  await page.getByRole('button',{name:'CDS-DOC-001 열기',exact:true}).click();
+  await page.selectOption('#vault-review-select','1');
+  await page.locator('.vault-comparison section').last().getByText(/전체 파일 합계/).waitFor();
+  assert.equal(await page.locator('#vault-comment').isVisible(),false);
+  // A second writer must not silently overwrite the open draft.
+  doc=await api(base+'/documents/CDS-DOC-001?connection_id='+id);
+  await api(base+'/documents/CDS-DOC-001','PUT',{connection_id:id,expected_revision:doc.revision,title:doc.title,content:doc.content+'\n추가 조건'});
+  await page.fill('#vault-content','오래된 화면의 수정');
+  await page.getByRole('button',{name:'문서 초안 저장',exact:true}).click();
+  await page.locator('#vault-editor-status').filter({hasText:'다른 화면에서 문서가 변경'}).waitFor();
+  assert.equal(await page.locator('#vault-content').inputValue(),'오래된 화면의 수정');
+  page.once('dialog',d=>d.accept());await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'CDS-DOC-001 열기',exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('#vault-review-select').scrollIntoViewIfNeeded();
+  await page.selectOption('#vault-review-select','3');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  assert.equal(await page.locator('#vault-editor').evaluate(n=>n.scrollWidth<=n.clientWidth+1),true);
+  await page.screenshot({path:'work/document-vault-browser/review-narrow.png',fullPage:true});
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:'work/document-vault-browser/library-narrow.png',fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.screenshot({path:'work/document-vault-browser/library-desktop.png',fullPage:true});
+  assert.deepEqual(errors,[]);
+  console.log('PASS: real API create/save/review/approve/reject/history/reload/stale-write/XSS/keyboard/narrow layout; project='+project);
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

@@ -1,0 +1,22 @@
+.vault-panel{max-width:1080px}.vault-panel>.hint{margin-bottom:var(--modal-gap)}
+.vault-panel .modal-form{gap:var(--form-field-gap)}
+.vault-heading{display:flex;align-items:center;gap:8px;margin:var(--modal-gap) 0 var(--form-field-gap)}
+.vault-heading h2{margin:0 auto 0 0;font-size:16px}.vault-heading button{margin:0}
+.vault-list{display:grid;gap:var(--form-field-gap)}
+.vault-list article{display:flex;align-items:center;gap:var(--form-field-gap);padding:var(--form-field-gap);border:1px solid #403b30;border-radius:8px}
+.vault-list article>div{flex:1;min-width:0;overflow-wrap:anywhere}.vault-list p{margin:8px 0 0}
+.vault-editor{width:min(1080px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:90vh;box-sizing:border-box}
+.vault-editor>header{background:var(--bg,#171714)}
+.vault-editor h2{font-size:18px}.vault-editor .modal-form{gap:var(--form-field-gap)}
+.vault-editor input,.vault-editor textarea{box-sizing:border-box;width:100%;min-width:0;margin:0}
+.vault-editor textarea{font:inherit;line-height:1.7;resize:vertical}
+#vault-content{min-height:220px;font-family:ui-monospace,Consolas,monospace}
+.vault-actions{display:flex;justify-content:flex-end;gap:var(--form-action-gap)}.vault-actions button{margin:0}
+.vault-reviews{margin-top:var(--modal-gap);border-top:1px solid #403b30;padding-top:var(--modal-gap)}
+.vault-comparison{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--form-field-gap);margin:var(--modal-gap) 0}
+.vault-comparison section{min-width:0}.vault-comparison h3{font-size:13px;color:#b8ac95}
+.vault-comparison pre{padding:var(--form-field-gap);background:#11110f;border:1px solid #403b30;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
+.vault-reviews>.hint{white-space:pre-wrap;overflow-wrap:anywhere}.vault-reviews details{margin-top:var(--modal-gap)}
+.vault-reviews li{margin:8px 0;font-size:12px;color:#a79d89}.vault-panel .error,.vault-editor .error{color:#efa590}
+.vault-panel [role=status],.vault-editor [role=status]{overflow-wrap:anywhere}
+@media(max-width:700px){.vault-comparison{grid-template-columns:minmax(0,1fr)}.vault-editor{width:calc(100vw - 16px);max-width:calc(100vw - 16px)}.vault-heading h2{font-size:14px}}
