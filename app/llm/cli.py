@@ -56,10 +56,15 @@ class ProcessRunner:
             return await asyncio.shield(worker)
         except asyncio.CancelledError:
             cancel.set()
-            try:
-                await asyncio.shield(worker)
-            except Exception:
-                pass
+            while True:
+                try:
+                    await asyncio.shield(worker)
+                except asyncio.CancelledError:
+                    if not worker.cancelled():
+                        continue
+                except Exception:
+                    pass
+                break
             raise
 
     @staticmethod
