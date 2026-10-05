@@ -1,4 +1,5 @@
 """Sequential, human-approved work. Immutable vault objects are the source of truth."""
+from copy import deepcopy
 from hashlib import sha256
 import json
 import io
@@ -40,13 +41,32 @@ class Workflows:
         digest = catalog.get('workflows', {}).get(identity)
         if not digest:
             raise FileNotFoundError('워크플로를 찾을 수 없습니다.')
-        return self.vault.get_object(root, digest)
+        return self.vault.workflow(root, digest)
+
+    def payload_refs(self, root, value):
+        # Bound each existing JSON object even for escaped text and large input copies.
+        text = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+        return [self.vault.put_object(root, {'text': text[i:i+128_000]})
+                for i in range(0, len(text), 128_000)]
 
     def save(self, root, catalog, state):
-        state['revision'] += 1
-        state['updated_at'] = now()
-        catalog.setdefault('workflows', {})[state['id']] = self.vault.put_object(root, state)
-        atomic_write(confined(root, 'catalog.json'), catalog)
+        stored = deepcopy(state)
+        stored.pop('cancellable', None)
+        for step in stored['steps']:
+            step.pop('cancellable', None)
+            step['attempts'] = [dict(run_id=a['run_id'], version=a.get('version'),
+                                     payload_refs=self.payload_refs(root, a)) for a in step['attempts']]
+        if 'source' in stored:
+            stored['source_refs'] = self.payload_refs(root, stored.pop('source'))
+        stored['revision'] += 1
+        stored['updated_at'] = now()
+        updated = deepcopy(catalog)
+        updated.setdefault('workflows', {})[state['id']] = self.vault.put_object(root, stored)
+        atomic_write(confined(root, 'catalog.json'), updated)
+        # Publish the revision only after the catalog commit succeeds.
+        catalog.clear()
+        catalog.update(updated)
+        state.update(revision=stored['revision'], updated_at=stored['updated_at'])
 
     def list(self, name, connection_id):
         with self.vault.opened(name, connection_id) as (root, catalog):
@@ -78,7 +98,7 @@ class Workflows:
         return output.getvalue()
 
     def capture(self, name, connection_id, identity):
-        # Capture even when the browser is closed. A failed save remains recoverable by GET.
+        # Capture with the browser closed; failed writes require an explicit recapture.
         try:
             self.read(name, connection_id, identity)
         except Exception:
@@ -108,28 +128,85 @@ class Workflows:
             self.save(root, catalog, state)
             return state
 
-    def sync(self, name, root, catalog, state):
-        if state.get('kind') == 'parallel':
-            return self.parallel.sync(name, root, catalog, state)
-        if state['status'] != 'running':
+    def sync(self, name, root, catalog, state, retry_run_id=None):
+        parallel = state.get('kind') == 'parallel'
+        indexes = [i for i, step in enumerate(state['steps']) if step['status'] == 'running'] if parallel else [state['current']] if state['status'] == 'running' else []
+        if not indexes:
             return
-        attempt = state['steps'][state['current']]['attempts'][-1]
-        try:
-            record = self.harness.storage.run(name, attempt['run_id'])
-        except FileNotFoundError:
-            # A crash before dispatch (or missing DB) must never cause automatic replay.
-            state['status'] = 'failed'
-            attempt['error'] = '실행 기록이 없습니다. 자동 재실행하지 않았습니다.'
-        else:
-            if record['status'] == 'running':
-                return
-            attempt.update(output=record['output'] or '', error=record['error'] or '',
-                           metadata=record['metadata'])
-            state['status'] = 'review' if record['status'] == 'completed' and record['output'] else 'failed'
-            if record['metadata'].get('question'):
-                state['status'] = 'question'
-        attempt['status'] = state['status']
-        self.save(root, catalog, state)
+        durable = deepcopy(state)
+        pending = {}
+        for index in indexes:
+            candidate = deepcopy(durable)
+            step = candidate['steps'][index]
+            attempt = step['attempts'][-1]
+            try:
+                record = self.harness.storage.run(name, attempt['run_id'])
+            except FileNotFoundError:
+                record = None
+                attempt.update(status='failed', error='실행 기록이 없습니다. 자동 재실행하지 않았습니다.')
+            else:
+                if record['status'] == 'running':
+                    continue
+                status = ('cancelled' if record['status'] == 'interrupted' and parallel else
+                          'question' if record['metadata'].get('question') else
+                          'review' if record['status'] == 'completed' and record['output'] else 'failed')
+                metadata = dict(record['metadata'])
+                marker = metadata.pop('workflow_capture', {})
+                attempt.update(status=status, output=record['output'] or '', error=record['error'] or '', metadata=metadata)
+            attempt['storage_status'] = 'saved'
+            attempt.pop('storage_error', None)
+            if parallel:
+                step['status'] = attempt['status']
+                self.parallel.aggregate(candidate)
+            else:
+                candidate['status'] = attempt['status']
+            if record is None and attempt['run_id'] != retry_run_id:
+                attempt.update(storage_status='missing', storage_error=attempt['error'])
+                pending[index] = attempt
+                continue
+            error = None
+            if record and marker.get('vault_id') == catalog['vault_id'] and marker.get('status') == 'failed' and attempt['run_id'] != retry_run_id:
+                error = marker['error']
+            else:
+                try:
+                    self.save(root, catalog, candidate)
+                except (ValueError, OSError) as exc:
+                    error = str(exc)
+                if record:
+                    self.harness.storage.workflow_capture(name, attempt['run_id'],
+                        {'vault_id': catalog['vault_id'], 'status': 'failed' if error else 'saved', 'error': error})
+            if error:
+                attempt.update(storage_status='failed', storage_error=error)
+                pending[index] = attempt
+            else:
+                durable = candidate
+        state.clear()
+        state.update(durable)
+        for index, attempt in pending.items():
+            state['steps'][index]['attempts'][-1] = attempt
+            if parallel:
+                state['steps'][index]['status'] = attempt['status']
+            else:
+                state['status'] = attempt['status']
+        if parallel:
+            self.parallel.aggregate(state)
+
+    def recapture(self, name, connection_id, identity, expected_revision, run_id):
+        with self.vault.opened(name, connection_id) as (root, catalog):
+            state = self.load(root, catalog, identity)
+            if state['revision'] != expected_revision:
+                raise FileExistsError('다른 화면에서 변경되었습니다. 다시 불러오세요.')
+            matches = [s for s in state['steps'] if s['attempts'] and s['attempts'][-1]['run_id'] == run_id]
+            if not matches:
+                raise ValueError('이 워크플로의 현재 실행을 선택하세요.')
+            try:
+                record = self.harness.storage.run(name, run_id)
+            except FileNotFoundError:
+                record = None  # Explicitly archive the missing-run failure, never replay it.
+            if record and record['status'] == 'running':
+                raise FileExistsError('실행이 아직 끝나지 않았습니다.')
+            self.sync(name, root, catalog, state, retry_run_id=run_id)
+            return state
 
     def read(self, name, connection_id, identity):
         with self.vault.opened(name, connection_id) as (root, catalog):
@@ -143,6 +220,19 @@ class Workflows:
                 state['cancellable'] = state['steps'][state['current']]['attempts'][-1]['run_id'] in self.harness.active
             return state
 
+    def missing_run(self, name, step):
+        """Only an explicit new run may archive a missing dispatch alongside its intent."""
+        if not step['attempts'] or step['attempts'][-1].get('status') != 'running':
+            return False
+        attempt = step['attempts'][-1]
+        try:
+            self.harness.storage.run(name, attempt['run_id'])
+        except FileNotFoundError:
+            attempt.update(status='failed', storage_status='saved',
+                           error='실행 기록이 없습니다. 자동 재실행하지 않았습니다.')
+            return True
+        return False
+
     def change(self, name, connection_id, identity, expected_revision, action, **values):
         with self.vault.opened(name, connection_id) as (root, catalog):
             state = self.load(root, catalog, identity)
@@ -153,6 +243,8 @@ class Workflows:
             if state['status'] == 'done':
                 raise FileExistsError('이미 완료한 워크플로입니다.')
             step = state['steps'][state['current']]
+            if action == 'run' and state['status'] == 'running' and self.missing_run(name, step):
+                state['status'] = 'failed'
             if action == 'approve':
                 if state['status'] != 'review':
                     raise FileExistsError('검토 가능한 결과가 없습니다.')

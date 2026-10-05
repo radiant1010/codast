@@ -65,28 +65,6 @@ class ParallelWorkflows:
                            else 'review' if all(s in ('review', 'approved') for s in statuses)
                            else 'ready' if all(s == 'ready' for s in statuses) else 'partial')
 
-    def sync(self, name, root, catalog, state):
-        changed = False
-        for step in state['steps']:
-            if step['status'] != 'running':
-                continue
-            attempt = step['attempts'][-1]
-            try:
-                record = self.harness.storage.run(name, attempt['run_id'])
-            except FileNotFoundError:
-                attempt.update(status='failed', error='실행 기록이 없습니다. 자동 재실행하지 않았습니다.')
-            else:
-                if record['status'] == 'running':
-                    continue
-                status = ('cancelled' if record['status'] == 'interrupted' else 'question' if record['metadata'].get('question')
-                          else 'review' if record['status'] == 'completed' and record['output'] else 'failed')
-                attempt.update(status=status, output=record['output'] or '', error=record['error'] or '', metadata=record['metadata'])
-            step['status'] = attempt['status']
-            changed = True
-        if changed:
-            self.aggregate(state)
-            self.workflows.save(root, catalog, state)
-
     def change(self, name, connection_id, identity, expected_revision, action, role=None, comment=''):
         with self.vault.opened(name, connection_id) as (root, catalog):
             state = self.workflows.load(root, catalog, identity)
@@ -104,6 +82,8 @@ class ParallelWorkflows:
                 if role not in (0, 1) or state['fixed_at'] is None:
                     raise ValueError('시작한 작업의 역할을 선택하세요.')
                 step = state['steps'][role]
+                if action == 'retry' and step['status'] == 'running' and self.workflows.missing_run(name, step):
+                    step['status'] = 'failed'
                 if action == 'approve':
                     if step['status'] != 'review':
                         raise FileExistsError('검토 가능한 결과가 없습니다.')

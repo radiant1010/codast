@@ -433,6 +433,11 @@ class Storage:
             db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
                        (run_id, 'status', status, now()))
 
+    def workflow_capture(self, project, run_id, value):
+        with self.connect() as db:
+            db.execute("UPDATE runs SET metadata=json_set(metadata,'$.workflow_capture',json(?)) WHERE project=? AND id=?",
+                       (json.dumps(value, ensure_ascii=False), project, run_id))
+
     def notifications(self, projects, after=0, limit=100):
         """Read durable terminal events, including runs completed between polls."""
         if not projects:

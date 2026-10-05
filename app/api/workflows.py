@@ -88,6 +88,17 @@ def read(name: str, identity: str, request: Request, connection_id: str = Query(
     return request.app.state.workflows.read(name, connection_id, identity)
 
 
+class Recapture(StrictModel):
+    connection_id: str = Field(pattern=r'^[a-f0-9]{32}$')
+    expected_revision: int = Field(ge=1)
+    run_id: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
+@router.post('/{identity}/recapture')
+def recapture(name: str, identity: str, body: Recapture, request: Request):
+    return request.app.state.workflows.recapture(name, identity=identity, **body.model_dump())
+
+
 @router.get('/{identity}/export')
 def export(name: str, identity: str, request: Request, connection_id: str = Query(max_length=32)):
     content = request.app.state.workflows.export(name, connection_id, identity)

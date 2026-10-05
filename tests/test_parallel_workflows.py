@@ -313,3 +313,40 @@ def test_approved_sequential_result_can_be_common_input(parallel, monkeypatch):
     p=response.json()
     assert p['source']['content']=='REQ-002: 승인 결과'
     assert client.post('/api/projects/sample/workflows/'+p['id']+'/parallel',json={'connection_id':cid,'expected_revision':p['revision'],'action':'start'}).status_code==200
+
+
+def test_capture_failure_isolated_and_role_recapture_does_not_repeat_peer(parallel, monkeypatch):
+    f=parallel
+    client, app, url, cid, s, _ = f
+    async def execute(self, context, *args, **kwargs):
+        await asyncio.sleep(.08)
+        role = '설계' if '역할: 설계 작성' in json.loads(context)['task'] else '테스트'
+        return AgentResult(adapter='codex', output=role+' 결과')
+    monkeypatch.setattr('app.llm.cli.CliAdapter.execute', execute)
+    started = act(f, s, 'start').json()
+    import app.core.workflows as module
+    write = module.atomic_write
+    def fail_design(path, value):
+        digest = value['workflows'][s['id']]
+        stored = app.state.document_vault.get_object(path.parent, digest)
+        if stored['steps'][0]['status'] == 'review':
+            raise ValueError('가상 설계 보관 실패')
+        return write(path, value)
+    monkeypatch.setattr(module, 'atomic_write', fail_design)
+    s = wait(f)
+    assert [step['status'] for step in s['steps']] == ['review','review']
+    assert s['steps'][0]['attempts'][0]['storage_status'] == 'failed'
+    assert s['steps'][1]['attempts'][0]['storage_status'] == 'saved'
+    assert act(f,s,'approve',role=0).status_code == 409
+    approved = act(f,s,'approve',role=1)
+    assert approved.status_code == 200, approved.text
+    s=read(f)
+    monkeypatch.setattr(module, 'atomic_write', write)
+    rid = started['steps'][0]['attempts'][0]['run_id']
+    response = client.post(url+'/recapture', json={'connection_id':cid,'expected_revision':s['revision'],'run_id':rid})
+    assert response.status_code == 200, response.text
+    saved=response.json()
+    assert saved['steps'][0]['attempts'][0]['storage_status'] == 'saved'
+    assert saved['steps'][1]['approved'] == 1
+    assert len(app.state.harness.storage.runs('sample',100,0)) == 2
+    assert act(f,saved,'approve',role=0).json()['status'] == 'done'

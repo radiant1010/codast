@@ -9,9 +9,10 @@
   function field(label,input){const wrap=el('div',undefined,'form-field'),lab=el('label',label);input.id=input.id||'wf-'+crypto.randomUUID();lab.htmlFor=input.id;wrap.append(lab,input);return wrap;}
   function select(values,value){const n=el('select');for(const v of values){const o=el('option',v);o.value=v;n.append(o);}n.value=value||values[0];return n;}
   function modeSelect(value){const n=select(['read-only','workspace-write'],value||'read-only');n.options[0].textContent='분석만 (읽기 전용)';n.options[1].textContent='구현, 테스트 (작업 폴더 수정 허용)';return n;}
+  const resultDialog=el('dialog',undefined,'session-drawer workflow-dialog');resultDialog.id='workflow-result-dialog';const resultBody=el('div'),resultStatus=el('p',undefined,'hint');resultStatus.setAttribute('role','status');const resultHead=el('header');resultHead.append(el('h2','작업 결과 상세'),icon('close','결과 상세 닫기',()=>resultDialog.close()));resultDialog.append(resultHead,resultStatus,resultBody);document.body.append(resultDialog);
   const close=icon('close','워크플로 닫기',()=>dialog.close());head.append(heading,close);dialog.append(head,status,body);document.body.append(dialog);
   dialog.addEventListener('close',()=>clearTimeout(timer));
-  async function safe(fn){if(locked)return;locked=true;const controls=[...body.querySelectorAll('button,input,select,textarea')].map(n=>[n,n.disabled]);controls.forEach(([n])=>n.disabled=true);try{status.textContent='처리 중…';await fn();status.textContent='';}catch(e){status.textContent=e.message;}finally{locked=false;controls.forEach(([n,d])=>{if(n.isConnected)n.disabled=d;});}}
+  async function safe(fn){if(locked)return;locked=true;const controls=[...body.querySelectorAll('button,input,select,textarea')].map(n=>[n,n.disabled]);controls.forEach(([n])=>n.disabled=true);try{status.textContent='처리 중…';await fn();status.textContent='';}catch(e){status.textContent=e.message;if(resultDialog.open)resultStatus.textContent=e.message;}finally{locked=false;controls.forEach(([n,d])=>{if(n.isConnected)n.disabled=d;});}}
   const launch=icon('route','워크플로 설정 및 진행',()=>safe(async()=>{
     if(!$('project').value)throw Error('먼저 프로젝트를 선택하세요.');
     project=$('project').value;current=null;heading.textContent=project+' ,  작업 순서와 결과';body.replaceChildren();dialog.showModal();
@@ -46,6 +47,34 @@
     for(const row of rows)body.append(button(row.title+' — '+label(row.status),()=>safe(()=>load(row.id))));
   }
   function label(value){return {ready:'실행 준비',running:'실행 중 / 종료 확인 필요',review:'결과 검토',question:'질문 답변 필요',failed:'실행 실패',cancelled:'실행 취소',partial:'작업별 확인 필요',approved:'결과 승인',done:'모든 단계 승인 완료'}[value]||value;}
+  function storageNotice(container,s,attempt){
+    if(attempt.storage_status==='failed')container.append(el('p','결과 보관 실패: '+attempt.storage_error,'workflow-storage-error'),el('p','실행 기록의 결과를 표시합니다. 다시 보관은 AI를 재실행하지 않습니다. 보관 후 승인할 수 있습니다.','hint'));
+    else if(attempt.storage_status==='missing')container.append(el('p','실행 기록이 없습니다. 복구할 결과를 찾을 수 없어 자동 재실행하지 않았습니다. 중단 기록을 보관하거나 필요한 작업만 새로 실행하세요. 새 실행은 AI를 호출합니다.','workflow-storage-error'));
+    else if(attempt.storage_status==='saved')container.append(el('p','문서함 보관 완료','hint'));
+  }
+  function openResult(s,index,version){
+    const step=s.steps[index],attempt=step.attempts.find(a=>a.version===version),latest=attempt===step.attempts.at(-1);
+    resultBody.replaceChildren();resultStatus.textContent='';
+    resultBody.append(el('h3',step.title+' / v'+version),el('p',label(attempt.status)+' / 실행 ID: '+attempt.run_id,'hint'));
+    storageNotice(resultBody,s,attempt);
+    resultBody.append(consoleOutput(attempt.output||attempt.error||'남아 있는 결과가 없습니다.'));
+    if(['failed','cancelled'].includes(attempt.status)&&attempt.output)resultBody.append(el('p','중단되거나 실패한 실행의 미완성 출력입니다. 완성된 결과로 승인하지 않습니다.','hint'));
+    const inputs=el('details');inputs.append(el('summary','입력과 지시, 실행 정보'),el('pre',JSON.stringify({inputs:attempt.inputs,directive:attempt.directive,metadata:attempt.metadata,error:attempt.error},null,2)));resultBody.append(inputs);
+    const actions=el('div',undefined,'workflow-actions');
+    if(['failed','missing'].includes(attempt.storage_status)&&latest)actions.append(button(attempt.storage_status==='missing'?'중단 기록 보관':'다시 보관',()=>safe(async()=>{
+      current=await api(endpoint()+'/'+s.id+'/recapture','POST',{connection_id:binding.connection_id,expected_revision:s.revision,run_id:attempt.run_id});render();openResult(current,index,version);
+    })));
+    const canApprove=latest&&!step.approved&&attempt.status==='review'&&(s.kind==='parallel'||s.current===index);
+    if(canApprove){
+      const comment=el('textarea');comment.rows=2;comment.maxLength=2000;const key=s.id+'/'+index;comment.value=parallelDrafts.get(key)||'';comment.oninput=()=>parallelDrafts.set(key,comment.value);resultBody.append(field('승인 의견',comment));
+      const approve=button('결과 승인',()=>safe(async()=>{
+        if(s.kind==='parallel')await parallelAction(s,'approve',index,comment.value);
+        else current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'approve',comment:comment.value});
+        parallelDrafts.delete(key);await load(s.id);resultDialog.close();
+      }));approve.disabled=['failed','missing'].includes(attempt.storage_status);actions.append(approve);
+    }
+    resultBody.append(actions);if(!resultDialog.open)resultDialog.showModal();
+  }
   async function setup(){
     creationId=crypto.randomUUID().replaceAll('-','');body.replaceChildren();
     const form=el('form',undefined,'modal-form'),title=el('input'),materials=el('div'),steps=el('div');title.required=true;title.maxLength=120;title.id='wf-title';
@@ -79,6 +108,7 @@
     const list=el('ol');s.steps.forEach((step,i)=>list.append(el('li',step.title+' — '+(step.approved?'승인 v'+step.approved:i===s.current?label(s.status):'대기'))));body.append(list);
     for(const [i,step] of s.steps.entries())for(const attempt of step.attempts){
       const card=el('details',undefined,'workflow-result');card.open=i===s.current&&attempt===step.attempts.at(-1);card.append(el('summary',step.title+' ,  v'+attempt.version+' ,  '+attempt.client+(step.approved===attempt.version?' ,  승인됨':'')));
+      storageNotice(card,s,attempt);card.append(button('결과 상세 보기',()=>openResult(s,i,attempt.version)));
       const metadata=attempt.metadata||{},tokens=tokenCount(metadata.usage,attempt.client);
       card.append(el('p',label(attempt.status)+' ,  '+(metadata.execution_model||attempt.model||'모델 미수신')+' ,  '+(metadata.elapsed_seconds===undefined?'시간 미수신':metadata.elapsed_seconds+'초')+' ,  '+(tokens===null?'토큰 미수신':tokens.toLocaleString('ko-KR')+'토큰'),'hint'));
       card.append(consoleOutput(attempt.output||attempt.error||'실행 결과를 기다리고 있습니다.'));
@@ -103,16 +133,16 @@
       function poll(){if(!dialog.open)return;if(locked){timer=setTimeout(poll,1500);return;}const top=dialog.scrollTop;safe(async()=>{await load(s.id);dialog.scrollTop=top;});}
       timer=setTimeout(poll,1500);return;
     }
-    const form=el('form',undefined,'modal-form'),mode=modeSelect(step.mode),client=select(['codex','claude'],step.client),model=el('input'),instruction=el('textarea'),comment=el('textarea');model.value=step.model||'';model.placeholder='CLI 기본 모델';instruction.value=step.instruction;instruction.rows=4;instruction.required=true;instruction.maxLength=4000;comment.rows=3;comment.maxLength=2000;
+    const form=el('form',undefined,'modal-form'),mode=modeSelect(step.mode),client=select(['codex','claude'],step.client),model=el('input'),instruction=el('textarea'),comment=el('textarea');model.value=step.model||'';model.placeholder='CLI 기본 모델';instruction.value=step.instruction;instruction.rows=4;instruction.required=true;instruction.maxLength=4000;comment.rows=3;comment.maxLength=2000;const draftKey=s.id+'/'+s.current;comment.value=parallelDrafts.get(draftKey)||'';comment.oninput=()=>parallelDrafts.set(draftKey,comment.value);
     form.append(el('h3',s.status==='ready'?'다음 작업 지시 확인':'검토와 수정'),field('실행 권한',mode),field('담당 AI',client),field('모델',model),field('작업 지시',instruction),field(s.status==='question'?'AI 질문에 대한 답변':'수정 대상과 의견',comment));
-    if(s.status==='failed')comment.value=step.attempts.at(-1)?.comment||'';
+    if(s.status==='failed'&&!parallelDrafts.has(draftKey))comment.value=step.attempts.at(-1)?.comment||'';
     if(s.status==='question'){
       const question=step.attempts.at(-1)?.metadata?.question;
-      if(question){const choices=el('div',undefined,'workflow-actions');form.append(el('p',question.question));for(const choice of question.choices||[])choices.append(button(choice,()=>{comment.value=choice;comment.focus();}));form.append(choices,el('p','선택한 답변을 수정하거나 직접 입력한 후 다시 실행하세요.','hint'));}
+      if(question){const choices=el('div',undefined,'workflow-actions');form.append(el('p',question.question));for(const choice of question.choices||[])choices.append(button(choice,()=>{comment.value=choice;parallelDrafts.set(draftKey,choice);comment.focus();}));form.append(choices,el('p','선택한 답변을 수정하거나 직접 입력한 후 다시 실행하세요.','hint'));}
     }
     const preview=el('details'),pre=el('pre');preview.append(el('summary','다음 실행에 포함할 자료'),pre);pre.textContent=s.materials.map(m=>m.role+': '+m.id).concat(s.steps.slice(0,s.current).map(p=>p.title+' ,  승인 v'+p.approved)).join('\n')||'작업 지시만 전달합니다.';form.append(preview);
-    const actions=el('div',undefined,'workflow-actions'),send=icon('send',s.status==='ready'?'현재 단계 실행':'의견을 반영해 다시 실행',()=>form.requestSubmit());actions.append(send);
-    if(s.status==='review')actions.append(icon('check','현재 결과 승인',()=>safe(async()=>{current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'approve',comment:comment.value});render();})));
+    const actions=el('div',undefined,'workflow-actions'),send=icon('send',s.status==='ready'?'현재 단계 실행':'의견을 반영해 다시 실행',()=>form.requestSubmit());send.disabled=step.attempts.at(-1)?.storage_status==='failed';actions.append(send);
+    if(s.status==='review'&&step.attempts.at(-1)?.storage_status!=='failed')actions.append(icon('check','현재 결과 승인',()=>safe(async()=>{current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'approve',comment:comment.value});render();})));
     form.append(actions);body.append(form);
     form.onsubmit=e=>{e.preventDefault();safe(async()=>{current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'run',mode:mode.value,client:client.value,model:model.value.trim()||null,instruction:instruction.value,comment:comment.value});render();});};
   }
@@ -143,7 +173,7 @@
     form.onsubmit=e=>{e.preventDefault();safe(async()=>{const source=sources[Number(choice.value)];if(!source)throw Error('승인 입력을 선택하세요.');current=await api(endpoint()+'/parallel','POST',{connection_id:binding.connection_id,request_id:creationId,title:title.value,source:source.ref});render();});};
   }
   async function parallelAction(s,action,role,comment=''){
-    current=await api(endpoint()+'/'+s.id+'/parallel','POST',{connection_id:binding.connection_id,expected_revision:s.revision,action,role,comment});render();
+    await api(endpoint()+'/'+s.id+'/parallel','POST',{connection_id:binding.connection_id,expected_revision:s.revision,action,role,comment});await load(s.id);
   }
   function renderParallel(){
     clearTimeout(timer);body.replaceChildren();const s=current,tools=el('div',undefined,'workflow-actions');tools.append(el('h3',s.title),icon('back','워크플로 목록',()=>safe(listing)),icon('restore','워크플로 새로고침',()=>safe(()=>load(s.id))));body.append(tools,el('p',label(s.status),'hint'));
@@ -155,6 +185,7 @@
         const result=el('details',undefined,'workflow-result');result.open=attempt===step.attempts.at(-1);result.append(el('summary','v'+attempt.version+' / '+label(attempt.status)),consoleOutput(attempt.output||attempt.error||'결과를 기다리고 있습니다.'));
         if(attempt.output&&attempt.error)result.append(el('p',attempt.error,'hint'));
         result.append(el('p','실행 ID: '+attempt.run_id,'hint'));
+        storageNotice(result,s,attempt);result.append(button('결과 상세 보기',()=>openResult(s,i,attempt.version)));
         const details=el('details');details.append(el('summary','이 실행의 입력, 지시, 실행 정보'),el('pre',JSON.stringify({inputs:attempt.inputs,directive:attempt.directive,comment:attempt.comment,approval_comment:attempt.approval_comment,metadata:attempt.metadata},null,2)));result.append(details);card.append(result);
       }
       if(step.status==='running'){
@@ -165,7 +196,7 @@
         const question=step.attempts.at(-1)?.metadata?.question;
         if(step.status==='question'&&question){card.append(el('p',question.question));const choices=el('div',undefined,'workflow-actions');for(const value of question.choices||[])choices.append(button(value,()=>{comment.value=value;parallelDrafts.set(key,value);comment.focus();}));card.append(choices);}
         card.append(field(step.title+' 답변 또는 수정 의견',comment));
-        const actions=el('div',undefined,'workflow-actions');actions.append(icon('send',step.title+'만 다시 실행',()=>safe(async()=>{await parallelAction(s,'retry',i,comment.value);parallelDrafts.delete(key);})));if(step.status==='review')actions.append(icon('check',step.title+' 결과 승인',()=>safe(()=>parallelAction(s,'approve',i,comment.value))));card.append(actions);
+        const actions=el('div',undefined,'workflow-actions');const retry=icon('send',step.title+'만 다시 실행',()=>safe(async()=>{await parallelAction(s,'retry',i,comment.value);parallelDrafts.delete(key);}));retry.disabled=step.attempts.at(-1)?.storage_status==='failed';actions.append(retry);if(step.status==='review'&&step.attempts.at(-1)?.storage_status!=='failed')actions.append(icon('check',step.title+' 결과 승인',()=>safe(()=>parallelAction(s,'approve',i,comment.value))));card.append(actions);
       }
       body.append(card);
     }

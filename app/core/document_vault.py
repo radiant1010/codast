@@ -210,6 +210,30 @@ class DocumentVault:
             raise ValueError('문서함 내용 검증에 실패했습니다. 백업을 확인하세요.')
         return value
 
+    def workflow(self, root, digest):
+        state = self.get_object(root, digest)
+        def payload(refs):
+            if not isinstance(refs, list) or not refs or len(refs) > 4096:
+                raise ValueError('워크플로 상세 참조가 손상되었습니다.')
+            try:
+                value = json.loads(''.join(self.get_object(root, ref)['text'] for ref in refs))
+                if not isinstance(value, dict):
+                    raise ValueError('워크플로 상세 내용이 손상되었습니다.')
+                return value
+            except (KeyError, TypeError, json.JSONDecodeError) as exc:
+                raise ValueError('워크플로 상세 내용이 손상되었습니다.') from exc
+        if 'source_refs' in state:
+            state['source'] = payload(state.pop('source_refs'))
+        for step in state['steps']:
+            for index, attempt in enumerate(step['attempts']):
+                if 'payload_refs' in attempt:
+                    value = payload(attempt['payload_refs'])
+                    if value.get('run_id') != attempt['run_id'] or value.get('version') != attempt['version']:
+                        raise ValueError('워크플로 실행 참조가 일치하지 않습니다.')
+                    step['attempts'][index] = value
+                step['attempts'][index].setdefault('storage_status', 'pending' if step['attempts'][index].get('status') == 'running' else 'saved')
+        return state
+
     def document(self, root, catalog, identity):
         if identity not in catalog['documents']:
             raise FileNotFoundError('문서를 찾을 수 없습니다.')
@@ -251,7 +275,7 @@ class DocumentVault:
                 self.snapshot(root, review)
             states.append(state)
         for digest in catalog.get('workflows', {}).values():
-            self.get_object(root, digest)
+            self.workflow(root, digest)
         return states
 
     @staticmethod

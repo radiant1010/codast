@@ -1,0 +1,57 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+(async()=>{
+ const origin=process.env.WORKFLOW_TEST_URL||'http://127.0.0.1:8775',project='recovery-'+Date.now();
+ async function api(path,method='GET',data){const r=await fetch(origin+'/api'+path,{method,headers:{'Content-Type':'application/json'},body:data===undefined?undefined:JSON.stringify(data)});const v=await r.json();assert.ok(r.ok,JSON.stringify(v));return v;}
+ await fetch(origin+'/test/capture-fault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true})});
+ await api('/projects','POST',{name:project});await api('/onboarding','PUT',{deferred:true});
+ const settings=await api('/projects/'+project+'/document-vault');
+ const cid=(await api('/projects/'+project+'/document-vault','PUT',{path:settings.suggested_base_path,layout:'project',mode:'create'})).binding.connection_id;
+ const db='/projects/'+project+'/document-vault/documents';
+ let doc=await api(db,'POST',{connection_id:cid,title:'가상 요구사항',content:'REQ-001: 제목은 필수다.'});
+ doc=await api(db+'/'+doc.id+'/reviews','POST',{connection_id:cid,expected_revision:doc.revision,reason:'가상 검토'});
+ await api(db+'/'+doc.id+'/reviews/1/decision','POST',{connection_id:cid,expected_revision:doc.revision,decision:'approved',comment:'가상 승인'});
+ const browser=await chromium.launch({channel:'msedge',headless:true});
+ try{
+ const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(origin);await page.locator('#startup-loading').waitFor({state:'hidden'});await page.selectOption('#project',project);
+ await page.getByRole('button',{name:'워크플로 관리',exact:true}).click();
+ await page.getByRole('button',{name:'새 병렬 설계와 테스트 정의',exact:true}).click();
+ await page.getByRole('button',{name:'병렬 작업 저장',exact:true}).click();
+ await page.getByRole('button',{name:'두 Codex 작업 동시 실행',exact:true}).click();
+ await page.locator('[data-role="0"] .workflow-storage-error').waitFor();
+ await page.getByRole('button',{name:'테스트케이스 정의 결과 승인',exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'설계 작성 결과 승인',exact:true}).count(),0);
+ await page.getByRole('button',{name:'테스트케이스 정의 결과 승인',exact:true}).click();
+ await page.locator('[data-role="0"] .workflow-storage-error').waitFor();
+ await page.locator('[data-role="0"]').getByRole('button',{name:'결과 상세 보기',exact:true}).click();
+ const modal=page.locator('#workflow-result-dialog');
+ assert.match(await modal.innerText(),/설계 REQ-001/);
+ assert.equal(await modal.getByRole('button',{name:'결과 승인',exact:true}).isDisabled(),true);
+ fs.mkdirSync('work/recovery-browser-captures',{recursive:true});await page.screenshot({path:'work/recovery-browser-captures/failed.png',fullPage:true});
+ await modal.getByLabel('승인 의견',{exact:true}).fill('가상 검토 의견');
+ await page.getByRole('button',{name:'결과 상세 닫기',exact:true}).click();
+ await page.keyboard.press('Escape');await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+ await page.getByRole('button',{name:'워크플로 관리',exact:true}).click();
+ await page.getByRole('button',{name:/설계와 요구사항 테스트케이스 —/}).click();
+ await page.locator('[data-role="0"] .workflow-storage-error').waitFor();
+ await page.locator('[data-role="0"]').getByRole('button',{name:'결과 상세 보기',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await modal.evaluate(n=>n.scrollWidth<=n.clientWidth+1),true);
+ const failed=await fetch(origin+'/test/capture-fault',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:false})});assert.ok(failed.ok);
+ await modal.getByRole('button',{name:'다시 보관',exact:true}).click();
+ await page.waitForFunction(()=>[...document.querySelectorAll('#workflow-result-dialog button')].some(n=>n.textContent==='결과 승인'&&!n.disabled));
+ assert.equal(await modal.getByRole('button',{name:'결과 승인',exact:true}).isDisabled(),false);
+ assert.equal(await modal.getByRole('button',{name:'다시 보관',exact:true}).count(),0);
+ assert.equal(await modal.locator('script').count(),0);
+ await page.screenshot({path:'work/recovery-browser-captures/recovered-narrow.png',fullPage:true});
+ await modal.getByRole('button',{name:'결과 승인',exact:true}).click();
+ await page.getByRole('button',{name:'승인 산출물과 이력 내려받기',exact:true}).waitFor();
+ const rows=await api('/projects/'+project+'/workflows?connection_id='+cid);
+ const state=await api('/projects/'+project+'/workflows/'+rows[0].id+'?connection_id='+cid);
+ assert.equal(state.status,'done');assert.deepEqual(state.steps.map(x=>x.attempts.length),[1,1]);
+ assert.equal((await api('/projects/'+project+'/runs')).runs.length,2);
+ assert.deepEqual(errors,[]);console.log('PASS recovery UI: peer approval, failed result modal, reload, 390px, recapture without AI, approval, safe output');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});
