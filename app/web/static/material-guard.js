@@ -48,7 +48,7 @@
   excel.append(el('summary','엑셀에서 보낼 시트와 열 선택'),excelBody);
   excelBody.append(el('p','이 프로젝트에 올리는 XLSX 파일에 적용합니다. 선택을 추가하지 않으면 숨기지 않은 모든 시트와 열을 읽습니다. 선택을 추가하면 지정한 시트와 열만 보냅니다. 시트 번호는 숨김 시트를 포함한 파일 안의 순서이며 1부터 시작합니다. 숨김 시트는 보낼 수 없습니다.','hint'),sheetRows,icon('plus','엑셀 시트 선택 추가',()=>{if(sheetRows.children.length<50)sheetRow({sheet:sheetRows.children.length+1,columns:[]});}),el('p','예: 시트 번호 1, 보낼 열 A, C. 선택한 셀에는 위 개인정보 처리 방식을 적용합니다. 첫 번째 행을 열 이름으로 사용하며 수식은 제외합니다. 다른 파일 형식에는 이 선택이 적용되지 않습니다. 설정을 저장한 후 파일을 첨부하세요.','hint'));
   form.append(privacyLabel,privacy,privacyHint,levelLabel,level,warning,el('p','추가로 가릴 항목이 있나요? 예를 들어 엑셀에 “담당자명” 열이 있다면, 아래에 담당자명을 입력하고 정보 유형을 이름으로 선택하세요. “담당자명: 홍길동”처럼 적힌 내용에도 적용됩니다.','hint'),fields,icon('plus','보호할 항목 추가',()=>{if(fields.children.length<30)fieldRow();}),excel,save);
-  const picker=el('input');picker.type='file';picker.id='attachment-picker';picker.multiple=true;picker.accept='.txt,.md,.csv,.xlsx,.docx,.pptx';picker.hidden=true;
+  const picker=el('input');picker.type='file';picker.id='attachment-picker';picker.multiple=true;picker.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';picker.hidden=true;
   const testLabel=el('label',undefined,'check'),test=el('input');test.type='checkbox';test.id='guard-test-data';testLabel.append(test,document.createTextNode('테스트용 자료로 표시 (보호 설정은 그대로 적용)'));
   const upload=icon('paperclip','파일 첨부',()=>{if(!project)throw Error('프로젝트를 선택하세요.');picker.click();});
   const hint=el('span','파일을 놓아 첨부','hint attachment-drop-hint');
@@ -58,7 +58,7 @@
   page.append(intro,form);
   const dialog=el('dialog',undefined,'session-drawer'),header=el('div',undefined,'account-dialog-header');dialog.id='attachment-dialog';dialog.setAttribute('aria-label','첨부 자료');
   header.append(el('h2','첨부 자료'),icon('close','첨부 자료 닫기',()=>dialog.close()));
-  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint 파일을 지원합니다. 파일당 최대 8 MiB입니다. 아래에서 실제로 보낼 내용을 확인하세요. 보호 설정을 바꿨다면 파일을 다시 올려 주세요.','hint'),list);document.body.append(dialog);
+  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF 파일을 지원합니다. 파일당 최대 8 MiB입니다. 필요할 때 첨부 내용과 검사 내역을 확인할 수 있습니다. 보호 설정을 바꿨다면 파일을 다시 올려 주세요.','hint'),list);document.body.append(dialog);
   const historyDialog=el('dialog',undefined,'session-drawer'),historyHeader=el('div',undefined,'account-dialog-header'),historyTitle=el('h2'),historyInfo=el('p',undefined,'hint'),historyReport=el('div'),historyContent=el('pre');
   historyDialog.id='sent-attachment-dialog';historyDialog.setAttribute('aria-label','보낸 첨부 내용');let historyTicket=0;
   historyHeader.append(historyTitle,icon('close','보낸 첨부 닫기',()=>historyDialog.close()));
@@ -89,7 +89,7 @@
     const detail=el('details');detail.append(el('summary',report.label+', '+policyLabel(report)+', '+(report.status==='blocked'?'차단':report.stale?'다시 첨부해 주세요':'검사 완료')));
     detail.append(el('p',report.rule_version+(report.test_data?', 테스트용 자료':''),'hint'));
     const counts=new Map();for(const f of report.findings){const key=f.location+': '+kinds[f.kind]+' ('+actions[f.action]+')';counts.set(key,(counts.get(key)||0)+f.count);}
-    detail.append(el('pre',Array.from(counts,([key,count])=>key+' '+count+'건').join('\n')||'가릴 정보를 찾지 못했습니다. 놓친 개인정보가 없는지 전송할 내용을 확인해 주세요.'));
+    detail.append(el('pre',Array.from(counts,([key,count])=>key+' '+count+'건').join('\n')||'가릴 정보를 찾지 못했습니다. 자동 검사는 일부 정보를 놓칠 수 있습니다.'));
     if(report.omissions?.length)detail.append(el('p',report.omissions.join(' / '),'hint'));
     return detail;
   }

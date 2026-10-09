@@ -7,14 +7,17 @@ from app.core.data_guard import Part
 
 MAX_BYTES = 8 * 1024 * 1024
 MAX_TEXT = 120000
-SUFFIXES = {'.txt','.md','.csv','.xlsx','.docx','.pptx'}
+SUFFIXES = {'.txt','.md','.csv','.xlsx','.docx','.pptx','.pdf'}
 
 
 def extract(filename, content, options=None, checkpoint=lambda: None):
     suffix = Path(filename).suffix.lower()
     if suffix not in SUFFIXES:
-        raise ValueError('지원 형식: TXT, MD, CSV, XLSX, DOCX, PPTX. 구형·암호화 파일은 변환 후 등록하세요.')
+        raise ValueError('지원 형식: TXT, MD, CSV, XLSX, DOCX, PPTX, PDF. 구형, 암호화 파일은 변환 후 등록하세요.')
     if len(content)>MAX_BYTES: raise ValueError('파일은 8 MiB 이하만 지원합니다.')
+    if suffix=='.pdf':
+        from app.core.material_pdf import extract_pdf
+        return extract_pdf(content,checkpoint)
     parts, size, visited = [], 0, 0
     def add(location, text, field=''):
         nonlocal size, visited

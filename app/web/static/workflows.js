@@ -78,9 +78,9 @@
   async function setup(){
     creationId=crypto.randomUUID().replaceAll('-','');body.replaceChildren();
     const form=el('form',undefined,'modal-form'),title=el('input'),materials=el('div'),steps=el('div');title.required=true;title.maxLength=120;title.id='wf-title';
-    form.append(field('작업 이름',title),el('h3','입력 자료'),el('p','문서에 포함된 텍스트를 보호 설정에 따라 검사합니다. TXT, MD, CSV, XLSX, DOCX, PPTX를 지원합니다. 이미지, PDF 분석은 아직 지원하지 않습니다. 화면은 문서나 텍스트 설명으로 등록하세요.','hint'),materials,el('h3','작업 순서'));
+    form.append(field('작업 이름',title),el('h3','입력 자료'),el('p','문서에 포함된 텍스트를 보호 설정에 따라 자동 검사하고 첨부합니다. TXT, MD, CSV, XLSX, DOCX, PPTX, PDF를 지원합니다. 스캔 이미지의 OCR은 지원하지 않습니다.','hint'),materials,el('h3','작업 순서'));
     const chosen=[];
-    for(const role of roles){const row=el('div',undefined,'workflow-material-row'),files=el('div'),input=el('input');input.type='file';input.multiple=true;input.accept='.txt,.md,.csv,.xlsx,.docx,.pptx';input.hidden=true;input.setAttribute('aria-label',role+' 파일');
+    for(const role of roles){const row=el('div',undefined,'workflow-material-row'),files=el('div'),input=el('input');input.type='file';input.multiple=true;input.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';input.hidden=true;input.setAttribute('aria-label',role+' 파일');
       input.onchange=()=>safe(async()=>{for(const file of input.files){if(chosen.length>=10)throw Error('입력 자료는 총 10개까지 등록할 수 있습니다.');
         const response=await fetch('/api/projects/'+encodeURIComponent(project)+'/materials?filename='+encodeURIComponent(file.name),{method:'POST',body:file});const data=await response.json();if(!response.ok)throw Error(data.detail||'파일 검사 실패');
         const entry={id:data.id,role};if(data.status!=='ready')throw Error('차단된 자료입니다. 파일 보호 설정과 내용을 확인하세요.');chosen.push(entry);
