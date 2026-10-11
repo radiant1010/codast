@@ -61,6 +61,34 @@ def test_prose_section_over_budget_is_not_partially_delivered(tmp_path):
     assert selected[0].content == store.read('one', report['id'])['content']
 
 
+def test_fifth_matching_section_is_kept_when_all_matches_fit(tmp_path):
+    _, store = setup_store(tmp_path)
+    text = ''.join(
+        f'# Rule {i}\n\nAurora ' +
+        ('permits standard access.' if i < 5 else 'prohibits temporary access without an approved sponsor.') + '\n\n'
+        for i in range(1, 6)
+    ) + '# Appendix\n\n' + 'Background only. ' * 600
+    report = store.import_file('one', 'guide.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is Aurora?')
+    assert audit['materials'][0]['delivery']['mode'] == 'excerpt'
+    assert all(f'# Rule {i}' in selected[0].content for i in range(1, 6))
+    assert 'prohibits temporary access without an approved sponsor.' in selected[0].content
+    assert 'Background only.' not in selected[0].content
+
+
+def test_later_matching_table_range_over_budget_keeps_full_text(tmp_path):
+    _, store = setup_store(tmp_path)
+    text = '| Product | Constraint |\n| --- | --- |\n| Aurora | standard use allowed |\n'
+    text += ''.join(f'| other{i:03d} | ' + 'ordinary background ' * 8 + '|\n' for i in range(30))
+    text += '| Aurora | temporary accounts are prohibited |\n'
+    text += ''.join(f'| other{i:03d} | ' + 'ordinary background ' * 8 + '|\n' for i in range(30, 80))
+    report = store.import_file('one', 'table.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is Aurora?', budget=3500)
+    assert audit['materials'][0]['delivery']['mode'] == 'full'
+    assert selected[0].content == store.read('one', report['id'])['content']
+    assert 'temporary accounts are prohibited' in selected[0].content
+
+
 def test_docx_table_label_does_not_end_a_prose_section(tmp_path):
     from docx import Document
     _, store = setup_store(tmp_path)

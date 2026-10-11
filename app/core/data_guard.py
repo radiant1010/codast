@@ -19,7 +19,8 @@ from pydantic import Field, field_validator
 from typing import Annotated, Literal
 from app.models.schemas import StrictModel
 
-RULE_VERSION = 'kr-attachments-1-detect-secrets-1.5.0'
+# Recheck saved copies that may have lost sensitive PDF table fields during extraction.
+RULE_VERSION = 'kr-attachments-2-detect-secrets-1.5.0'
 Level = Literal['strong', 'medium', 'low', 'allow']
 Kind = Literal['name', 'phone', 'email', 'identity', 'user_id', 'secret']
 

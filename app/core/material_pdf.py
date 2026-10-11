@@ -100,7 +100,7 @@ def _read_pdf(content, sender):
             if len(pdf.pages)>100: raise _PdfLimit('pages')
             for number,page in enumerate(pdf.pages,1):
                 start = len(parts)
-                if len(page.chars)>120000: raise _PdfLimit('layout')
+                if len(page.chars)>120000 or len(page.edges)>10000: raise _PdfLimit('layout')
                 if page.images: omissions.append(f'{number}페이지: 이미지 내용은 읽지 못함, OCR 미지원')
                 rotated = any(not char.get('upright',True) for char in page.chars)
                 if rotated:
@@ -148,24 +148,18 @@ def _read_pdf(content, sender):
                     omissions.append(f'{number}페이지: 폰트 문자를 PDFium으로 복구')
                 readable = page.dedupe_chars(tolerance=.01,extra_attrs=()) if recovery else page
                 readable = readable.filter(lambda obj:obj.get('object_type')!='char' or obj.get('upright',True))
-                regions = [page.bbox]
-                if len(page.edges)>10000:
-                    if not recovery: raise _PdfLimit('layout')
-                    tables = []
-                    omissions.append(f'{number}페이지: 도형이 많아 표 탐색 생략, 일반 텍스트로 전달')
-                else:
-                    existing = readable.find_tables()
-                    if len(existing)>100: raise _PdfLimit('layout')
-                    regions = _reading_regions(readable,existing)
-                    tables = []
-                    for box in regions:
-                        if box[0]>=box[2] or box[1]>=box[3]: continue
-                        column = readable if len(regions)==1 else readable.crop(box)
-                        found = existing if len(regions)==1 else column.find_tables()
-                        settings = _table_settings(column,found)
-                        tables.extend(column.find_tables(settings) if settings['explicit_vertical_lines'] else found)
-                        if len(tables)>100: raise _PdfLimit('layout')
-                    tables.sort(key=lambda table:(table.bbox[1],table.bbox[0]))
+                existing = readable.find_tables()
+                if len(existing)>100: raise _PdfLimit('layout')
+                regions = _reading_regions(readable,existing)
+                tables = []
+                for box in regions:
+                    if box[0]>=box[2] or box[1]>=box[3]: continue
+                    column = readable if len(regions)==1 else readable.crop(box)
+                    found = existing if len(regions)==1 else column.find_tables()
+                    settings = _table_settings(column,found)
+                    tables.extend(column.find_tables(settings) if settings['explicit_vertical_lines'] else found)
+                    if len(tables)>100: raise _PdfLimit('layout')
+                tables.sort(key=lambda table:(table.bbox[1],table.bbox[0]))
                 tables = [(index,table,table.extract()) for index,table in enumerate(tables,1)]
                 tables = [(index,table,rows) for index,table,rows in tables
                           if any((cell or '').strip() for row in rows for cell in row)]

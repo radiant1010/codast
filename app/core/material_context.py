@@ -141,7 +141,7 @@ def retrieve(db, identity, text, terms, budget, whole_pages=False):
     sections = [(row['start'], len(heading[1])) for row in rows
                 if (heading := HEADING.match(row['content'])) and not re.fullmatch(r'## T\d+\s*', row['content'])]
     ranges = []
-    for number in candidates[:4]:
+    for number in candidates:
         row = rows[number]
         parents = json.loads(row['parents'])
         table = any(SEPARATOR.fullmatch(line.strip()) for line in row['content'].splitlines()[:2]) or (
@@ -170,8 +170,8 @@ def retrieve(db, identity, text, terms, budget, whole_pages=False):
         excerpt = render_excerpt(text, proposed)
         if len(json.dumps(excerpt, ensure_ascii=False)) <= budget:
             ranges = proposed
-        elif not ranges:
-            # Never cut a matched paragraph, code block or table row to make it fit.
+        else:
+            # Never drop a later match just because earlier matches filled the budget.
             return text, []
     excerpt = render_excerpt(text, ranges)
     if not ranges or len(excerpt) >= len(text) or not all(term in excerpt.lower() for term in terms):

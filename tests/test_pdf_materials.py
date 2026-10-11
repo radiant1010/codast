@@ -146,9 +146,48 @@ def test_pdf_page_limit_has_a_specific_error():
         extract('large.pdf', pdf_bytes([b'']*101))
 
 
-def test_font_recovery_does_not_run_table_detection_on_dense_drawings():
-    parts, _ = extract('drawing.pdf', inherited_korean_font_pdf(b'0 0 m 1 1 l S\n'*10001))
-    assert '사용' in '\n'.join(part.text for part in parts)
+def test_font_recovery_rejects_drawings_over_the_layout_limit():
+    with pytest.raises(ValueError, match='PDF 페이지 구조'):
+        extract('drawing.pdf', inherited_korean_font_pdf(b'0 0 m 1 1 l S\n'*10001))
+
+
+@pytest.mark.parametrize('field,value', [(b'name', b'Sample Person'), (b'password', b'fixture-pass')])
+def test_dense_pdf_cannot_save_values_without_sensitive_table_fields(tmp_path, monkeypatch, field, value):
+    monkeypatch.setitem(globals(), 'TABLE', TABLE.replace(b'(name)', b'('+field+b')')
+                        .replace(b'(Sample Person)', b'('+value+b')'))
+    harness = create_app(tmp_path/'ws').state.harness
+    harness.projects.create('one')
+    source = inherited_korean_font_pdf(b'0 0 m 1 1 l S\n'*10001, table=True)
+    with pytest.raises(ValueError, match='PDF 페이지 구조'):
+        harness.materials.import_file('one', 'dense.pdf', source)
+    assert harness.materials.list('one') == []
+    with harness.storage.connect() as db:
+        assert db.execute('SELECT count(*) FROM material_chunks').fetchone()[0] == 0
+
+
+@pytest.mark.parametrize('staged', [False, True])
+def test_legacy_guard_fingerprint_requires_reupload_before_delivery(tmp_path, monkeypatch, staged):
+    harness = create_app(tmp_path/'ws').state.harness
+    harness.projects.create('one')
+    store = harness.materials
+    with monkeypatch.context() as legacy:
+        legacy.setattr('app.core.materials.RULE_VERSION', 'kr-attachments-1-detect-secrets-1.5.0')
+        prepared = store.prepare('one', 'legacy.pdf', pdf_bytes([TABLE]))
+    if staged:
+        token = store.stage('one', prepared)
+        with pytest.raises(ValueError, match='설정'):
+            store.commit('one', token)
+        assert store.list('one') == []
+    else:
+        report = store.persist('one', prepared)
+        store = create_app(tmp_path/'ws').state.harness.materials
+        assert store.list('one')[0]['stale']
+        with pytest.raises(ValueError, match='설정'):
+            store.selected('one', [report['id']])
+    fresh = store.import_file('one', 'fresh.pdf', pdf_bytes([TABLE]))
+    selected, _ = store.selected('one', [fresh['id']])
+    assert 'Delivery request' in selected[0].content
+    assert 'Sample Person' not in selected[0].content
 
 
 def test_font_recovery_still_excludes_rotated_text():
