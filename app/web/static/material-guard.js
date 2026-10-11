@@ -58,7 +58,7 @@
   page.append(intro,form);
   const dialog=el('dialog',undefined,'session-drawer'),header=el('div',undefined,'account-dialog-header');dialog.id='attachment-dialog';dialog.setAttribute('aria-label','첨부 자료');
   header.append(el('h2','첨부 자료'),icon('close','첨부 자료 닫기',()=>dialog.close()));
-  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF 파일을 지원합니다. 파일당 최대 8 MiB입니다. 필요할 때 첨부 내용과 검사 내역을 확인할 수 있습니다. 보호 설정을 바꿨다면 파일을 다시 올려 주세요.','hint'),list);document.body.append(dialog);
+  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF 파일을 지원합니다. 파일당 최대 8 MiB입니다. 긴 자료에 대한 구체적인 질문은 관련 부분과 주변 내용을 발췌해 전달합니다. 전체 요약, 분석, 구현 요청은 전체 내용을 유지합니다. 보호 설정을 바꿨다면 파일을 다시 올려 주세요.','hint'),list);document.body.append(dialog);
   const historyDialog=el('dialog',undefined,'session-drawer'),historyHeader=el('div',undefined,'account-dialog-header'),historyTitle=el('h2'),historyInfo=el('p',undefined,'hint'),historyReport=el('div'),historyContent=el('pre');
   historyDialog.id='sent-attachment-dialog';historyDialog.setAttribute('aria-label','보낸 첨부 내용');let historyTicket=0;
   historyHeader.append(historyTitle,icon('close','보낸 첨부 닫기',()=>historyDialog.close()));
@@ -67,10 +67,13 @@
   async function openHistory(report,audit,b){
     const ticket=++historyTicket,owner=contextVersion;
     historyTitle.textContent=report.label;historyContent.textContent='첨부 내용을 불러오는 중…';
-    historyInfo.textContent='이 요청에 첨부한 가공본입니다. 원본 파일은 보관하지 않습니다. '+(audit.state==='dispatch_attempted'?'에이전트 전달을 시도한 자료입니다.':'실행 준비 시 연결한 자료이며 전달 여부는 확인되지 않았습니다.');
+    historyInfo.textContent=(report.delivery?.mode==='excerpt'?'이 요청에 선택된 발췌 내용입니다. 표시한 위치는 보관된 가공본의 문자 위치입니다. ':'이 요청에 첨부한 가공본 전체입니다. ')+(audit.state==='dispatch_attempted'?'에이전트 전달을 시도한 자료입니다.':'실행 준비 시 연결한 자료이며 전달 여부는 확인되지 않았습니다.');
     historyReport.replaceChildren(reportCard(report));if(!historyDialog.open)historyDialog.showModal();
     try{const result=await api(b+'/materials/'+encodeURIComponent(report.id));
-      if(ticket===historyTicket&&owner===contextVersion&&historyDialog.open)historyContent.textContent=result.content||'표시할 내용이 없습니다.';
+      if(ticket===historyTicket&&owner===contextVersion&&historyDialog.open){
+        const chars=Array.from(result.content||'');
+        historyContent.textContent=report.delivery?.mode==='excerpt'?report.delivery.ranges.map(([start,end])=>'[문자 '+(start+1)+'-'+end+']\n'+chars.slice(start,end).join('')).join('\n\n'):result.content||'표시할 내용이 없습니다.';
+      }
     }catch(e){if(ticket===historyTicket&&owner===contextVersion&&historyDialog.open)historyContent.textContent='첨부 내용을 불러오지 못했습니다. 자료가 삭제되었거나 서버에 연결할 수 없습니다. 닫은 뒤 다시 열어 주세요.';}
   }
   error.setAttribute('role','status');$('composer').append(error);
@@ -88,6 +91,7 @@
   function reportCard(report){
     const detail=el('details');detail.append(el('summary',report.label+', '+policyLabel(report)+', '+(report.status==='blocked'?'차단':report.stale?'다시 첨부해 주세요':'검사 완료')));
     detail.append(el('p',report.rule_version+(report.test_data?', 테스트용 자료':''),'hint'));
+    if(report.delivery){const d=report.delivery;detail.append(el('p',(d.mode==='excerpt'?'관련 부분 발췌':'전체 전달')+': '+d.source_chars.toLocaleString()+'자 중 '+d.sent_chars.toLocaleString()+'자 전달'+(d.mode==='excerpt'?' (안내 포함, '+Math.round(100*(1-d.sent_chars/d.source_chars))+'% 감소)':'')+'. 문자 수이며 실제 토큰 수와 다릅니다.','hint'));}
     const counts=new Map();for(const f of report.findings){const key=f.location+': '+kinds[f.kind]+' ('+actions[f.action]+')';counts.set(key,(counts.get(key)||0)+f.count);}
     detail.append(el('pre',Array.from(counts,([key,count])=>key+' '+count+'건').join('\n')||'가릴 정보를 찾지 못했습니다. 자동 검사는 일부 정보를 놓칠 수 있습니다.'));
     if(report.omissions?.length)detail.append(el('p',report.omissions.join(' / '),'hint'));
@@ -104,7 +108,7 @@
     list.replaceChildren();for(const row of rows.filter(row=>selected.has(row.id))){
       const card=el('article',undefined,'message');
       const detail=reportCard(row),preview=el('pre');detail.id='material-'+row.id;
-      card.append(detail,icon('file','전송할 내용 보기',async()=>{const b=url(),g=generation;const result=await api(b+'/materials/'+row.id);if(g===generation)preview.textContent=result.content||'차단되어 전달할 내용이 없습니다.';}),preview);list.append(card);
+      card.append(detail,icon('file','보관된 내용 보기',async()=>{const b=url(),g=generation;const result=await api(b+'/materials/'+row.id);if(g===generation)preview.textContent=result.content||'차단되어 전달할 내용이 없습니다.';}),preview);list.append(card);
     }
   }
 

@@ -24,7 +24,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 10:
+            if version > 11:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -173,6 +173,17 @@ class Storage:
                         project TEXT PRIMARY KEY, key BLOB NOT NULL CHECK(length(key)=32)
                     );
                     PRAGMA user_version=10;
+                    COMMIT;
+                """)
+
+            if version < 11:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE VIRTUAL TABLE IF NOT EXISTS material_chunks USING fts5(
+                        material UNINDEXED, ordinal UNINDEXED, start UNINDEXED, end UNINDEXED,
+                        parents UNINDEXED, content, tokenize='unicode61'
+                    );
+                    PRAGMA user_version=11;
                     COMMIT;
                 """)
 

@@ -59,6 +59,7 @@ class Part:
     location: str
     text: str
     field: str = ''
+    heading: int = 0
 
 
 PHONE = re.compile(r'(?<!\d)(?:\+82[ -]?(?:10|1[16789]|2|[3-6]\d)|0(?:10|1[16789]|2|[3-6]\d))[ -]?\d{3,4}[ -]?\d{4}(?!\d)')
@@ -168,7 +169,7 @@ def guard(parts, options, pseudonym_key=None, checkpoint=lambda: None):
             text = text[:start]+value+text[end:]
             findings.append({'location':part.location,'kind':kind,'action':action,'count':1})
             if len(findings)>10000: raise ValueError('탐지 결과 한도를 초과했습니다.')
-        output.append({'location':part.location, 'text':text})
+        output.append({'location':part.location, 'text':text, 'heading':part.heading})
     # No finding contains the matched value, field label or raw filename.
     return {'status':'blocked' if blocked else 'ready', 'level':options.level, 'privacy_mode':options.privacy_mode,
         'rule_version':RULE_VERSION,'findings':findings,

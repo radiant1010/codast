@@ -81,6 +81,26 @@ def test_extract_fails_closed_for_unsupported_malformed_and_entities():
     with pytest.raises(ValueError): extract('a.docx',stream.getvalue())
 
 
+@pytest.mark.parametrize('encoding,bom', [('utf-16-le', b'\xff\xfe'), ('utf-16-be', b'\xfe\xff')])
+@pytest.mark.parametrize('declaration', ['', '<!DOCTYPE metadata>', '<!ENTITY secret "value">'])
+def test_utf16_office_xml_preserves_text_and_still_rejects_entities(encoding, bom, declaration):
+    from openpyxl import Workbook
+    book = Workbook()
+    book.active.append(['Item', 'Value'])
+    book.active.append(['Aurora', 17])
+    stream = io.BytesIO()
+    book.save(stream)
+    xml = '<?xml version="1.0" encoding="UTF-16"?>'+declaration+'<metadata>한글</metadata>'
+    with zipfile.ZipFile(stream, 'a') as archive:
+        archive.writestr('customXml/item1.xml', bom+xml.encode(encoding))
+    if declaration:
+        with pytest.raises(ValueError):
+            extract('fixture.xlsx', stream.getvalue())
+    else:
+        parts, _ = extract('fixture.xlsx', stream.getvalue())
+        assert [p.text for p in parts] == ['Item', 'Value', 'Aurora', '17']
+
+
 class Recorder:
     def __init__(self): self.contexts=[]
     async def run(self, context):

@@ -6,7 +6,7 @@ const {chromium}=require('playwright');
  try{
   const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const preparedRows=new Map();
-  let options={level:'strong',fields:[]},rows=[],savedMessages=[],missingPreview=false,sent,serial=0,holdAfter=0,hold=false,release,fail=false,failChat=false,block=false;
+  let options={level:'strong',fields:[]},rows=[],savedMessages=[],missingPreview=false,previewContent='홍*동,010-****-2324',sent,serial=0,holdAfter=0,hold=false,release,fail=false,failChat=false,block=false;
   await page.route('http://localhost/**',async route=>{
    const req=route.request(),path=new URL(req.url()).pathname;
    if(path==='/')return route.fulfill({contentType:'text/html',body:fs.readFileSync('app/web/templates/index.html','utf8')});
@@ -19,7 +19,7 @@ const {chromium}=require('playwright');
     if(req.method()==='POST'){if(holdAfter&&--holdAfter===0)hold=true;if(hold){hold=false;await new Promise(done=>release=done);}if(fail){fail=false;return route.fulfill({status:400,json:{detail:'지원하지 않는 파일입니다.'}});}const row={id:(++serial).toString(16).padStart(32,'0'),label:'자료 '+serial+'.csv',level:options.level,privacy_mode:options.privacy_mode,rule_version:'fixture',status:block?'blocked':'ready',findings:[{location:'R2C1',kind:'name',action:'masked',count:1}],omissions:[],test_data:true};block=false;preparedRows.set(row.id,row);return route.fulfill({status:201,json:{token:row.id}});}
     return route.fulfill({json:{materials:rows}});
    }
-   if(resource.startsWith('materials/'))return missingPreview?route.fulfill({status:404,json:{detail:'자료를 찾을 수 없습니다.'}}):route.fulfill({json:{content:'홍*동,010-****-2324'}});
+   if(resource.startsWith('materials/'))return missingPreview?route.fulfill({status:404,json:{detail:'자료를 찾을 수 없습니다.'}}):route.fulfill({json:{content:previewContent}});
    if(resource==='messages')return route.fulfill({json:{messages:new URL(req.url()).searchParams.get('chat_id')==='a'.repeat(32)?savedMessages:[]}});
    if(resource==='chat'){if(failChat){failChat=false;return route.fulfill({status:503,json:{detail:'전송 실패 테스트'}});}sent=req.postDataJSON();savedMessages.unshift({task:'A',created_at:'2026-09-20T00:00:00Z',text:sent.text,run_id:'run',adapter:'codex',status:'completed',output:'테스트 완료',metadata:{guard:{state:'dispatch_attempted',materials:rows.filter(row=>sent.material_ids.includes(row.id))}}});return route.fulfill({json:{run_id:'run',action:'run',routing:{task:'A',kind:'explicit'}}});}
    const data={'/api/projects':{projects:['one']},'/api/onboarding':{status:'deferred'},'/api/notifications':{events:[],cursor:0,has_more:false},'/api/clients/codex/status':{models:[],limits:[]},'/api/session-overview':{sessions:[],running:[],usage:[]},settings:{client:'codex',mode:'read-only',cwd:'.'},workspace:{path:'fixture/one'},tasks:{tasks:[{id:'a'.repeat(32),task:'A',count:0},{id:'b'.repeat(32),task:'B',count:0}]},messages:{messages:[]},questions:{messages:[]},runs:{runs:[]},rules:{rules:[]},environment:{git:{state:'unavailable'},docker:{state:'unavailable'},ports:{values:[]}}};
@@ -59,7 +59,7 @@ const {chromium}=require('playwright');
   const id=n=>n.toString(16).padStart(32,'0');
   await page.waitForFunction(()=>window.materialGuard.selected().length===1);
   await page.locator('#attachment-chips .attachment-title').click();
-  await page.getByRole('button',{name:'전송할 내용 보기',exact:true}).click();await page.getByText('홍*동,010-****-2324',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'보관된 내용 보기',exact:true}).click();await page.getByText('홍*동,010-****-2324',{exact:true}).waitFor();
   await page.keyboard.press('Escape');
   await page.locator('#task-list button.task',{hasText:/^B$/}).click();assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[]);
   await page.locator('#task-list button.task',{hasText:/^A$/}).click();assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[id(1)]);
@@ -78,6 +78,15 @@ const {chromium}=require('playwright');
   await page.locator('#messages .sent-attachments .attachment-title').click();
   await page.locator('#sent-attachment-dialog pre').filter({hasText:'홍*동,010-****-2324'}).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[]);
+  await page.keyboard.press('Escape');
+  previewContent='😀앞\n관련내용\n생략할내용';
+  savedMessages[0].metadata.guard.materials[0].delivery={mode:'excerpt',source_chars:14,sent_chars:10,ranges:[[3,7]]};
+  await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+  await page.locator('#messages .sent-attachments .attachment-title').click();
+  await page.locator('#sent-attachment-dialog pre').filter({hasText:'관련내용'}).waitFor();
+  assert.doesNotMatch(await page.locator('#sent-attachment-dialog').innerText(),/생략할내용|😀앞/);
+  await page.locator('#sent-attachment-dialog details summary').click();
+  assert.match(await page.locator('#sent-attachment-dialog').innerText(),/관련 부분 발췌/);
   await page.keyboard.press('Escape');missingPreview=true;
   await page.locator('#messages .sent-attachments .attachment-title').click();
   await page.locator('#sent-attachment-dialog').getByText(/첨부 내용을 불러오지 못했습니다/).waitFor();

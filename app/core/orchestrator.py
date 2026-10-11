@@ -81,9 +81,12 @@ class Orchestrator:
             raise FileNotFoundError('작업 디렉터리를 찾을 수 없습니다.')
         rules = self.rules.load(root, command.cwd, self.rulebook_preferences(name))
         selected = [ContextPart(path=p, content=self.read_file(name, p)) for p in dict.fromkeys(command.context_paths)]
-        materials, audit = self.materials.selected(name, command.material_ids)
-        selected.extend(materials)
         selected.extend(extra_context or [])
+        base = self.context.build(command, rules, selected)
+        materials, audit = self.materials.selected(name, command.material_ids,
+                                                  query='' if workflow_id else command.text,
+                                                  budget=self.context.max_chars - len(base.model_dump_json()))
+        selected.extend(materials)
         adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))
         if command.client != 'mock':
             adapter.model = command.model

@@ -1,6 +1,7 @@
 """Bounded in-memory text extraction. Originals are never copied to the workspace."""
 import csv
 import io
+import re
 from pathlib import Path
 import zipfile
 from app.core.data_guard import Part
@@ -19,7 +20,7 @@ def extract(filename, content, options=None, checkpoint=lambda: None):
         from app.core.material_pdf import extract_pdf
         return extract_pdf(content,checkpoint)
     parts, size, visited = [], 0, 0
-    def add(location, text, field=''):
+    def add(location, text, field='', heading=0):
         nonlocal size, visited
         checkpoint()
         visited += 1
@@ -28,7 +29,8 @@ def extract(filename, content, options=None, checkpoint=lambda: None):
         if len(text)>16000: raise ValueError('한 셀·문단은 16,000자 이하만 지원합니다.')
         size += len(text)
         if size>MAX_TEXT or len(parts)>=10000: raise ValueError('추출 한도를 초과했습니다. 필요한 시트·페이지만 나누어 등록하세요.')
-        if text.strip(): parts.append(Part(location,text,str(field or '')))
+        # Empty headers preserve column positions without retaining every blank cell.
+        if text.strip() or re.search(r'R1C\d+$', location): parts.append(Part(location,text,str(field or ''),heading))
     omissions = []
     try:
         if suffix in {'.txt','.md','.csv'}:
@@ -49,7 +51,10 @@ def extract(filename, content, options=None, checkpoint=lambda: None):
                 # Reject entity declarations before passing XML to third-party parsers.
                 for entry in entries:
                     if entry.filename.endswith(('.xml','.rels')):
-                        xml = archive.read(entry).upper()
+                        xml = archive.read(entry)
+                        if xml.startswith((b'\xff\xfe', b'\xfe\xff')):
+                            xml = xml.decode('utf-16').encode('utf-8')
+                        xml = xml.upper()
                         if b'\x00' in xml or b'<!DOCTYPE' in xml or b'<!ENTITY' in xml: raise ValueError('지원하지 않는 XML 구조입니다.')
             omissions = ['이미지·도형·내장 객체·메타데이터는 전달하지 않음']
             if suffix=='.xlsx':
@@ -86,28 +91,41 @@ def extract(filename, content, options=None, checkpoint=lambda: None):
                 omissions.append('주석 제외')
             elif suffix=='.docx':
                 from docx import Document
+                from docx.text.paragraph import Paragraph
                 doc = Document(io.BytesIO(content))
-                for i,p in enumerate(doc.paragraphs,1): add(f'P{i}',p.text)
-                for t,table in enumerate(doc.tables,1):
-                    headers = [c.text for c in table.rows[0].cells] if table.rows else []
-                    for r,row in enumerate(table.rows,1):
-                        for c,cell in enumerate(row.cells,1): add(f'T{t}R{r}C{c}',cell.text,headers[c-1] if r>1 and c<=len(headers) else '')
+                paragraph, table_no = 0, 0
+                for block in doc.iter_inner_content():
+                    if isinstance(block, Paragraph):
+                        paragraph += 1
+                        heading = re.fullmatch(r'Heading ([1-6])', block.style.name) if block.style else None
+                        add(f'P{paragraph}',block.text,heading=int(heading[1]) if heading else 0)
+                    else:
+                        table_no += 1
+                        headers = [c.text for c in block.rows[0].cells] if block.rows else []
+                        for r,row in enumerate(block.rows,1):
+                            for c,cell in enumerate(row.cells,1): add(f'T{table_no}R{r}C{c}',cell.text,headers[c-1] if r>1 and c<=len(headers) else '')
                 omissions.append('머리말·꼬리말·주석·중첩 표·변경 이력 제외')
             else:
                 from pptx import Presentation
                 deck = Presentation(io.BytesIO(content))
-                for s,slide in enumerate(deck.slides,1):
-                    for n,shape in enumerate(slide.shapes,1):
-                        if shape.has_text_frame: add(f'S{s}T{n}',shape.text)
+                def shapes(items, prefix):
+                    for n,shape in enumerate(items,1):
+                        checkpoint()
+                        location = f'{prefix}T{n}'
+                        if hasattr(shape, 'shapes'):
+                            shapes(shape.shapes, location)
+                        if shape.has_text_frame: add(location,shape.text)
                         if shape.has_table:
                             table = shape.table; headers = [c.text for c in table.rows[0].cells]
                             for r,row in enumerate(table.rows,1):
-                                for c,cell in enumerate(row.cells,1): add(f'S{s}T{n}R{r}C{c}',cell.text,headers[c-1] if r>1 else '')
-                omissions.append('발표자 노트·그룹 도형·마스터 제외')
+                                for c,cell in enumerate(row.cells,1): add(f'{location}R{r}C{c}',cell.text,headers[c-1] if r>1 else '')
+                for s,slide in enumerate(deck.slides,1):
+                    shapes(slide.shapes, f'S{s}')
+                omissions.append('발표자 노트, 마스터 제외')
     except (ValueError,UnicodeError) as exc:
         # Do not reflect parser messages which may include source data.
         raise ValueError('파일을 읽을 수 없거나 처리 한도를 초과했습니다. 텍스트는 UTF-8을 사용하세요. 엑셀 선택을 설정했다면 시트와 열 번호가 맞는지, 숨김 시트인지 확인하세요.') from None
     except Exception:
         raise ValueError('파일 추출에 실패했습니다. 원본은 저장하거나 전달하지 않았습니다.') from None
-    if not parts: raise ValueError('전달 가능한 텍스트가 없습니다.')
+    if not any(part.text.strip() for part in parts): raise ValueError('전달 가능한 텍스트가 없습니다.')
     return parts, omissions
