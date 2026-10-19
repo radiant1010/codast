@@ -20,7 +20,7 @@
     for(const [key,page] of pages){page.node.hidden=key!==last;page.link.setAttribute('aria-current',key===last?'page':'false');}
     if(selected.node.tagName==='DETAILS')selected.node.open=true;
     if(last==='history'&&$('project').value)act(()=>history());
-    content.scrollTop=0;heading.focus();
+    content.scrollTop=0;heading.focus();selected.node.dispatchEvent(new Event('settings-open'));
   }
   window.settingsPage={
     register(key,label,node){const link=el('a',label);link.href='#settings/'+key;nav.append(link);node.classList.add('settings-content');node.hidden=true;content.append(node);pages.set(key,{label,node,link});},

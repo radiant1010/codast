@@ -36,6 +36,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.folder_picker = FolderPicker()
     app.state.codex_status = CodexStatus()
     app.state.environment_status = EnvironmentStatus()
+    from app.llm.plugins import Plugins
+    app.state.plugins = Plugins()
     app.state.onboarding = Onboarding(app.state.harness)
     from app.core.document_vault import DocumentVault
     app.state.document_vault = DocumentVault(projects)
@@ -56,6 +58,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     for exception in (PermissionError, FileExistsError, FileNotFoundError, ValueError, IsADirectoryError, NotADirectoryError):
         app.add_exception_handler(exception, error)
     app.include_router(router)
+    from app.api.plugins import router as plugins_router
+    app.include_router(plugins_router)
     from app.api.materials import router as materials_router
     app.include_router(materials_router)
     from app.api.document_vault import router as document_vault_router
