@@ -90,6 +90,8 @@ class Orchestrator:
         adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))
         if command.client != 'mock':
             adapter.model = command.model
+            adapter.reasoning_effort = command.reasoning_effort
+            adapter.ultracode = command.ultracode
         chat = self.storage.resolve_chat(name, command.task, command.chat_id)
         command = command.model_copy(update={'task': chat['task'], 'chat_id': chat['id']})
         context = self.context.build(command, rules, selected)
@@ -122,6 +124,7 @@ class Orchestrator:
         started = time.monotonic()
         metadata = {'chat_id': command.chat_id, 'client': command.client, 'mode': command.mode, 'resumed': bool(session),
                     'requested_model': command.model,
+                    'requested_reasoning_effort': command.reasoning_effort, 'requested_ultracode': command.ultracode,
                     'history_count': len(context.history),
                     'rules': [{'path': rule.path, 'sha256': hashlib.sha256(rule.content.encode('utf-8')).hexdigest()}
                               for rule in context.rules]}

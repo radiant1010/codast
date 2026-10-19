@@ -100,6 +100,12 @@ async def clients(request: Request):
     return {'clients': await asyncio.gather(*(probe(client, s.storage.client_path(client)) for client in ('codex','claude')))}
 
 
+@router.get('/clients/claude/options')
+def claude_execution_options(request: Request):
+    from app.llm.claude_options import claude_options
+    return claude_options(executable('claude', service(request).storage.client_path('claude')))
+
+
 @router.post('/connections/check')
 async def connections_check(request: Request):
     from app.core.connections import check_connections

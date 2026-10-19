@@ -2,7 +2,7 @@
 (()=>{
   const panel=el('section',undefined,'vault-panel');panel.id='document-vault-panel';
   const intro=el('p','문서를 작성하고 변경 내용을 검토하세요. 이전 승인본과 검토 결과는 문서함에 함께 보관됩니다.','hint');
-  const setup=el('form',undefined,'modal-form'),path=el('input'),mode=el('select'),status=el('p',undefined,'hint');
+  const setup=el('form',undefined,'modal-form'),path=el('input',undefined,'form-control'),mode=el('select'),status=el('p',undefined,'hint');
   path.id='vault-path';path.required=true;path.placeholder='산출물을 보관할 폴더의 전체 경로';
   mode.id='vault-mode';mode.add(new Option('새 문서함 만들기','create'));mode.add(new Option('기존 문서함 연결','connect'));
   status.id='vault-status';status.setAttribute('role','status');
@@ -31,7 +31,7 @@
   const head=el('header'),heading=el('h2','새 산출물');heading.id='vault-editor-heading';
   const close=icon('close','산출물 편집 닫기',()=>{if(canClose())dialog.close();});head.append(heading,close);
   const meta=el('p',undefined,'hint'),editorStatus=el('p',undefined,'hint');editorStatus.id='vault-editor-status';editorStatus.setAttribute('role','status');
-  const form=el('form',undefined,'modal-form'),title=el('input'),content=el('textarea'),reason=el('textarea');
+  const form=el('form',undefined,'modal-form'),title=el('input',undefined,'form-control'),content=el('textarea'),reason=el('textarea');
   title.id='vault-title';title.required=true;title.maxLength=120;
   content.id='vault-content';content.maxLength=200000;content.rows=12;content.spellcheck=false;
   reason.id='vault-reason';reason.maxLength=2000;reason.rows=2;reason.placeholder='이번 내용을 검토해야 하는 이유를 입력하세요.';
@@ -42,7 +42,7 @@
     const result=await request(endpoint()+'/documents/'+doc.id+'/reviews','POST',{connection_id:binding.connection_id,expected_revision:doc.revision,reason:reason.value});
     renderDocument(result);await loadList();editorStatus.textContent='검토를 요청했습니다. 변경 전후를 확인하고 검토 결과를 입력하세요.';
   }));
-  const upload=el('input');upload.type='file';upload.accept='.md,.txt';upload.hidden=true;
+  const upload=el('input',undefined,'form-control');upload.type='file';upload.accept='.md,.txt';upload.hidden=true;
   const importFile=icon('importDocument','Markdown 또는 텍스트 불러오기',()=>upload.click());
   upload.onchange=()=>run(async()=>{
     const file=upload.files[0];if(!file)return;

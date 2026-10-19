@@ -113,8 +113,70 @@ def test_windows_default_install_discovery_without_path(tmp_path, monkeypatch):
     monkeypatch.setattr('app.llm.cli.shutil.which', lambda client: str(wrapper) if client == 'codex' else None)
     monkeypatch.setattr(Path, 'home', lambda: home)
     monkeypatch.setenv('LOCALAPPDATA', str(local))
+    monkeypatch.setenv('APPDATA', str(tmp_path/'roaming'))
     assert executable('claude') == str(cli.resolve())
     assert executable('codex') == str(codex.resolve())
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows Claude install locations')
+@pytest.mark.parametrize('native_version,desktop_version,expected', [
+    ('2.1.8', '2.1.10', 'desktop'),
+    ('2.1.11', '2.1.10', 'native'),
+    ('2.1.8', None, 'older_desktop'),
+])
+def test_claude_auto_discovery_selects_newest_runnable_install(tmp_path, monkeypatch, native_version, desktop_version, expected):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from app.llm.cli import executable
+    home, roaming = tmp_path/'home', tmp_path/'roaming'
+    desktop_root = roaming/'Claude'/'claude-code'
+    paths = {'native': home/'.local'/'bin'/'claude.exe',
+             'desktop': desktop_root/'2.1.10'/'build-new'/'claude.exe',
+             'older_desktop': desktop_root/'2.1.9'/'build-old'/'claude.exe'}
+    for path in paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    versions = {str(paths['native']): native_version, str(paths['desktop']): desktop_version,
+                str(paths['older_desktop']): '2.1.9'}
+    calls = []
+    def version(argv, **kwargs):
+        calls.append(argv)
+        assert argv[1:] == ['--version']
+        value = versions[argv[0]]
+        if value is None:
+            raise OSError('Incomplete installation')
+        return SimpleNamespace(returncode=0, stdout=value+' (Claude Code)')
+    monkeypatch.setattr('app.llm.claude_options.subprocess.run', version)
+    monkeypatch.setattr('app.llm.cli.shutil.which', lambda client: str(paths['native']))
+    monkeypatch.setattr(Path, 'home', lambda: home)
+    monkeypatch.setenv('APPDATA', str(roaming))
+    assert executable('claude') == str(paths[expected].resolve())
+    assert len([call for call in calls if call[0] == str(paths['native'])]) == 1
+    calls.clear()
+    assert executable('claude', str(paths['native'])) == str(paths['native'].resolve())
+    assert calls == []
+    paths['native'].unlink()
+    with pytest.raises(FileNotFoundError):
+        executable('claude', str(paths['native']))
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows Claude install locations')
+def test_claude_desktop_discovery_without_native_cli_ignores_shell_wrapper(tmp_path, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from app.llm.cli import executable
+    desktop = tmp_path/'roaming'/'Claude'/'claude-code'/'2.1.10'/'build'/'claude.exe'
+    desktop.parent.mkdir(parents=True)
+    desktop.touch()
+    wrapper = tmp_path/'claude.cmd';wrapper.touch()
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path/'home')
+    monkeypatch.setenv('APPDATA', str(tmp_path/'roaming'))
+    monkeypatch.setattr('app.llm.cli.shutil.which', lambda client: str(wrapper))
+    def version(argv, **kwargs):
+        assert argv == [str(desktop), '--version']
+        return SimpleNamespace(returncode=0, stdout='2.1.10 (Claude Code)')
+    monkeypatch.setattr('app.llm.claude_options.subprocess.run', version)
+    assert executable('claude') == str(desktop.resolve())
 
 @pytest.mark.parametrize('executable', [False, True])
 def test_picker_foreground_launch_and_failures(monkeypatch, executable):

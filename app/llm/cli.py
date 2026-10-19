@@ -11,10 +11,11 @@ import time
 
 from app.models.schemas import AgentResult
 from app.core.questions import QUESTION_INSTRUCTION
+from app.llm.claude_options import claude_options, claude_version
 
 
 def discovery_candidates(client):
-    """PATH first, then bounded native install locations; never run shell wrappers."""
+    """Enumerate PATH and bounded native install locations; never run shell wrappers."""
     found = shutil.which(client)
     if found:
         yield Path(found)
@@ -26,6 +27,11 @@ def discovery_candidates(client):
         home = None
     if home:
         yield home / '.local' / 'bin' / (client + '.exe')
+    roaming = os.environ.get('APPDATA')
+    if client == 'claude' and roaming:
+        folder = Path(roaming) / 'Claude' / 'claude-code'
+        if folder.is_dir():
+            yield from sorted(folder.glob('*/*/claude.exe'))
     local = os.environ.get('LOCALAPPDATA')
     if client == 'codex' and local:
         folder = Path(local) / 'OpenAI' / 'Codex' / 'bin'
@@ -36,8 +42,20 @@ def discovery_candidates(client):
 def executable(client, configured=''):
     if client not in ('codex', 'claude'):
         raise ValueError('지원하지 않는 클라이언트입니다.')
-    path = configured or next((str(p) for p in discovery_candidates(client)
-                               if p.is_file() and (os.name != 'nt' or p.suffix.lower() == '.exe')), '')
+    path = configured
+    if not path:
+        candidates = list(dict.fromkeys(p.resolve() for p in discovery_candidates(client)
+                                       if p.is_file() and (os.name != 'nt' or p.suffix.lower() == '.exe')))
+        path = str(candidates[0]) if candidates else ''
+        if client == 'claude' and os.name == 'nt' and len(candidates) > 1:
+            newest = (0, 0, 0)
+            for candidate in candidates:
+                try:
+                    version = claude_version(str(candidate))
+                except ValueError:
+                    continue
+                if version and (number := tuple(map(int, version.split('.')))) > newest:
+                    path, newest = str(candidate), number
     if not path or not Path(path).is_file():
         raise FileNotFoundError(f'{client} 실행 파일을 찾지 못했습니다. 설치 후 클라이언트 화면에서 경로를 지정하세요.')
     path = str(Path(path).resolve())
@@ -155,11 +173,16 @@ class CliAdapter:
         self.on_event = None
         self.seen_text = {}
         self.model = None
+        self.reasoning_effort = None
+        self.ultracode = None
 
     def arguments(self, mode, session=None):
         if self.client == 'codex':
             # Global config applies to both new and resumed exec sessions.
-            args = [self.path, '-c', 'approval_policy="never"', '-c', f'sandbox_mode="{mode}"', 'exec']
+            args = [self.path, '-c', 'approval_policy="never"', '-c', f'sandbox_mode="{mode}"']
+            if self.reasoning_effort:
+                args += ['-c', f'model_reasoning_effort="{self.reasoning_effort}"']
+            args += ['exec']
             if session:
                 args += ['resume', session]
             if self.model:
@@ -171,9 +194,24 @@ class CliAdapter:
             args += ['--resume', session]
         if self.model:
             args += ['--model', self.model]
+        if self.reasoning_effort:
+            args += ['--effort', self.reasoning_effort]
+        args += ['--settings', json.dumps({'ultracode': self.ultracode is True})]
         return args
 
     async def execute(self, context, cwd, mode, session=None):
+        if self.client == 'claude' and (self.model or self.ultracode):
+            choices = await asyncio.to_thread(claude_options, self.path)
+            model = next((row for row in choices['models'] if row['model'] == self.model), None)
+            if model and not model['available']:
+                raise ValueError('선택한 모델에는 Claude Code '+model['minimumVersion']+' 이상이 필요합니다.')
+            efforts = [row['reasoningEffort'] for row in model['supportedReasoningEfforts']] if model else []
+            if model and self.reasoning_effort and self.reasoning_effort not in efforts:
+                raise ValueError('선택한 모델의 추론 강도를 확인할 수 없거나 지원하지 않습니다. 모델과 강도를 다시 선택하세요.')
+            if self.ultracode and not choices['ultracode']:
+                raise ValueError('Ultracode를 켜려면 Claude Code 2.1.284 이상이 필요합니다.')
+            if self.ultracode and 'xhigh' not in efforts:
+                raise ValueError('Ultracode를 켜려면 Extra high를 지원하는 모델을 선택하세요.')
         prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + QUESTION_INSTRUCTION + context
         options = {'on_line': self.stream_line} if self.on_event else {}
         code, stdout, stderr = await self.runner.run(self.arguments(mode, session), cwd, prompt, **options)

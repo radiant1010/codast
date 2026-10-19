@@ -1,0 +1,17 @@
+Bootstrap 5.3.8
+Source: https://github.com/twbs/bootstrap/tree/v5.3.8
+License: bootstrap-5.3.8/LICENSE (MIT)
+The compiled CSS is distributed unchanged. The optional development source map
+and JavaScript plugins are not bundled; the application uses its own controls.
+
+Pretendard 1.3.9
+Source: https://github.com/orioncactus/pretendard/tree/v1.3.9/packages/pretendard/dist/web/variable
+License: pretendard-1.3.9/LICENSE (SIL Open Font License 1.1)
+PretendardVariable.woff2 is distributed unchanged. pretendard.css is a local
+font-face declaration that preserves the application's Pretendard family name.
+
+Google Material Symbols, Sharp, 24px, default weight 400
+Source: https://github.com/google/material-design-icons/tree/49d4db35df873165d6bd6ba09b063c7dafbac2f4/symbols/web
+License: material-symbols-sharp/LICENSE (Apache License 2.0)
+Selected SVG paths are bundled in symbols.svg as named symbols. Their original
+coordinate systems are preserved; the application supplies the current text color.

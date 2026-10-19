@@ -286,6 +286,8 @@ class Storage:
                 if prior:
                     previous = json.loads(prior['command'])
                     previous.setdefault('material_ids', [])
+                    previous.setdefault('reasoning_effort', None)
+                    previous.setdefault('ultracode', None)
                     if 'chat_id' not in previous:
                         message = db.execute('SELECT chat_id FROM messages WHERE run_id=?', (run_id,)).fetchone()
                         previous['chat_id'] = message['chat_id'] if message else None

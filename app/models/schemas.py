@@ -14,7 +14,24 @@ class WorkspaceRegister(ProjectCreate):
     path: str = Field(min_length=1, max_length=4096)
 
 
-class Command(StrictModel):
+class ExecutionSettings(StrictModel):
+    client: Literal['mock', 'codex', 'claude'] = 'mock'
+    model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$')
+    reasoning_effort: Literal['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] | None = None
+    ultracode: bool | None = None
+
+    @model_validator(mode='after')
+    def validate_reasoning(self):
+        if self.client != 'claude' and self.ultracode is not None:
+            raise ValueError('Ultracode는 Claude 전용 설정입니다.')
+        if self.client == 'claude' and self.reasoning_effort in ('none', 'minimal', 'ultra'):
+            raise ValueError('Claude가 지원하지 않는 추론 강도입니다.')
+        if self.client == 'mock' and self.reasoning_effort is not None:
+            raise ValueError('추론 강도는 Codex 또는 Claude에서 설정하세요.')
+        return self
+
+
+class Command(ExecutionSettings):
     chat_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
     text: str = Field(min_length=1, max_length=8000, pattern=r"\S")
     raw_text: str | None = Field(default=None, max_length=8000)
@@ -22,10 +39,8 @@ class Command(StrictModel):
     context_paths: list[str] = Field(default_factory=list, max_length=10)
     material_ids: list[str] = Field(default_factory=list, max_length=10)
     task: str = Field(default="", max_length=120)
-    client: Literal['mock', 'codex', 'claude'] = 'mock'
     mode: Literal['read-only', 'workspace-write'] = 'read-only'
     fresh: bool = False
-    model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
 
 
 class MessageCreate(StrictModel):
@@ -42,11 +57,9 @@ class FileWrite(StrictModel):
     content: str = Field(max_length=65536)
 
 
-class ProjectSettings(StrictModel):
-    model: str | None = Field(default=None, min_length=1, max_length=200, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$')
+class ProjectSettings(ExecutionSettings):
     cwd: str = Field(default=".", max_length=1024)
     context_paths: list[str] = Field(default_factory=list, max_length=10)
-    client: Literal['mock', 'codex', 'claude'] = 'mock'
     mode: Literal['read-only', 'workspace-write'] = 'read-only'
 
 

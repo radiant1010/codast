@@ -9,14 +9,14 @@
   const page=el('section'),intro=el('p','첨부한 파일에서 개인정보와 비밀 키를 찾아 가립니다. 메시지, 이전 대화, 작업 규칙이나 에이전트가 직접 읽는 파일에는 적용되지 않습니다. 이미 보낸 정보는 이 설정을 바꿔도 되돌릴 수 없습니다.','hint');
   const badge=el('span',undefined,'hint'),toolbar=el('div',undefined,'attachment-toolbar'),chips=el('div',undefined,'attachment-chips');chips.id='attachment-chips';
   function icon(kind,label,fn){const b=button(label,fn);window.actionIcon(b,kind,label);return b;}
-  $('text').closest('.command-entry').before(chips);$('action-hint').before(toolbar);
+  $('text').before(chips);$('composer-toolbar').prepend(toolbar);
   const form=el('form',undefined,'modal-form'),levelLabel=el('label','비밀 키와 비밀번호'),level=el('select');level.id='guard-level';levelLabel.htmlFor=level.id;
   for(const [value,label] of Object.entries({strong:'가리기 (개인키 첨부 차단)',allow:'원본 그대로 전송'})){const opt=el('option',label);opt.value=value;level.append(opt);}
   const privacyLabel=el('label','개인정보 처리 방식'),privacy=el('select'),privacyHint=el('p',undefined,'hint');privacy.id='guard-privacy-mode';privacyLabel.htmlFor=privacy.id;
   for(const [value,label] of Object.entries(privacyModes)){const opt=el('option',label);opt.value=value;privacy.append(opt);}
   const warning=el('p',undefined,'hint'),fields=el('div',undefined,'modal-form');
   function fieldRow(value='',kind='name'){
-    const row=el('div',undefined,'field-action-row'),input=el('input'),select=el('select');input.value=value;input.maxLength=60;input.placeholder='예: 담당자명';input.setAttribute('aria-label','보호할 열 또는 항목 이름');
+    const row=el('div',undefined,'field-action-row'),input=el('input',undefined,'form-control'),select=el('select');input.value=value;input.maxLength=60;input.placeholder='예: 담당자명';input.setAttribute('aria-label','보호할 열 또는 항목 이름');
     for(const [key,label] of Object.entries(kinds))if(key!=='private_key'){const option=el('option',label);option.value=key;select.append(option);}select.value=kind;select.setAttribute('aria-label','정보 유형');
     row.append(input,select,icon('trash','보호할 항목 삭제',()=>row.remove()));fields.append(row);
   }
@@ -25,7 +25,7 @@
   const excel=el('details'),excelBody=el('div',undefined,'modal-form'),sheetRows=el('div',undefined,'modal-form');sheetRows.id='guard-excel-sheets';let sheetSerial=0;
   function columnName(value){let label='';while(value){value--;label=String.fromCharCode(65+value%26)+label;value=Math.floor(value/26);}return label;}
   function sheetRow(value={sheet:1,columns:[]}){
-    const row=el('div',undefined,'modal-form'),number=el('input'),columns=el('input');
+    const row=el('div',undefined,'modal-form'),number=el('input',undefined,'form-control'),columns=el('input',undefined,'form-control');
     number.type='number';number.min='1';number.max='1000';number.required=true;number.value=value.sheet;number.dataset.sheet='';
     columns.value=(value.columns||[]).map(columnName).join(', ');columns.placeholder='예: A, C, D (비우면 모든 열)';columns.maxLength=5000;columns.dataset.columns='';
     const serial=++sheetSerial;
@@ -48,11 +48,11 @@
   excel.append(el('summary','엑셀에서 보낼 시트와 열 선택'),excelBody);
   excelBody.append(el('p','이 프로젝트에 올리는 XLSX 파일에 적용합니다. 선택을 추가하지 않으면 숨기지 않은 모든 시트와 열을 읽습니다. 선택을 추가하면 지정한 시트와 열만 보냅니다. 시트 번호는 숨김 시트를 포함한 파일 안의 순서이며 1부터 시작합니다. 숨김 시트는 보낼 수 없습니다.','hint'),sheetRows,icon('plus','엑셀 시트 선택 추가',()=>{if(sheetRows.children.length<50)sheetRow({sheet:sheetRows.children.length+1,columns:[]});}),el('p','예: 시트 번호 1, 보낼 열 A, C. 선택한 셀에는 위 개인정보 처리 방식을 적용합니다. 첫 번째 행을 열 이름으로 사용하며 수식은 제외합니다. 다른 파일 형식에는 이 선택이 적용되지 않습니다. 설정을 저장한 후 파일을 첨부하세요.','hint'));
   form.append(privacyLabel,privacy,privacyHint,levelLabel,level,warning,el('p','추가로 가릴 항목이 있나요? 예를 들어 엑셀에 “담당자명” 열이 있다면, 아래에 담당자명을 입력하고 정보 유형을 이름으로 선택하세요. “담당자명: 홍길동”처럼 적힌 내용에도 적용됩니다.','hint'),fields,icon('plus','보호할 항목 추가',()=>{if(fields.children.length<30)fieldRow();}),excel,save);
-  const picker=el('input');picker.type='file';picker.id='attachment-picker';picker.multiple=true;picker.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';picker.hidden=true;
-  const testLabel=el('label',undefined,'check'),test=el('input');test.type='checkbox';test.id='guard-test-data';testLabel.append(test,document.createTextNode('테스트용 자료로 표시 (보호 설정은 그대로 적용)'));
-  const upload=icon('paperclip','파일 첨부',()=>{if(!project)throw Error('프로젝트를 선택하세요.');picker.click();});
+  const picker=el('input',undefined,'form-control');picker.type='file';picker.id='attachment-picker';picker.multiple=true;picker.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';picker.hidden=true;
+  const testLabel=el('label',undefined,'check'),test=el('input',undefined,'form-check-input');test.type='checkbox';test.id='guard-test-data';testLabel.append(test,document.createTextNode('테스트용 자료로 표시 (보호 설정은 그대로 적용)'));
+  const upload=icon('plus','파일 첨부',()=>{if(!project)throw Error('프로젝트를 선택하세요.');picker.click();});
   const hint=el('span','파일을 놓아 첨부','hint attachment-drop-hint');
-  toolbar.append(upload,hint,badge,picker);
+  toolbar.append(upload,hint,picker);badge.classList.add('attachment-notice');$('composer-toolbar').after(badge);
   const list=el('div');list.id='guard-materials';const error=el('p',undefined,'error');
   const saveRow=el('div',undefined,'field-action-row');saveRow.append(save,saveStatus);form.append(testLabel,saveRow);
   page.append(intro,form);
@@ -133,7 +133,7 @@
   const progress=el('div',undefined,'attachment-progress field-action-row'),progressText=el('span');
   progress.id='attachment-progress';progress.hidden=true;progressText.setAttribute('role','status');
   const cancelUpload=icon('close','첨부 처리 취소',()=>{uploadController?.abort();cancelUpload.disabled=true;progressText.textContent='취소 중…';});
-  progress.append(progressText,cancelUpload);toolbar.after(progress);
+  progress.append(progressText,cancelUpload);$('composer-toolbar').after(progress);
   async function uploadFiles(files){
     if(!files.length)return;
     if(uploading)throw Error('현재 첨부 자료를 검사 중입니다.');

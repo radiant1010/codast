@@ -77,8 +77,12 @@ def normalize(models, limits):
     result = {'models': [], 'limits': [], 'models_state': 'unavailable', 'limits_state': 'unavailable'}
     if 'result' in models:
         result['models_state'] = 'available'
-        result['models'] = [{key: row.get(key) for key in ('id', 'model', 'displayName', 'isDefault')}
-                            for row in models['result'].get('data', [])]
+        for row in models['result'].get('data', []):
+            public = {key: row.get(key) for key in ('id', 'model', 'displayName', 'isDefault', 'defaultReasoningEffort')}
+            public['supportedReasoningEfforts'] = [
+                {key: effort.get(key) for key in ('reasoningEffort', 'description')}
+                for effort in row.get('supportedReasoningEfforts', []) if isinstance(effort, dict)]
+            result['models'].append(public)
         result['models_has_more'] = bool(models['result'].get('nextCursor'))
     if 'result' in limits:
         data = limits['result']

@@ -9,9 +9,10 @@
   };
   const chatId=(name,task)=>Object.entries(project(name).identities||{}).find(([,title])=>title===task)?.[0];
   const id=(name,task)=>chatId(name,task)?'@'+chatId(name,task):JSON.stringify(task);
-  const fingerprint=payload=>JSON.stringify(Object.fromEntries(Object.entries({material_ids:[],...payload,...(payload.chat_id?{task:''}:{})}).sort(([a],[b])=>a.localeCompare(b))));
+  const fingerprint=payload=>JSON.stringify(Object.fromEntries(Object.entries({material_ids:[],reasoning_effort:null,ultracode:null,...payload,...(payload.chat_id?{task:''}:{})}).sort(([a],[b])=>a.localeCompare(b))));
   function persist(){try{localStorage.setItem(key,JSON.stringify(data));sessionStorage.removeItem(key);}catch{notice('브라우저 저장이 불가능합니다. 이 탭에서만 작성 내용을 유지합니다.',true);}}
   function capture(){return {text:$('text').value,client:$('client').value,model:window.selectedConfiguredModel?.()||null,
+    ...window.selectedReasoningSettings?.(),
     cwd:$('cwd').value,mode:$('mode').value,paths:selectedPaths(),fresh:$('fresh').checked,
     material_ids:window.materialGuard?.selected()||[],action:$('action').value,offset,scroll:$('messages').scrollTop};}
   function save(){if(!ready||!active)return;const state=capture();if(pendingScroll!==null)state.scroll=pendingScroll;project(active.project).chats[id(active.project,active.task)]=state;persist();}
@@ -49,14 +50,17 @@
       const current=active,p=project(name),saved=p.chats[id(name,task)]||{};
       p.selected=task;p.selectedId=chatId(name,task)||null;data.lastProject=name;persist();
       const state={text:'',client:defaults.client,model:defaults.model,cwd:defaults.cwd,mode:defaults.mode,
+        reasoning_effort:defaults.reasoning_effort??null,ultracode:defaults.ultracode??null,
         paths:defaults.context_paths||[],fresh:false,action:'run',offset:0,scroll:0,...saved};
-      if(!['codex','claude'].includes(state.client)){state.client=['codex','claude'].includes(defaults.client)?defaults.client:'codex';state.model=null;}
+      if(Object.keys(saved).length){state.reasoning_effort=saved.reasoning_effort??null;state.ultracode=saved.ultracode??null;}
+      if(state.client!=='claude')state.ultracode=null;
+      if(!['codex','claude'].includes(state.client)){state.client=['codex','claude'].includes(defaults.client)?defaults.client:'codex';state.model=null;state.reasoning_effort=null;state.ultracode=null;}
       p.chats[id(name,task)]=state;persist();
       $('text').value=state.text;$('task-name').value=task||'';$('client').value=state.client;
       $('cwd').value=state.cwd;$('mode').value=state.mode;$('fresh').checked=state.fresh;$('action').value='run';
       offset=state.offset;
       window.materialGuard?.restore(name,state.material_ids||[]);
-      window.loadModelChoices?.(state.model);
+      window.loadModelChoices?.(state.model,state.reasoning_effort,state.ultracode);
       if(active!==current)return null;
       pendingScroll=state.scroll;ready=true;
       return {state,current};

@@ -8,13 +8,13 @@
   const navigation=el('nav');navigation.className='rulebook-navigation';navigation.setAttribute('aria-label','룰북 목록');
   const toolbar=el('div',undefined,'rulebook-toolbar'),tree=el('div');tree.id='rulebook-tree';
   const editor=el('section',undefined,'rulebook-editor');
-  const name=el('input');name.id='rulebook-name';name.maxLength=80;
+  const name=el('input',undefined,'form-control');name.id='rulebook-name';name.maxLength=80;
   const folder=el('select');folder.id='rulebook-folder';
   const content=el('textarea');content.id='rulebook-content';content.rows=14;content.maxLength=24000;content.spellcheck=false;
   const empty=el('p','룰북을 선택하거나 추가하세요.','hint');
   const fields=el('div');
   for(const [text,node] of [['이름',name],['폴더',folder],['내용',content]]){const label=el('label',text);label.htmlFor=node.id;fields.append(label,node);}
-  const filePicker=el('input');filePicker.type='file';filePicker.accept='.md,.txt';filePicker.multiple=true;filePicker.hidden=true;filePicker.id='rulebook-import-files';
+  const filePicker=el('input',undefined,'form-control');filePicker.type='file';filePicker.accept='.md,.txt';filePicker.multiple=true;filePicker.hidden=true;filePicker.id='rulebook-import-files';
   const importFiles=button('',async()=>filePicker.click());window.actionIcon(importFiles,'importDocument','룰북 파일 추가');
   const importRow=el('div',undefined,'rulebook-import-row');importRow.append(importFiles,el('span','나만의 룰북 파일을 추가해 주세요.','hint'),filePicker);
   filePicker.onchange=async()=>{
@@ -65,7 +65,7 @@
   }
   function renderTree(){
     const open=new Map([...tree.querySelectorAll('details')].map(n=>[n.dataset.folder,n.open]));tree.replaceChildren();const root=el('div','최상위로 이동','rulebook-root-drop');root.title='폴더나 룰북을 여기에 놓으세요.';dropTarget(root,'');tree.append(root);
-    function row(book,parent){const line=el('div',undefined,'rulebook-row');const checked=el('input');checked.type='checkbox';checked.checked=book.enabled;checked.setAttribute('aria-label',book.name+' 적용');checked.onchange=()=>{book.enabled=checked.checked;dirty();};
+    function row(book,parent){const line=el('div',undefined,'rulebook-row');const checked=el('input',undefined,'form-check-input');checked.type='checkbox';checked.checked=book.enabled;checked.setAttribute('aria-label',book.name+' 적용');checked.onchange=()=>{book.enabled=checked.checked;dirty();};
       const select=button(book.name,async()=>{selected=book.id;renderTree();renderEditor();},'rulebook-select');select.setAttribute('aria-pressed',String(selected===book.id));line.dataset.book=book.id;draggable(select,{kind:'book',value:book.id});dropTarget(line,book.folder,book.id);line.append(checked,select);parent.append(line);}
     for(const book of books.filter(b=>!b.trashed&&!b.folder))row(book,tree);
     function branch(parent,target){

@@ -3,7 +3,13 @@ let projectDefaults={}, chatLoading=false, projectReady=false;
 let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false, pollTimer;
 const statusNames={running:'실행 중 / 종료 미확인',completed:'완료',failed:'실패',interrupted:'중단'};
 const taskStates={active:'진행',paused:'보류',done:'완료'};
-function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function el(tag,text,cls){
+  const n=document.createElement(tag);
+  if(text!==undefined)n.textContent=text;
+  const styles={button:'btn btn-outline-secondary',select:'form-select',textarea:'form-control'};
+  n.className=[styles[tag],cls].filter(Boolean).join(' ');
+  return n;
+}
 // Presentation only: keep the original response on the node and in storage.
 function consoleText(value){
   const lines=String(value).split('\n'),hidden=new Set();
@@ -49,7 +55,7 @@ function streamRun(id,b,container,refresh){
   source.addEventListener('detached',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)act(async()=>{await conversation(b);if(valid(b,generation))notice('서버 연결이 바뀌었습니다. 실행 종료 여부를 확인한 뒤 기록을 정리하세요.',true);});});
   source.onerror=()=>{if(valid(b,generation)&&container.isConnected&&source.readyState!==EventSource.CLOSED)notice('응답 연결을 다시 시도하고 있습니다. 마지막으로 받은 내용부터 이어집니다.');};
 }
-$('toggle-sidebar').onclick=()=>{const collapsed=$('workspace').classList.toggle('collapsed');$('toggle-sidebar').setAttribute('aria-expanded',String(!collapsed));$('toggle-sidebar').title=collapsed?'제어판 펼치기':'제어판 접기';};
+$('toggle-sidebar').onclick=()=>{const collapsed=$('workspace').classList.toggle('collapsed');$('toggle-sidebar').setAttribute('aria-expanded',String(!collapsed));$('toggle-sidebar').title=collapsed?'제어판 펼치기':'제어판 접기';$('toggle-sidebar').setAttribute('aria-label',$('toggle-sidebar').title);};
 $('new-output').onclick=()=>followOutput(true);
 $('messages').onscroll=()=>{if(atBottom())$('new-output').hidden=true;};
 $('history-panel').ontoggle=()=>{if($('history-panel').open&&$('project').value)act(()=>history());};
@@ -120,6 +126,10 @@ function messageCard(m,b){
     const summary=el('summary',agent+', '+state+(info.elapsed_seconds!==undefined?', '+info.elapsed_seconds+'초':'')+', '+(tokens===null?'토큰 사용량 미수신':'토큰 사용량 '+tokens.toLocaleString('ko-KR')+'개'),'state '+m.status);
     summary.title='실행 과정과 사용량 펼치기';
     detail.append(summary,detailBody);
+    if('requested_reasoning_effort' in info){
+      detailBody.append(el('h4','요청한 실행 설정'),el('p','모델: '+(info.requested_model||'CLI 기본')+', 추론: '+(info.requested_reasoning_effort||'CLI 기본')+(m.adapter==='claude'?', Ultracode: '+(info.requested_ultracode===null?'CLI 기본':info.requested_ultracode?'켜기':'끄기'):''),'run-usage'));
+      if(info.execution_model)detailBody.append(el('p','CLI가 보고한 모델: '+info.execution_model,'run-usage'));
+    }
     if(info.usage)detailBody.append(el('h4','사용량'),el('pre',JSON.stringify(info.usage,null,2),'run-usage'));
     detailBody.append(el('h4',m.status==='running'&&m.cancellable?'실시간 실행 과정':'저장된 실행 과정'),log);
     answer.append(detail,consoleOutput(m.output||m.error||(m.cancellable?'에이전트가 작업 중입니다. 위에서 실행 과정을 펼쳐 볼 수 있습니다.':'서버가 이 실행을 관리하고 있지 않습니다. 프로세스가 종료됐는지 확인해 주세요.')));
@@ -187,8 +197,9 @@ async function loadRules(b=base()){
 async function history(){const b=base(),e=epoch,d=await api(b+'/runs?limit=20&offset='+historyOffset);if(!valid(b,e))return;$('history').replaceChildren();for(const r of d.runs){const item=el('details');item.append(el('summary',new Date(r.started_at).toLocaleString()+', '+r.adapter+', '+statusNames[r.status]+', '+r.command.text.slice(0,60)),consoleOutput(r.output||r.error||'실행 중 / 종료 미확인'));$('history').append(item);}if(!d.runs.length)$('history').textContent='실행 기록이 없습니다.';$('history-prev').disabled=historyOffset===0;$('history-next').disabled=d.runs.length<20;}
 $('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;act(async()=>{
   if(window.materialGuard?.isUploading())throw Error('첨부 자료 검사 완료 후 보내세요.');
+  window.validateExecutionSettings?.();
   const b=base(),generation=epoch,sentProject=$('project').value,sentTask=filter,sentText=$('text').value;window.chatState.save();busy=true;$('send').disabled=true;
-  const payload={text:$('text').value,task:$('task-name').value,chat_id:window.chatState.identity(sentProject,$('task-name').value),auto_route:$('auto-route').checked,action:'run',client:$('client').value,mode:$('mode').value,fresh:$('fresh').checked,model:window.selectedExecutionModel?.()||null,cwd:$('cwd').value,context_paths:selectedPaths(),material_ids:window.materialGuard?.selected()||[]};
+  const payload={text:$('text').value,task:$('task-name').value,chat_id:window.chatState.identity(sentProject,$('task-name').value),auto_route:$('auto-route').checked,action:'run',client:$('client').value,mode:$('mode').value,fresh:$('fresh').checked,model:window.selectedExecutionModel?.()||null,...window.selectedReasoningSettings?.(true),cwd:$('cwd').value,context_paths:selectedPaths(),material_ids:window.materialGuard?.selected()||[]};
   try{const requestId=window.chatState.request(sentProject,sentTask,payload);
     const data=await api(b+'/chat','POST',{...payload,request_id:requestId});
     window.chatState.acknowledge(sentProject,sentTask,requestId);
@@ -210,15 +221,15 @@ $('create').onsubmit=e=>{e.preventDefault();act(async()=>{const name=$('name').v
 $('reload').onclick=()=>act(()=>projectReady?switchChat(filter):loadProject());$('reload-rules').onclick=()=>act(()=>loadRules());
 $('messages-prev').onclick=()=>act(async()=>{offset=Math.max(0,offset-20);await conversation();});$('messages-next').onclick=()=>act(async()=>{offset+=20;await conversation();});
 $('history-prev').onclick=()=>act(async()=>{historyOffset=Math.max(0,historyOffset-20);await history();});$('history-next').onclick=()=>act(async()=>{historyOffset+=20;await history();});
-$('save-settings').onclick=()=>act(async()=>{projectDefaults=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
+$('save-settings').onclick=()=>act(async()=>{projectDefaults=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null,...window.selectedReasoningSettings?.()});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
 $('probe-clients').onclick=()=>act(async()=>{
-  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?', '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('클라이언트 경로를 저장했습니다. 다시 확인을 눌러 검증하세요.');},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
+  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?', '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input',undefined,'form-control');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('클라이언트 경로를 저장했습니다. 다시 확인을 눌러 검증하세요.');},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
 });
 
 
 async function trash(){
   const d=await api('/deleted-projects');$('deleted-projects').replaceChildren();
-  for(const name of d.projects){const row=el('div',undefined,'row');row.append(el('span',name),button('복원',async()=>{await api('/deleted-projects/'+encodeURIComponent(name)+'/restore','POST');await projects(name);await loadProject();await trash();notice('프로젝트와 기존 기록을 복원했습니다.');},'icon-action'));$('deleted-projects').append(row);}
+  for(const name of d.projects){const row=el('div',undefined,'action-row');row.append(el('span',name),button('복원',async()=>{await api('/deleted-projects/'+encodeURIComponent(name)+'/restore','POST');await projects(name);await loadProject();await trash();notice('프로젝트와 기존 기록을 복원했습니다.');},'icon-action'));$('deleted-projects').append(row);}
   if(!d.projects.length)$('deleted-projects').textContent='삭제한 프로젝트가 없습니다.';
 }
 $('trash-panel').ontoggle=()=>{if($('trash-panel').open)act(trash);};

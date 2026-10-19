@@ -25,14 +25,14 @@
   const connectionHint=$('clients-panel').querySelector('.hint');connectionHint.before(connectionIntro);connectionIntro.append(connectionHint,$('probe-clients'));
   const workspaceHeader=el('div',undefined,'account-dialog-header');
   const workspaceTitle=$('workspace-dialog-title');workspaceTitle.before(workspaceHeader);workspaceHeader.append(workspaceTitle,$('cancel-workspace'));
-  $('cancel-workspace').textContent='×';$('cancel-workspace').className='account-dialog-close';$('cancel-workspace').setAttribute('aria-label','프로젝트 연결 닫기');$('cancel-workspace').title='닫기';
+  $('cancel-workspace').classList.add('account-dialog-close');window.actionIcon($('cancel-workspace'),'close','프로젝트 연결 닫기');
   function openSection(node){if(node.dataset.settingsKey){window.settingsPage.open(node.dataset.settingsKey);return;}const dialog=sectionDialogs.get(node);node.open=true;dialog.showModal();dialog.scrollTop=0;if(node.id==='rules-panel')act(()=>window.openRulebook?.());}
   const project=$('project-panel');project.querySelector('summary').textContent='프로젝트';
   project.querySelector('label[for=project]').remove();$('project').setAttribute('aria-label','프로젝트 선택');
   const chats=el('section',undefined,'chat-navigation');
   const title=el('div',undefined,'side-title');const titleActions=el('div',undefined,'section-header-actions');titleActions.append($('reload'));title.append(el('h2','채팅 세션'),titleActions);chats.append(title);
   const createChat=el('dialog',undefined,'session-drawer'),chatForm=el('form');
-  const chatLabel=el('label','새 채팅 이름'),chatInput=el('input');chatInput.id='new-chat-name';chatInput.maxLength=120;chatInput.required=true;chatLabel.htmlFor=chatInput.id;
+  const chatLabel=el('label','새 채팅 이름'),chatInput=el('input',undefined,'form-control');chatInput.id='new-chat-name';chatInput.maxLength=120;chatInput.required=true;chatLabel.htmlFor=chatInput.id;
   const createButton=el('button');createButton.type='submit';window.actionIcon(createButton,'plus','새 채팅 만들기');
   const chatHeader=el('div',undefined,'account-dialog-header');chatHeader.append(el('h2','새 채팅'),closeIcon('새 채팅 닫기',async()=>createChat.close()));
   const chatRow=el('div',undefined,'field-action-row');chatRow.append(chatInput,createButton);
@@ -43,10 +43,12 @@
     if(groups.some(g=>g.task===name)||window.chatState.drafts($('project').value).includes(name))throw Error('같은 이름의 채팅이 있습니다. 목록에서 선택하세요.');
     await api(base()+'/tasks','POST',{task:name});createChat.close();await switchChat(name);$('text').focus();notice('새 채팅을 저장했습니다. 작성 중인 내용도 이 브라우저에 보관됩니다.');
   });};
-  chats.append(button('＋ 새 채팅',async()=>{
+  const newChat=button('',async()=>{
     if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');
     chatInput.value='';createChat.showModal();chatInput.focus();
-  },'new-chat'),$('task-list'),$('chat-archive'));
+  },'new-chat');
+  window.actionIcon(newChat,'plus','새 채팅');newChat.classList.replace('action-icon','button-with-icon');newChat.append(document.createTextNode('새 채팅'));
+  chats.append(newChat,$('task-list'),$('chat-archive'));
   project.querySelector('.side-title').remove();
   const projectTools=el('details');projectTools.id='project-tools';projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));projectTools.dataset.settingsKey='projects';
   const path=el('p','프로젝트를 선택하세요.','project-location');project.append(path);
@@ -101,8 +103,8 @@
       if(selected!==importProject||agent!==selectedImportClient)return;importStatus.textContent=data.preview_scope;
       const transcript=el('div',undefined,'native-thread-preview');for(const message of data.messages){transcript.append(el('strong',message.role==='user'?'사용자':agent==='codex'?'Codex':'Claude'),el('pre',message.text));if(message.delivery_details){const details=el('details');details.append(el('summary','전달 내용 상세'+(message.details_truncated?', 일부 표시':'')),el('pre',message.delivery_details));transcript.append(details);}}
       if(!data.messages.length)transcript.append(el('p','표시할 저장 메시지가 없습니다.'));
-      const name=el('input');name.maxLength=120;name.value=(thread.name||'불러온 세션').slice(0,120);name.setAttribute('aria-label','연결할 새 채팅 이름');
-      const ack=el('input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('다른 창이나 CLI에서 이 세션의 실행을 멈췄습니다. 동시 실행하지 않겠습니다.'));
+      const name=el('input',undefined,'form-control');name.maxLength=120;name.value=(thread.name||'불러온 세션').slice(0,120);name.setAttribute('aria-label','연결할 새 채팅 이름');
+      const ack=el('input',undefined,'form-check-input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('다른 창이나 CLI에서 이 세션의 실행을 멈췄습니다. 동시 실행하지 않겠습니다.'));
       const attach=button('선택',async()=>{if(!ack.checked)return;attach.disabled=true;
         try{if($('project').value!==selected||agent!==selectedImportClient)throw Error('프로젝트가 변경되었습니다. 다시 열어 주세요.');
           window.chatState.save();
@@ -131,7 +133,8 @@
   usage.append(el('p','현재 프로젝트에서 기록한 사용량입니다. 계정의 남은 사용량이나 대화에 남은 공간과는 다릅니다.','hint'));
   const usageDetails=el('section',undefined,'session-usage-details');usageDetails.id='recent-session-usage';usageDetails.hidden=true;
   usageDetails.append(el('p','에이전트마다 최근에 실행한 채팅 3개를 보여 줍니다. 완료된 채팅도 포함됩니다.','hint'));
-  const toggleUsage=button('+',async()=>{usageDetails.hidden=!usageDetails.hidden;toggleUsage.textContent=usageDetails.hidden?'+':'−';toggleUsage.setAttribute('aria-expanded',String(!usageDetails.hidden));toggleUsage.setAttribute('aria-label',usageDetails.hidden?'최근 세션 사용량 펼치기':'최근 세션 사용량 접기');});
+  const toggleUsage=button('',async()=>{usageDetails.hidden=!usageDetails.hidden;window.actionIcon(toggleUsage,usageDetails.hidden?'plus':'minus',usageDetails.hidden?'최근 세션 사용량 펼치기':'최근 세션 사용량 접기');toggleUsage.setAttribute('aria-expanded',String(!usageDetails.hidden));});
+  window.actionIcon(toggleUsage,'plus','최근 세션 사용량 펼치기');
   toggleUsage.setAttribute('aria-label','최근 세션 사용량 펼치기');toggleUsage.setAttribute('aria-expanded','false');toggleUsage.setAttribute('aria-controls',usageDetails.id);usageHeading.append(toggleUsage);
   const usageList=el('div');usageList.id='session-usage-list';usageDetails.append(usageList);usage.append(usageDetails);
   const running=el('section',undefined,'running-panel');const rh=el('div',undefined,'side-title');rh.append(el('h2','작업 중인 세션'));
@@ -141,8 +144,7 @@
   const accountLabel=el('h2','계정 사용량');
   const accountDetails=el('dialog',undefined,'session-drawer');
   const accountHeader=el('div',undefined,'account-dialog-header');
-  const accountClose=button('×',async()=>accountDetails.close(),'account-dialog-close');
-  accountClose.setAttribute('aria-label','조회 정보 닫기');accountClose.title='닫기';
+  const accountClose=closeIcon('조회 정보 닫기',async()=>accountDetails.close());
   accountHeader.append(el('h2','Codex 조회 정보'),accountClose);accountDetails.append(accountHeader);
   const accountBody=el('div');accountDetails.append(accountBody);document.body.append(accountDetails);
   const accountHead=el('div',undefined,'compact-panel-head'),accountActions=el('div',undefined,'section-header-actions');
@@ -247,12 +249,16 @@
   const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='저장된 실행 종료 알림을 확인합니다.';top.after(alertBox);
   const expand=button('확장',async()=>{const on=$('workspace').classList.toggle('console-expanded');expand.textContent=on?'복원':'확장';expand.setAttribute('aria-pressed',String(on));});expand.setAttribute('aria-pressed','false');$('console').querySelector('header').append(expand);
   const native=el('div',undefined,'native-session');native.id='native-session';$('console').querySelector('header').after(native);
-  const composer=$('composer'),picker=el('div',undefined,'agent-picker');const label=el('label','AI 에이전트');label.htmlFor='client';picker.append(label,$('client'));composer.prepend(picker);
+  const composer=$('composer'),picker=el('details',undefined,'model-picker');picker.id='model-picker';
+  const summary=el('summary','모델 선택');summary.id='execution-summary';
+  const modelMenu=el('div',undefined,'execution-menu');modelMenu.id='execution-menu';
+  const label=el('label','AI 에이전트');label.htmlFor='client';modelMenu.append(label,$('client'));picker.append(summary,modelMenu);
   const oldLabel=$('settings-panel').querySelector('label[for="client"]');oldLabel.remove();
   $('action').value='run';$('auto-route').checked=false;
   const options=$('composer').querySelector('.composer-options');options.hidden=true;
-  const entry=el('div',undefined,'command-entry');$('text').before(entry);entry.append($('text'),$('send'));
-  $('text').placeholder='선택한 에이전트에게 메시지를 보내세요. Ctrl+Enter로 전송';$('text').rows=2;
+  const entry=el('div',undefined,'command-entry'),toolbar=el('div',undefined,'composer-toolbar');toolbar.id='composer-toolbar';
+  $('text').before(entry);toolbar.append(picker,$('send'));entry.append($('text'),toolbar);
+  $('text').placeholder='선택한 에이전트에게 메시지를 보내세요. Ctrl+Enter로 전송';$('text').rows=2;$('text').setAttribute('aria-label','요청 내용');
   // Grow with the draft, including restored text and wrapping after width changes.
   const input=$('text');let resizeFrame=0,lastInputWidth=0;
   window.resizeComposer=()=>{

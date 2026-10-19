@@ -9,13 +9,31 @@ function screen(storage=new Map()){
     localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},
     sessionStorage:{getItem:()=>null,removeItem(){}},
     $:id=>nodes[id],selectedPaths:()=>context.paths,paths:[],offset:0,notice:()=>{},actionHint:()=>{}};
-  context.window.loadModelChoices=async model=>{context.model=model;};
+  context.window.loadModelChoices=async(model,reasoning_effort=null,ultracode=null)=>{context.model=model;context.reasoning={reasoning_effort,ultracode};};
   context.window.selectedConfiguredModel=()=>context.model;
+  context.window.selectedReasoningSettings=()=>context.reasoning;
   vm.createContext(context);vm.runInContext(source,context);
   return {context,nodes,state:context.window.chatState,storage};
 }
 const defaults={client:'codex',model:null,cwd:'.',mode:'read-only',context_paths:[]};
 async function open(ui,project,task){ui.state.pause();const result=await ui.state.restore(project,task,defaults);if(result){ui.context.paths=result.state.paths;ui.state.finish(result);}return result;}
+
+test('chat switching and reload preserve independent effort and Ultracode choices',async()=>{
+  const ui=screen();await open(ui,'one','A');ui.nodes.client.value='claude';ui.context.model='claude-opus-5';
+  ui.context.reasoning={reasoning_effort:'medium',ultracode:true};
+  await open(ui,'one','B');assert.equal(ui.context.reasoning.reasoning_effort,null);
+  ui.context.reasoning={reasoning_effort:'ultra',ultracode:null};
+  await open(ui,'one','A');assert.equal(ui.context.reasoning.reasoning_effort,'medium');assert.equal(ui.context.reasoning.ultracode,true);
+  const reloaded=screen(ui.storage);await open(reloaded,'one','B');
+  assert.equal(reloaded.context.reasoning.reasoning_effort,'ultra');assert.equal(reloaded.context.reasoning.ultracode,null);
+});
+
+test('legacy chat settings do not inherit newly added project reasoning overrides',async()=>{
+  const storage=new Map([['codast.chat-state.v1',JSON.stringify({projects:{one:{chats:{'"A"':{client:'codex',model:null,text:'keep'}}}}})]]);
+  const ui=screen(storage);const result=await ui.state.restore('one','A',{...defaults,client:'claude',reasoning_effort:'max',ultracode:true});
+  ui.state.finish(result);
+  assert.equal(ui.nodes.client.value,'codex');assert.equal(ui.context.reasoning.reasoning_effort,null);assert.equal(ui.context.reasoning.ultracode,null);
+});
 
 test('chat/project switching and reload preserve draft, settings, files and scroll',async()=>{
   const ui=screen();await open(ui,'one','A');

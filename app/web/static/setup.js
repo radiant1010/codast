@@ -3,29 +3,6 @@
   let connecting=false;
   async function runConnection(fn){if(connecting)return;connecting=true;dialog.querySelectorAll('button,input,select').forEach(n=>n.disabled=true);try{await fn();}catch(e){status.textContent='● '+e.message;status.style.color='#ef9292';}finally{connecting=false;dialog.querySelectorAll('button,input,select').forEach(n=>n.disabled=false);}}
   const icon=(kind,label,fn)=>{const b=button('',()=>runConnection(fn));window.actionIcon(b,kind,label);return b;};
-  const model=el('select');model.id='execution-model';model.setAttribute('aria-label','실행 모델');
-  const modelLabel=el('label','모델');modelLabel.htmlFor=model.id;
-  $('client').parentElement.append(modelLabel,model);
-  let modelClient='',ticket=0;
-  window.loadModelChoices=async(selected=null)=>{
-    const client=$('client').value,request=++ticket;
-    modelClient=client;model.replaceChildren(new Option('CLI 기본 모델',''));if(selected){model.add(new Option(selected+' (저장됨, 확인 중)',selected));model.value=selected;}model.disabled=true;
-    if(client!=='codex'){model.disabled=false;return;}
-    try{
-      const data=await api('/clients/codex/status');if(request!==ticket||client!==$('client').value)return;
-      model.replaceChildren(new Option('CLI 기본 모델',''));for(const row of data.models||[])if(row.model)model.add(new Option(row.displayName||row.model,row.model));
-      if(selected&&!Array.from(model.options).some(o=>o.value===selected))model.add(new Option(selected+' (저장됨, 사용 가능 여부 미확인)',selected));
-      model.value=selected||'';
-    }catch(error){if(request===ticket)notice('모델 목록 조회 실패: '+error.message,true);}
-    finally{if(request===ticket)model.disabled=false;}
-  };
-  window.selectedConfiguredModel=()=>modelClient===$('client').value?model.value||null:null;
-  window.selectedExecutionModel=()=>{
-    const explicit=$('text').value.trim().match(/^\/(codex|claude)(?:\s|$)/)?.[1];
-    return (!explicit||explicit===modelClient)&&modelClient===$('client').value?model.value||null:null;
-  };
-  $('client').addEventListener('change',()=>act(()=>window.loadModelChoices()));
-  model.addEventListener('change',()=>notice('모델을 선택했습니다. 실행 설정 저장으로 다음 접속에도 유지할 수 있습니다.'));
   const dialog=el('dialog',undefined,'session-drawer');dialog.id='onboarding-dialog';dialog.setAttribute('aria-label','최초 연결 설정');
   const head=el('div',undefined,'account-dialog-header');head.append(el('h2','작업실 연결'),icon('close','설정 나중에 하기',defer));
   const project=el('select');project.setAttribute('aria-label','연결할 프로젝트');
@@ -35,7 +12,7 @@
   const connectionLabel=row=>!row?'미확인':row.state!=='installed'?(row.state==='missing'?'찾지 못함':'확인 실패'):row.auth==='ready'?'인증 확인':row.auth==='check_required'?'로그인 필요':'인증 미확인';
   function renderTabs(){for(const tab of tabs.children){const selected=tab.dataset.client===client.value;tab.setAttribute('aria-pressed',String(selected));tab.textContent=(tab.dataset.client==='codex'?'Codex':'Claude')+', '+connectionLabel(observations[tab.dataset.client]);}}
   for(const value of ['codex','claude']){const tab=button(value==='codex'?'Codex':'Claude',()=>runConnection(async()=>{draftPaths[client.value]=path.value;client.value=value;path.value=draftPaths[value]??observations[value]?.path??'';renderTabs();await inspect();}));tab.dataset.client=value;tabs.append(tab);}
-  const path=el('input');path.id='onboarding-cli-path';path.setAttribute('aria-label','CLI 실행 파일 경로');path.placeholder='자동으로 찾지 못하면 실행 파일을 선택하세요';
+  const path=el('input',undefined,'form-control');path.id='onboarding-cli-path';path.setAttribute('aria-label','CLI 실행 파일 경로');path.placeholder='자동으로 찾지 못하면 실행 파일을 선택하세요';
   const status=el('p');status.setAttribute('role','status');const commands=el('pre');commands.style.whiteSpace='pre-wrap';
   const pathRow=el('div',undefined,'client-path-row');pathRow.append(path,icon('folder','CLI 실행 파일 선택',async()=>{status.textContent='● Windows 파일 선택 창에서 '+(client.value==='codex'?'codex.exe':'claude.exe')+'를 선택하세요. 최대 60초 후 대기를 종료합니다.';status.style.color='#7ab8ff';const chosen=await api('/clients/'+client.value+'/executable-picker','POST');if(!chosen.path){status.textContent='● 파일 선택을 취소했습니다. 기존 연결은 유지됩니다.';return;}path.value=chosen.path;draftPaths[client.value]=chosen.path;await api('/clients/'+client.value,'PUT',{path:chosen.path});await inspect();}));
   const pathLabel=el('label','CLI 실행 파일');pathLabel.htmlFor=path.id;
@@ -46,7 +23,7 @@
   const projectRow=el('div',undefined,'client-path-row');project.style.flex='1';project.style.minWidth='0';
   projectRow.append(project,icon('folder','프로젝트 등록 열기',async()=>{await api('/onboarding','PUT',selection());dialog.close();$('add-workspace').click();}));
   const projectStep=el('section');projectStep.append(el('h3','2. 프로젝트를 만들거나 선택하세요'),projectRow);
-  const newProject=el('input');newProject.placeholder='새 프로젝트 이름';newProject.setAttribute('aria-label','새 프로젝트 이름');
+  const newProject=el('input',undefined,'form-control');newProject.placeholder='새 프로젝트 이름';newProject.setAttribute('aria-label','새 프로젝트 이름');
   const createRow=el('div',undefined,'client-path-row');createRow.append(newProject,icon('plus','새 프로젝트 생성',async()=>{
     const name=newProject.value.trim();await api('/projects','POST',{name});project.add(new Option(name,name));project.value=name;newProject.value='';await inspect();
   }));projectStep.append(createRow);
