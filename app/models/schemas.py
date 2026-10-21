@@ -116,6 +116,7 @@ class AgentResult(BaseModel):
     session_id: str | None = None
     usage: dict | None = None
     execution_model: str | None = None
+    context_usage: dict | None = None
 
 
 class RulebookEntry(StrictModel):

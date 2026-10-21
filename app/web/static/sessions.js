@@ -145,7 +145,7 @@
   const accountDetails=el('dialog',undefined,'session-drawer');
   const accountHeader=el('div',undefined,'account-dialog-header');
   const accountClose=closeIcon('조회 정보 닫기',async()=>accountDetails.close());
-  accountHeader.append(el('h2','Codex 조회 정보'),accountClose);accountDetails.append(accountHeader);
+  accountHeader.append(el('h2','모델과 사용 한도'),accountClose);accountDetails.append(accountHeader);
   const accountBody=el('div');accountDetails.append(accountBody);document.body.append(accountDetails);
   const accountHead=el('div',undefined,'compact-panel-head'),accountActions=el('div',undefined,'section-header-actions');
   const accountDetail=button('모델과 사용 한도',async()=>accountDetails.showModal());accountDetail.title='모델과 사용 한도 보기';
@@ -154,7 +154,7 @@
   for(const name of ['AI','한도 사용률','초기화'])accountTitles.append(el('th',name));
   accountThead.append(accountTitles);const accountRows=el('tbody');accountTable.append(accountThead,accountRows);account.append(accountTable);
   function accountPlaceholder(client,text){const row=el('tr');row.append(el('td',client),el('td',text),el('td','—'));return row;}
-  accountRows.append(accountPlaceholder('Codex','조회 중…'),accountPlaceholder('Claude','미수집'));
+  accountRows.append(accountPlaceholder('Codex','조회 중…'),accountPlaceholder('Claude','조회 중…'));
   const metrics=el('section');
   metrics.append(usage,running);window.settingsPage.register('usage','사용량',metrics);
   usageDetails.hidden=false;toggleUsage.remove();
@@ -163,7 +163,9 @@
   const sessionsHead=el('div',undefined,'compact-panel-head'),sessionActions=el('div',undefined,'section-header-actions');
   sessionActions.append(alerts,button('상세',async()=>window.settingsPage.open('usage')));sessionsHead.append(el('h2','AI 세션'),sessionActions);
   const table=el('table',undefined,'compact-session-table'),thead=el('thead'),tr=el('tr');
-  for(const name of ['AI / 채팅','상태','컨텍스트','누적 토큰','실행 모델'])tr.append(el('th',name));
+  for(const name of ['AI / 채팅','상태','컨텍스트','누적 토큰','실행 모델']){
+    const th=el('th',name);if(name==='컨텍스트')th.title='마지막 측정값, 수치에 마우스를 올리면 토큰 수와 측정 시간이 표시됩니다.';tr.append(th);
+  }
   thead.append(tr);const sessionRows=el('tbody');table.append(thead,sessionRows);sessionsPanel.append(sessionsHead,table);
   const environment=el('section',undefined,'compact-environment'),envHead=el('div',undefined,'compact-panel-head');
   envHead.append(el('h2','실행 환경'),el('div',undefined,'section-header-actions'));environment.append(envHead);
@@ -206,44 +208,60 @@
   setInterval(()=>{if(!document.hidden)refreshEnvironment();},15000);
   top.replaceChildren(sessionsPanel,account,environment);
   let statusBusy=false;
+  const accountSnapshots={};
   const accountStatus=queryStatus(account,'계정 정보',refreshAccount);
   async function refreshAccount(){
     if(statusBusy)return;statusBusy=true;
     accountStatus('loading','계정 정보 확인 중');
     try{
-      const data=await api('/clients/codex/status');
-      if(data.state==='error')throw Error('계정 조회 실패');
-      accountBody.replaceChildren();
-      accountStatus(data.state==='error'?'error':'ready',data.state==='error'?'정보를 불러오지 못했습니다. 다시 시도할 수 있습니다.':'확인 '+new Date(data.checked_at).toLocaleTimeString());
+      const results=await Promise.all(['codex','claude'].map(async client=>{
+        try{return {client,models:[],limits:[],...await api('/clients/'+client+'/status')};}
+        catch{return {client,state:'error',models:[],limits:[]};}
+      }));
+      accountBody.replaceChildren();accountRows.replaceChildren();
       const duration=minutes=>minutes===10080?'주간':minutes===300?'5시간':minutes?minutes+'분':'기간 미제공';
-      accountRows.replaceChildren();
-      for(const limit of data.limits.filter(row=>row.bucket==='codex')){
-        const row=el('tr'),known=typeof limit.usedPercent==='number'&&Number.isFinite(limit.usedPercent);
-        const value=el('td',duration(limit.windowDurationMins)+' '+(known?limit.usedPercent+'%':'미수신'));
-        const reset=limit.resetsAt?new Date(limit.resetsAt*1000):null;
-        row.append(el('td','Codex'),value,el('td',reset&&!Number.isNaN(reset.getTime())?reset.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'미제공'));accountRows.append(row);
+      const labels={not_installed:'CLI 미설치',login_required:'로그인 필요',permission_required:'로그인 권한 확인 필요',
+        credentials_unavailable:'인증정보 확인 필요',unsupported:'구독 계정 조회 미지원',rate_limited:'조회 제한, 잠시 후 재시도',error:'조회 실패'};
+      for(const data of results){
+        const client=data.client,label=client==='claude'?'Claude':'Codex';
+        const previous=['error','rate_limited'].includes(data.state)?accountSnapshots[client]:null;
+        if(['available','partial'].includes(data.state))accountSnapshots[client]=data;
+        else if(!previous)delete accountSnapshots[client];
+        const observed=previous||data,rows=observed.limits.filter(row=>row.bucket===client);
+        for(const limit of rows){
+          const row=el('tr'),known=typeof limit.usedPercent==='number'&&Number.isFinite(limit.usedPercent);
+          const value=el('td',duration(limit.windowDurationMins)+' '+(known?limit.usedPercent+'%':'미수신')+(previous?' (마지막 조회)':''));
+          const reset=limit.resetsAt!=null?new Date(limit.resetsAt*1000):null;
+          row.append(el('td',limit.name||label),value,el('td',reset&&!Number.isNaN(reset.getTime())?reset.toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}):'미제공'));accountRows.append(row);
+        }
+        if(previous||!rows.length)accountRows.append(accountPlaceholder(label,labels[data.state]||'한도 미제공'));
+        accountBody.append(el('h3',label));
+        if(previous)accountBody.append(el('p',(labels[data.state]||'조회 실패')+'. 마지막으로 확인한 값을 표시합니다.','hint'));
+        const limits=el('div',undefined,'account-limits');
+        for(const row of [...observed.limits].sort((a,b)=>(a.bucket===client?0:1)-(b.bucket===client?0:1))){
+          const card=el('section',undefined,'account-limit');
+          const name=(row.name||(row.bucket===client?label:row.bucket))+', '+duration(row.windowDurationMins);
+          card.append(el('h3',name));
+          const meter=el('div',undefined,'account-limit-meter');
+          const known=typeof row.usedPercent==='number'&&Number.isFinite(row.usedPercent);
+          if(known){const bar=el('progress');bar.max=100;bar.value=Math.max(0,Math.min(100,row.usedPercent));bar.setAttribute('aria-label',name+' 사용률');meter.append(bar);}
+          meter.append(el('span',known?row.usedPercent+'% 사용':'사용률 미제공'));card.append(meter);
+          const reset=row.resetsAt!=null?new Date(row.resetsAt*1000):null;
+          card.append(el('p','초기화, '+(reset&&!Number.isNaN(reset.getTime())?reset.toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'미제공'),'account-limit-reset'));limits.append(card);
+        }
+        if(!observed.limits.length)limits.append(el('p',labels[data.state]||'한도 정보를 받지 못했습니다.','hint'));
+        accountBody.append(limits);
+        if(client==='codex'){
+          accountBody.append(el('h3','사용 가능한 Codex 모델'));
+          for(const model of observed.models)accountBody.append(el('p',(model.displayName||model.model)+(model.isDefault?', 목록 기본값':'')));
+          if(!observed.models.length)accountBody.append(el('p','모델 목록을 받지 못했습니다.'));
+        }
+        if(observed.checked_at)accountBody.append(el('p','계정 정보 출처: '+observed.source+'. 마지막 확인: '+new Date(observed.checked_at).toLocaleString()+'. 정상 조회 결과는 최대 60초간 재사용합니다.','hint'));
       }
-      if(!accountRows.children.length)accountRows.append(accountPlaceholder('Codex',data.state==='not_installed'?'CLI 미설치':'한도 미제공'));
-      accountRows.append(accountPlaceholder('Claude','미수집'));
-      const limits=el('div',undefined,'account-limits');
-      for(const row of [...data.limits].sort((a,b)=>(a.bucket==='codex'?0:1)-(b.bucket==='codex'?0:1))){
-        const card=el('section',undefined,'account-limit');
-        const name=(row.name||(row.bucket==='codex'?'Codex':row.bucket))+', '+duration(row.windowDurationMins);
-        card.append(el('h3',name));
-        const meter=el('div',undefined,'account-limit-meter');
-        const known=typeof row.usedPercent==='number'&&Number.isFinite(row.usedPercent);
-        if(known){const bar=el('progress');bar.max=100;bar.value=Math.max(0,Math.min(100,row.usedPercent));bar.setAttribute('aria-label',name+' 사용률');meter.append(bar);}
-        meter.append(el('span',known?row.usedPercent+'% 사용':'사용률 미제공'));card.append(meter);
-        const reset=row.resetsAt?new Date(row.resetsAt*1000):null;
-        card.append(el('p','초기화, '+(reset&&!Number.isNaN(reset.getTime())?reset.toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'미제공'),'account-limit-reset'));limits.append(card);
-      }
-      if(!data.limits.length)limits.append(el('p','한도 정보를 받지 못했습니다.','hint'));
-      accountBody.append(limits);
-      accountBody.append(el('h3','사용 가능한 모델'));
-      for(const model of data.models)accountBody.append(el('p',(model.displayName||model.model)+(model.isDefault?', 목록 기본값':'')));
-      if(!data.models.length)accountBody.append(el('p','모델 목록을 받지 못했습니다.'));
-      accountBody.append(el('p','목록 기본값은 실제 실행 모델을 뜻하지 않습니다. 실제 실행 모델과 대화 공간 사용량은 아직 확인할 수 없습니다.','hint'),el('p','계정 정보 출처: '+data.source+'. 마지막 확인: '+new Date(data.checked_at).toLocaleString()+'. 최대 60초 전 정보일 수 있습니다.','hint'));
-    }catch(error){if(accountRows.textContent.includes('조회 중…'))accountRows.replaceChildren(accountPlaceholder('Codex','조회 실패'),accountPlaceholder('Claude','미수집'));accountStatus('error','정보를 불러오지 못했습니다. 다시 시도해 주세요.');}finally{statusBusy=false;}
+      accountBody.append(el('p','실행 모델과 마지막 컨텍스트 측정값은 AI 세션 표에서 확인할 수 있습니다.','hint'));
+      const failed=results.some(data=>!['available','partial'].includes(data.state));
+      accountStatus(failed?'error':'ready',failed?'일부 계정 정보를 불러오지 못했습니다. 각 AI의 상태를 확인하세요.':'확인 '+new Date().toLocaleTimeString());
+    }catch(error){accountRows.replaceChildren(accountPlaceholder('Codex','조회 실패'),accountPlaceholder('Claude','조회 실패'));accountStatus('error','정보를 불러오지 못했습니다. 다시 시도해 주세요.');}finally{statusBusy=false;}
   }
   refreshAccount();setInterval(()=>{if(!document.hidden)refreshAccount();},60000);
   const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='저장된 실행 종료 알림을 확인합니다.';top.after(alertBox);
@@ -298,6 +316,23 @@
     if(!rows.length){native.textContent=filter?'아직 연결된 대화가 없습니다. Codex나 Claude가 첫 응답을 마치면 여기에 표시됩니다.':'채팅을 선택하면 연결된 에이전트 대화를 확인할 수 있습니다.';return;}
     for(const s of rows){const item=el('span',s.client+', '+s.session_id+', '+s.mode);item.title=s.cwd;native.append(item);}
   }
+  function contextCell(usage){
+    const used=usage?.used_tokens,windowSize=usage?.window_tokens;
+    const valid=Number.isSafeInteger(used)&&used>=0,hasWindow=Number.isSafeInteger(windowSize)&&windowSize>0;
+    const cell=el('td',valid?(hasWindow?(used/windowSize*100).toFixed(1)+'%':used.toLocaleString()+' 토큰'):'측정값 없음');
+    cell.title=valid?'마지막 측정 '+used.toLocaleString()+' / '+(hasWindow?windowSize.toLocaleString():'최대 크기 미제공')+' 토큰'+
+      (usage.observed_at?', '+new Date(usage.observed_at).toLocaleString():''):'CLI가 제공한 컨텍스트 기록이 없습니다.';
+    return cell;
+  }
+  function applyMetrics(row,metrics,identity){
+    if(!metrics)return;
+    const current=Date.parse(row.context_usage?.observed_at),incoming=Date.parse(metrics.context_usage?.observed_at);
+    if(row.session_id===identity&&current&&incoming&&incoming<current)return;
+    if(row.session_id!==identity){row.execution_model=null;row.context_usage=null;}
+    if(metrics.execution_model&&metrics.execution_model!==row.execution_model&&!('context_usage' in metrics))row.context_usage=null;
+    row.session_id=identity;
+    for(const field of ['execution_model','context_usage'])if(field in metrics)row[field]=metrics[field];
+  }
   function renderUsage(){
     const rows=(snapshot.usage||[]).filter(row=>row.project===$('project').value);
     envProject.textContent=$('project').value||'프로젝트를 선택하세요.';
@@ -313,23 +348,32 @@
       if(!chatsByAgent.has(key))chatsByAgent.set(key,{...row});
       else{const chat=chatsByAgent.get(key);for(const field of ['runs','running','input_reports','output_reports'])chat[field]+=row[field];
         for(const field of ['input_tokens','output_tokens'])if(row[field]!==null)chat[field]=(chat[field]??0)+row[field];
-        if((row.last_started_at||'')>(chat.last_started_at||''))chat.last_started_at=row.last_started_at;
+        if((row.last_started_at||'')>=(chat.last_started_at||'')){
+          for(const field of ['last_started_at','session_id','execution_model','context_usage'])chat[field]=row[field];
+        }
       }
     }
     const counts=new Map();
-    const summaries=new Map(chatsByAgent);
+    const summaries=new Map([...chatsByAgent].map(([key,row])=>[key,{...row}]));
+    for(const session of snapshot.sessions.filter(s=>s.project===$('project').value).sort((a,b)=>(a.metrics?.context_usage?.observed_at||'').localeCompare(b.metrics?.context_usage?.observed_at||''))){
+      const key=JSON.stringify([session.client,session.task]);
+      const row=summaries.get(key)||{...session,input_tokens:null,output_tokens:null,runs:0,input_reports:0,output_reports:0};
+      if(row.runs&&row.session_id&&row.session_id!==session.session_id)continue;
+      applyMetrics(row,session.metrics,session.session_id);summaries.set(key,row);
+    }
     for(const run of snapshot.running.filter(r=>r.project===$('project').value)){
       const client=run.command.client||run.adapter,task=run.command.task||'',key=JSON.stringify([client,task]);
       const row=summaries.get(key)||{client,task,project:run.project,input_tokens:null,output_tokens:null,runs:0,input_reports:0,output_reports:0};
       row.liveState=run.cancellable?'실행 중':'종료 확인 필요';summaries.set(key,row);
+      applyMetrics(row,run.metrics,run.metadata?.session_id||null);
     }
     sessionRows.replaceChildren();
     for(const row of [...summaries.values()].sort((a,b)=>Number(Boolean(b.liveState))-Number(Boolean(a.liveState))||(b.last_started_at||'').localeCompare(a.last_started_at||''))){
-      const tr=el('tr'),name=el('td');name.append(button(row.client+', '+(row.task||'미분류'),()=>openChat(row.project,row.task)));tr.append(name,el('td',row.liveState||'실행 없음'),el('td','미수집'));
+      const tr=el('tr'),name=el('td');name.append(button(row.client+', '+(row.task||'미분류'),()=>openChat(row.project,row.task)));tr.append(name,el('td',row.liveState||'실행 없음'),contextCell(row.context_usage));
       const known=row.input_tokens!==null&&row.output_tokens!==null;
       const complete=known&&row.input_reports===row.runs&&row.output_reports===row.runs;
       const token=el('td',known?(row.input_tokens+row.output_tokens).toLocaleString()+(complete?'':' (일부)'):'미수신');
-      token.title='현재 프로젝트, 해당 AI/채팅의 저장된 누적 입력+출력';tr.append(token,el('td','미수집'));sessionRows.append(tr);
+      token.title='현재 프로젝트, 해당 AI/채팅의 저장된 누적 입력+출력';tr.append(token,el('td',row.execution_model||'모델 정보 없음'));sessionRows.append(tr);
     }
     if(!summaries.size){const empty=el('td',$('project').value?'아직 실행 기록이 없습니다.':'프로젝트를 선택하면 세션이 표시됩니다.');empty.colSpan=5;sessionRows.append(el('tr'));sessionRows.lastChild.append(empty);}
     for(const row of [...chatsByAgent.values()].sort((a,b)=>a.client.localeCompare(b.client)||(b.last_started_at||'').localeCompare(a.last_started_at||''))){
@@ -353,7 +397,7 @@
     sessionStatus('loading','세션 현황 확인 중');
     try{
       const next=await api('/session-overview');snapshot=next;list.replaceChildren();
-      for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+run.project+' / '+(run.command.task||'미분류')+', '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','대화 공간 사용량은 아직 확인할 수 없습니다.','hint'));list.append(item);}
+      for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+run.project+' / '+(run.command.task||'미분류')+', '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트와 실행 모델은 AI 세션 표에서 확인하세요.','hint'));list.append(item);}
       if(!next.running.length)list.append(el('p','실행 중인 세션이 없습니다.','hint'));
       renderNative();renderUsage();
       sessionStatus('ready','확인 '+new Date().toLocaleTimeString());

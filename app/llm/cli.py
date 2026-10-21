@@ -1,6 +1,7 @@
 """Native CLI adapters; inherit user configuration, never invoke a command shell."""
 import asyncio
 import json
+from app.llm.session_metrics import update_claude_metrics
 import os
 from pathlib import Path
 import shutil
@@ -171,6 +172,8 @@ class CliAdapter:
         self.client, self.path = client, path
         self.runner = runner or ProcessRunner()
         self.on_event = None
+        self.on_metrics = None
+        self.metrics = {}
         self.seen_text = {}
         self.model = None
         self.reasoning_effort = None
@@ -236,6 +239,13 @@ class CliAdapter:
         if not isinstance(event, dict):
             return
         kind = event.get('type', '')
+        if self.on_metrics:
+            if self.client == 'claude':
+                update_claude_metrics(self.metrics, event)
+                if kind in ('system', 'assistant', 'result') and self.metrics:
+                    self.on_metrics(self.metrics)
+            elif kind == 'thread.started' and event.get('thread_id'):
+                self.on_metrics({'session_id': event['thread_id']})
         if self.client == 'codex':
             item = event.get('item') or {}
             category = item.get('type')
@@ -277,20 +287,24 @@ class CliAdapter:
 
     def parse(self, stdout):
         if self.client == 'claude':
-            execution_model = None
+            metrics = {}
             try:
                 data = json.loads(stdout)
+                events = [data]
             except json.JSONDecodeError:
                 data = None
+                events = []
                 for line in stdout.splitlines():
                     try:
                         event = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    if isinstance(event, dict) and event.get('type') == 'system' and event.get('subtype') == 'init':
-                        execution_model = event.get('model')
+                    events.append(event)
                     if isinstance(event, dict) and event.get('type') == 'result':
                         data = event
+            for event in events:
+                if isinstance(event, dict):
+                    update_claude_metrics(metrics, event)
             if not isinstance(data, dict):
                 raise ValueError('Claude 최종 JSON 응답을 해석하지 못했습니다.')
             if data.get('is_error') or data.get('subtype', 'success') != 'success':
@@ -298,7 +312,8 @@ class CliAdapter:
             result = data.get('result')
             if not isinstance(result, str):
                 raise ValueError('Claude 최종 결과가 없습니다.')
-            return AgentResult(adapter='claude', output=result, session_id=data.get('session_id'), usage=data.get('usage'), execution_model=execution_model)
+            return AgentResult(adapter='claude', output=result, session_id=data.get('session_id'), usage=data.get('usage'),
+                               execution_model=metrics.get('execution_model'), context_usage=metrics.get('context_usage'))
         messages, session, usage, completed = [], None, None, False
         for line in stdout.splitlines():
             try:

@@ -43,3 +43,27 @@ def test_usage_totals_native_sessions_missing_values_and_chat_move(tmp_path):
         s.storage.move_message('sample', other, 'moved')
         data = client.get('/api/session-overview').json()['usage']
         assert next(row for row in data if row['client']=='claude')['task']=='moved'
+
+
+def test_overview_combines_stored_live_and_linked_metrics(tmp_path, monkeypatch):
+    app = create_app(tmp_path / 'workspaces')
+    with TestClient(app) as client:
+        s = app.state.harness
+        root = s.projects.create('sample')
+        measured = {'execution_model': 'actual', 'context_usage': {'used_tokens': 12, 'window_tokens': 1000}}
+        monkeypatch.setattr(app.state.session_metrics, 'snapshot', lambda *args: {**measured, 'state': 'available'})
+        s.storage.save_session('sample', 'linked', 'codex', str(root), 'read-only', 'native')
+        run = s.storage.start_run('sample', Command(text='test', task='live', client='claude'), 'claude')
+        s.storage.update_run_metadata(run, {'session_id': 'live', **measured})
+        data = client.get('/api/session-overview').json()
+        assert data['sessions'][0]['metrics']['execution_model'] == 'actual'
+        assert data['running'][0]['metrics'] == measured
+        assert data['usage'][0]['context_usage']['used_tokens'] == 12
+        s.storage.update_run_metadata(run, {'session_id': 'live', 'execution_model': 'changed'})
+        current = client.get('/api/session-overview').json()['running'][0]['metrics']
+        assert current == {'execution_model': 'changed'}
+        s.storage.finish_run(run, 'completed', metadata={'session_id': 'live', **measured})
+        data = client.get('/api/session-overview').json()
+        assert not data['running']
+        assert data['usage'][0]['execution_model'] == 'actual'
+        assert data['usage'][0]['context_usage']['window_tokens'] == 1000

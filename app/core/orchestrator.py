@@ -130,6 +130,13 @@ class Orchestrator:
                               for rule in context.rules]}
         scope = self.storage.run(name, run_id)['metadata']
         metadata.update({k: scope[k] for k in ('parallel_group', 'parallel_role', 'workflow_id') if k in scope})
+        if session:
+            metadata['session_id'] = session
+
+        def record_metrics(metrics):
+            metadata.update(metrics)
+            self.storage.update_run_metadata(run_id, metadata)
+
         try:
             audit = scope.get('guard')
             if audit:
@@ -140,6 +147,7 @@ class Orchestrator:
                 result = await adapter.run(context)
             else:
                 adapter.on_event = lambda kind, text: self.storage.append_event(run_id, kind, text)
+                adapter.on_metrics = record_metrics
                 result = await adapter.execute(context.model_dump_json(), str(cwd), command.mode, session)
         except asyncio.CancelledError:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
@@ -152,7 +160,8 @@ class Orchestrator:
             raise
         native_session = result.session_id or session
         self.storage.save_session(name, command.task, command.client, str(cwd), command.mode, native_session, chat_id=command.chat_id)
-        metadata.update(session_id=native_session, usage=result.usage, execution_model=result.execution_model, elapsed_seconds=round(time.monotonic()-started, 2))
+        metadata.update(session_id=native_session, usage=result.usage, execution_model=result.execution_model,
+                        context_usage=result.context_usage, elapsed_seconds=round(time.monotonic()-started, 2))
         question = parse_question(result.final_output if result.final_output is not None else result.output)
         if question:
             metadata['question'] = question

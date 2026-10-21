@@ -25,6 +25,7 @@ const {chromium}=require('playwright');
    if(hold)await new Promise(done=>waiting.push(done));
    return route.fulfill({status:fail?503:200,json:fail?{detail:'offline'}:account});
   }
+  if(path==='/api/clients/claude/status')return route.fulfill({json:{...account,client:'claude',limits:[{bucket:'claude',usedPercent:0,windowDurationMins:300,resetsAt:null}]}});
   const project=path.match(/^\/api\/projects\/(one|two)\/(.*)$/);
   if(project){
    const [,name,resource]=project;
@@ -114,7 +115,7 @@ const {chromium}=require('playwright');
  assert.equal(boxes.length,3);
  for(let i=1;i<3;i++){assert.equal(boxes[i].y,boxes[0].y);assert.equal(boxes[i].w,boxes[0].w);assert.equal(boxes[i].h,boxes[0].h);assert.equal(boxes[i].x,boxes[i-1].x+boxes[i-1].w);}
  assert.match(await page.locator('.account-table').innerText(),/주간 63%/);
- assert.match(await page.locator('.account-table').innerText(),/Claude\s+미수집/);
+ assert.match(await page.locator('.account-table').innerText(),/Claude\s+5시간 0%/);
  assert.deepEqual(await page.locator('.environment-table th').allTextContents(),['항목','상태','값']);
  for(const panel of ['.compact-session-panel','.codex-account-summary','.compact-environment']){
   const result=await page.locator(panel).evaluate(node=>{

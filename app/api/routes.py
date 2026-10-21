@@ -93,6 +93,11 @@ def codex_status(request: Request):
     return request.app.state.codex_status.read(service(request).storage.client_path('codex'))
 
 
+@router.get('/clients/claude/status')
+def claude_status(request: Request):
+    return request.app.state.claude_status.read(service(request).storage.client_path('claude'))
+
+
 @router.get('/clients')
 async def clients(request: Request):
     import asyncio
@@ -289,10 +294,25 @@ def session_overview(request: Request):
     result = {'sessions': [], 'running': [], 'usage': []}
     for project in s.projects.list():
         overview = s.storage.session_overview(project)
+        for row in overview['sessions']:
+            row['metrics'] = request.app.state.session_metrics.snapshot(
+                row['client'], row['cwd'], row['session_id'], s.storage.client_path(row['client']))
         result['sessions'].extend(overview['sessions'])
         result['usage'].extend(overview['usage'])
         for row in overview['running']:
             row['cancellable'] = row['id'] in s.active
+            metadata = row['metadata']
+            row['metrics'] = {key: metadata[key] for key in ('execution_model', 'context_usage') if key in metadata}
+            if metadata.get('session_id'):
+                command = row['command']
+                cwd = s.policy.file_path(s.projects.select(project), command.get('cwd', '.'))
+                native = request.app.state.session_metrics.snapshot(command['client'], cwd, metadata['session_id'],
+                                                               s.storage.client_path(command['client']))
+                for key in ('execution_model', 'context_usage'):
+                    if key == 'context_usage' and metadata.get('execution_model') and metadata['execution_model'] != native.get('execution_model'):
+                        continue
+                    if key not in row['metrics'] and key in native:
+                        row['metrics'][key] = native[key]
             result['running'].append(row)
     return result
 

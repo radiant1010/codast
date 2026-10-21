@@ -15,6 +15,8 @@ from app.llm.mock import MockAgentAdapter
 from app.core.storage import Storage
 from app.core.folder_picker import FolderPicker
 from app.llm.codex_status import CodexStatus
+from app.llm.claude_status import ClaudeStatus
+from app.llm.session_metrics import SessionMetrics
 from app.core.environment import EnvironmentStatus
 from app.core.onboarding import Onboarding
 
@@ -26,6 +28,7 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     async def lifespan(app):
         yield
         await app.state.harness.shutdown()
+        app.state.session_metrics.close()
 
     app = FastAPI(title="AI Coding Harness", lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
@@ -35,6 +38,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.harness = Orchestrator(projects, PolicyEngine(), FileSystemTool(), agent or MockAgentAdapter(), storage)
     app.state.folder_picker = FolderPicker()
     app.state.codex_status = CodexStatus()
+    app.state.claude_status = ClaudeStatus()
+    app.state.session_metrics = SessionMetrics()
     app.state.environment_status = EnvironmentStatus()
     from app.llm.plugins import Plugins
     app.state.plugins = Plugins()

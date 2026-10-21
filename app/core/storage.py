@@ -436,6 +436,11 @@ class Storage:
                   AND json_extract(r.metadata,'$.superseded_by') IS NULL
                 ORDER BY m.created_at DESC LIMIT 1""", (project,chat_id))]
 
+    def update_run_metadata(self, run_id, metadata):
+        with self.connect() as db:
+            db.execute("UPDATE runs SET metadata=? WHERE id=? AND status='running'",
+                       (json.dumps(metadata, ensure_ascii=False), run_id))
+
     def finish_run(self, run_id, status, *, output=None, error=None, adapter=None, metadata=None):
         with self.connect() as db:
             changed = db.execute("""UPDATE runs SET status=?, finished_at=?, output=?, error=?,
@@ -492,6 +497,7 @@ class Storage:
                 "SELECT * FROM runs WHERE project=? AND status='running' ORDER BY started_at DESC", (project,))]
         for row in running:
             row['command'] = json.loads(row['command'])
+            row['metadata'] = json.loads(row['metadata'])
         return {'sessions': sessions, 'running': running, 'usage': self.session_usage(project)}
 
     def session_usage(self, project):
@@ -499,7 +505,7 @@ class Storage:
         with self.connect() as db:
             rows = db.execute('''SELECT m.task,r.command,r.metadata,r.status,r.started_at
                 FROM runs r JOIN messages m ON m.run_id=r.id AND m.project=r.project
-                WHERE r.project=?''', (project,)).fetchall()
+                WHERE r.project=? ORDER BY r.started_at,r.rowid''', (project,)).fetchall()
         groups = {}
         for row in rows:
             command, meta = json.loads(row['command']), json.loads(row['metadata'])
@@ -510,6 +516,8 @@ class Storage:
                 input_tokens=None, output_tokens=None, input_reports=0, output_reports=0,
                 last_started_at=row['started_at']))
             group['last_started_at'] = max(group['last_started_at'], row['started_at'])
+            group['execution_model'] = meta.get('execution_model')
+            group['context_usage'] = meta.get('context_usage')
             group['runs'] += 1
             group['running'] += row['status'] == 'running'
             usage = meta.get('usage') or {}
