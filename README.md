@@ -15,14 +15,44 @@ CODAST는 Codex와 Claude Code의 작업 지시, 자료, 결과와 실행 기록
 
 ## 설치와 실행
 
-Python 3.12 이상과 uv가 필요합니다. 실제 AI 실행에는 사용할 Codex 또는 Claude Code CLI를 별도로 설치하고 인증해야 합니다.
+저장소를 내려받은 뒤 프로젝트 폴더에서 운영체제에 맞는 명령을 실행합니다. `start` 하나로 최초 설치와 서버 실행을 처리합니다.
+
+Windows:
 
 ```powershell
-uv sync
-uv run python start.py
+.\codast.cmd start
 ```
 
-브라우저에서 http://127.0.0.1:8765 에 접속한 뒤 사용할 CLI를 연결하고 프로젝트를 등록합니다.
+Linux, macOS:
+
+```sh
+sh ./codast.sh start
+```
+
+uv가 없으면 공식 설치 프로그램으로 프로젝트의 `.local/uv`에 설치합니다. Linux, macOS에서 uv를 자동 설치하려면 `curl` 또는 `wget`이 필요합니다. 새 환경에는 Python 3.12와 가상환경 `.venv`를 준비하고, 기존 환경은 프로젝트 요구사항에 맞는 Python 버전을 유지합니다. 이어서 `uv.lock`에 고정된 패키지를 설치하고 앱을 실행합니다. Python을 미리 설치하거나 가상환경을 직접 활성화할 필요가 없습니다. 최초 설치에는 인터넷 연결이 필요합니다. 설치가 중단되면 오류를 해결한 뒤 같은 명령을 다시 실행하면 됩니다.
+
+Homebrew를 사용하는 macOS, Linux에서는 uv를 먼저 설치해도 됩니다. 실행기는 PATH에 있는 uv를 재사용하며, Homebrew를 자동으로 설치하거나 변경하지 않습니다.
+
+```sh
+brew install uv
+sh ./codast.sh start
+```
+
+이는 [Homebrew의 uv 패키지](https://formulae.brew.sh/formula/uv)를 사용하는 방식이며 CODAST 자체의 Homebrew 패키지를 배포하는 것은 아닙니다.
+
+설치만 하려면 `init`, Python 테스트를 실행하려면 `test`를 사용합니다. 인수를 생략하면 `start`로 실행됩니다.
+
+| 작업 | Windows | Linux, macOS |
+| --- | --- | --- |
+| 설치 | `.\codast.cmd init` | `sh ./codast.sh init` |
+| 실행 | `.\codast.cmd start` | `sh ./codast.sh start` |
+| Python 테스트 | `.\codast.cmd test` | `sh ./codast.sh test` |
+
+브라우저에서 http://127.0.0.1:8765 에 접속한 뒤 사용할 CLI를 연결하고 프로젝트를 등록합니다. 실제 AI 실행에는 Codex 또는 Claude Code CLI를 별도로 설치하고 로그인해야 합니다. 서버는 실행한 터미널에서 `Ctrl+C`로 종료합니다.
+
+FastAPI 서버와 현재 HTML, JavaScript 화면은 별도 빌드 없이 실행합니다. `init`은 패키지 설치, `start`는 서버 실행에 해당합니다. 운영체제별 앱 기능 지원 범위는 다를 수 있습니다.
+
+설치 방식은 [uv 설치 문서](https://docs.astral.sh/uv/getting-started/installation/)와 [Python 자동 설치 안내](https://docs.astral.sh/uv/concepts/python-versions/)를 따릅니다. 실행기는 셸 설정이나 전역 PATH를 변경하지 않습니다. Windows 실행기는 PowerShell 실행 정책을 해당 프로세스에만 적용하며 시스템 정책을 변경하지 않습니다.
 
 ## 화면 구조 (IA)
 
