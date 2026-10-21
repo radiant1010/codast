@@ -114,6 +114,7 @@ function tokenCount(usage,adapter){
 }
 function messageCard(m,b){
   const card=el('article',undefined,'message'),meta=el('div',undefined,'meta');
+  card.dataset.messageId=m.id;
   const questionInfo=metadata(m.metadata),awaitingAnswer=questionInfo.question&&!questionInfo.reply_run_id&&!questionInfo.superseded_by;
   const runningLabel=m.cancellable?'실행 중':'종료 확인 필요';
   meta.append(el('span',m.task||'미분류'),el('span',new Date(m.created_at).toLocaleString()));card.append(meta,el('pre',m.text,'user'));

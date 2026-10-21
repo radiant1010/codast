@@ -88,6 +88,12 @@
   const importScope=el('p',undefined,'hint');
   importDialog.append(importHead,importScope,importClient,el('p','현재 프로젝트와 작업 경로가 같은 세션만 표시합니다. 다른 프로젝트의 대화는 불러오지 않습니다. 세션 내용을 확인한 뒤 연결하세요.','hint'),importStatus,importList,nextThreads,importPreview);document.body.append(importDialog);
   let importProject='',importCursor=null;
+  window.openStoredSession=async(agent,thread,selected)=>{
+    if($('project').value!==selected)throw Error('프로젝트가 변경되었습니다. 다시 검색하세요.');
+    importProject=selected;selectedImportClient=agent;importCursor=null;nextThreads.hidden=true;importList.replaceChildren();importPreview.replaceChildren();
+    for(const choice of importClient.children)choice.setAttribute('aria-pressed',String(choice.textContent.toLowerCase()===agent));
+    importScope.textContent=selected+' 프로젝트';importDialog.showModal();await previewThread(thread,selected,agent);
+  };
   async function loadThreads(more=false){
     const selected=importProject,agent=selectedImportClient;importStatus.textContent='조회 중…';nextThreads.disabled=true;
     try{const data=await api('/projects/'+encodeURIComponent(selected)+'/native-threads/'+agent+(more&&importCursor?'?cursor='+encodeURIComponent(importCursor):''));

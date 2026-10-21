@@ -56,14 +56,15 @@
   });
   actions.append(importFile,upload,save,submit);form.append(field('문서 제목',title),field('문서 내용',content),field('변경 이유',reason),actions);
   const reviews=el('section',undefined,'vault-reviews'),select=el('select');select.id='vault-review-select';
-  const comparison=el('div',undefined,'vault-comparison'),before=el('pre'),after=el('pre'),reviewInfo=el('p',undefined,'hint');
+  const comparison=el('div',undefined,'vault-comparison'),before=el('pre'),after=el('pre'),reviewInfo=el('p',undefined,'hint'),diffNote=el('p',undefined,'hint');
+  for(const [node,label] of [[before,'변경 전 승인본'],[after,'검토에 제출한 내용']]){node.tabIndex=0;node.setAttribute('role','region');node.setAttribute('aria-label',label);}
   const left=el('section'),right=el('section');left.append(el('h3','변경 전 승인본'),before);right.append(el('h3','검토에 제출한 내용'),after);comparison.append(left,right);
   const decisionForm=el('div',undefined,'modal-form'),comment=el('textarea');comment.id='vault-comment';comment.maxLength=2000;comment.rows=2;
   const approve=icon('check','선택한 버전 승인',()=>decide('approved')),reject=icon('close','선택한 버전 반려',()=>decide('rejected'));
   const decisionActions=el('div',undefined,'vault-actions');decisionActions.append(approve,reject);
   decisionForm.append(field('검토 결과',comment),decisionActions);
   const audit=el('details'),auditList=el('ol');audit.append(el('summary','변경 기록'),auditList);
-  reviews.append(el('h3','버전별 검토 이력'),field('조회할 검토 버전',select),reviewInfo,comparison,decisionForm,audit);
+  reviews.append(el('h3','버전별 검토 이력'),field('조회할 검토 버전',select),reviewInfo,diffNote,comparison,decisionForm,audit);
   dialog.append(head,meta,editorStatus,form,reviews);document.body.append(dialog);
   for(const input of [title,content])input.addEventListener('input',()=>{dirty=true;setDisabled(busy);});
   function canClose(){return !busy&&(!dirty||window.confirm('저장하지 않은 수정 내용을 버리고 닫을까요?'));}
@@ -89,23 +90,35 @@
   const stateText=d=>d.pending?'검토 대기':d.approved?'승인본 있음':'초안';
   function renderDocument(value){
     doc=value;dirty=false;form.hidden=Boolean(value.pending);dialog.scrollTop=0;heading.textContent=value.id;title.value=value.title;content.value=value.content;reason.value='';comment.value='';
-    meta.textContent=stateText(value)+(value.approved?' · 승인 기준: 검토 버전 '+value.approved:' · 승인된 버전 없음');
+    meta.textContent=stateText(value)+(value.approved?', 승인 기준: 검토 버전 '+value.approved:', 승인된 버전 없음');
     editorStatus.textContent='';editorStatus.classList.remove('error');reviews.hidden=!value.reviews.length;
     select.replaceChildren();for(const review of value.reviews)select.add(new Option('검토 버전 '+review.number+' — '+labels[review.decision],review.number));
     if(value.reviews.length)select.value=String(value.pending||value.reviews.length);
     auditList.replaceChildren();const names={created:'문서 등록',saved:'초안 저장',submitted:'검토 요청',approved:'승인',rejected:'반려'};
-    for(const event of value.history.slice().reverse())auditList.append(el('li',names[event.action]+' · '+new Date(event.at).toLocaleString()+' · 로컬 사용자'));
+    for(const event of value.history.slice().reverse())auditList.append(el('li',names[event.action]+', '+new Date(event.at).toLocaleString()+', 로컬 사용자'));
     setDisabled(busy);if(value.reviews.length)loadReview();
+  }
+  function renderDiff(node,parts,side){
+    const fragment=document.createDocumentFragment();
+    const names={insert:'추가',delete:'삭제',replace:side==='before'?'수정 전':'수정 후'};
+    for(const part of parts){
+      if(!part[side])continue;
+      const chunk=el('span',undefined,'vault-diff-chunk vault-diff-'+part.kind);
+      if(names[part.kind])chunk.append(el('span',names[part.kind],'vault-diff-label'));
+      chunk.append(el('span',part[side],'vault-diff-text'));fragment.append(chunk);
+    }
+    node.replaceChildren(fragment);
   }
   async function loadReview(){
     const ticket=++reviewGeneration,id=doc.id,number=Number(select.value),b=endpoint(),v=binding.connection_id;
-    decisionForm.hidden=true;before.textContent='불러오는 중…';after.textContent='';reviewInfo.textContent='';
+    decisionForm.hidden=true;before.textContent='불러오는 중…';after.textContent='';reviewInfo.textContent='';diffNote.textContent='';
     try{
       const data=await api(b+'/documents/'+id+'/reviews/'+number+'?connection_id='+v);
       if(ticket!==reviewGeneration||doc?.id!==id||b!==endpoint())return;
-      before.textContent=data.review.base?data.before.title+'\n\n'+data.before.content:'이전 승인본이 없습니다.';
-      after.textContent=data.after.title+'\n\n'+data.after.content;
-      reviewInfo.textContent='변경 이유: '+data.review.reason+(data.review.comment?'\n검토 결과: '+data.review.comment:'')+'\n'+labels[data.review.decision]+' · '+new Date(data.review.decided_at||data.review.submitted_at).toLocaleString();
+      if(data.review.base)renderDiff(before,data.diff,'before');else before.textContent='이전 승인본이 없습니다.';
+      renderDiff(after,data.diff,'after');
+      diffNote.textContent=data.diff_coarse?'변경 범위가 커서 중간 구간을 묶어 표시합니다. 이 구간에는 바뀌지 않은 줄도 포함될 수 있습니다.':data.review.base?'줄 단위로 비교합니다. 추가, 삭제, 수정 표시는 변경된 구간에 붙습니다.':'첫 검토 버전이므로 전체 내용을 추가로 표시합니다.';
+      reviewInfo.textContent='변경 이유: '+data.review.reason+(data.review.comment?'\n검토 결과: '+data.review.comment:'')+'\n'+labels[data.review.decision]+', '+new Date(data.review.decided_at||data.review.submitted_at).toLocaleString();
       decisionForm.hidden=doc.pending!==number;comment.value='';setDisabled(busy);
     }catch(e){if(ticket===reviewGeneration){before.textContent='';after.textContent='';editorStatus.textContent=e.message;}}
   }
@@ -129,7 +142,7 @@
     for(const problem of data.issues)issues.append(el('p',problem.id+': '+problem.message,'error'));
     if(!data.documents.length)list.append(el('p',data.issues.length?'읽을 수 있는 문서가 없습니다. 백업을 확인하세요.':'아직 문서가 없습니다. + 버튼으로 첫 산출물을 작성하세요.','hint'));
     for(const row of data.documents){
-      const card=el('article'),text=el('div');text.append(el('strong',row.title),el('p',row.id+' · '+stateText(row)+(row.approved?' · 승인 버전 '+row.approved:''),'hint'));
+      const card=el('article'),text=el('div');text.append(el('strong',row.title),el('p',row.id+', '+stateText(row)+(row.approved?', 승인 버전 '+row.approved:''),'hint'));
       const open=icon('file',row.id+' 열기',()=>run(async()=>{const value=await api(b+'/documents/'+row.id+'?connection_id='+v);if(ticket!==generation)return;renderDocument(value);dialog.showModal();}));
       card.append(text,open);list.append(card);
     }

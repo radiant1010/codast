@@ -16,6 +16,12 @@
 .vault-comparison{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--form-field-gap);margin:var(--modal-gap) 0}
 .vault-comparison section{min-width:0}.vault-comparison h3{font-size:13px;color:#b8ac95}
 .vault-comparison pre{padding:var(--form-field-gap);background:#11110f;border:1px solid #403b30;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
+.vault-comparison pre:focus-visible{outline:2px solid #e5bf76;outline-offset:2px}
+.vault-diff-chunk{display:block;padding:0 8px;border-left:3px solid transparent}
+.vault-diff-label{display:block;font:600 12px/1.7 system-ui,sans-serif;white-space:normal;user-select:none}
+.vault-diff-insert{background:#193124;border-color:#8fcca4}.vault-diff-insert .vault-diff-label{color:#bbdfc5}
+.vault-diff-delete{background:#321c1d;border-color:#e5938b}.vault-diff-delete .vault-diff-label{color:#efb1ac}
+.vault-diff-replace{background:#362d1b;border-color:#d9b566}.vault-diff-replace .vault-diff-label{color:#f5d192}
 .vault-reviews>.hint{white-space:pre-wrap;overflow-wrap:anywhere}.vault-reviews details{margin-top:var(--modal-gap)}
 .vault-reviews li{margin:8px 0;font-size:12px;color:#a79d89}.vault-panel .error,.vault-editor .error{color:#efa590}
 .vault-panel [role=status],.vault-editor [role=status]{overflow-wrap:anywhere}

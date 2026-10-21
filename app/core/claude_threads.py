@@ -10,10 +10,10 @@ def transcript_root():
     return Path(os.environ.get('CLAUDE_CONFIG_DIR', str(Path.home() / '.claude'))) / 'projects'
 
 
-def read_file(path, root):
+def read_file(path, root, *, full=False):
     if path.is_symlink() or path.parent.is_symlink() or path.parent.is_junction():
         return None
-    if path.stat().st_size > 16 * 1024 * 1024:
+    if not full and path.stat().st_size > 16 * 1024 * 1024:
         raise ValueError('Claude 세션이 16 MiB 조회 한도를 초과했습니다.')
     messages = []
     matched = False
@@ -38,8 +38,9 @@ def read_file(path, root):
             if isinstance(content, list):
                 content = '\n'.join(b.get('text', '') for b in content if isinstance(b, dict) and b.get('type') == 'text')
             if isinstance(content, str) and content:
-                messages.append(display_message(row['type'], content))
-                messages = messages[-20:]
+                messages.append(display_message(row['type'], content, full=full))
+                if not full:
+                    messages = messages[-20:]
                 updated = row.get('timestamp')
     if not matched:
         return None
@@ -48,13 +49,13 @@ def read_file(path, root):
             'live_state': 'unknown', 'preview_scope': '최근 최대 20메시지, 메시지당 8000자 · Claude Code 로컬 기록'}
 
 
-def candidates():
+def candidates(*, limit=1000):
     base = transcript_root()
     if base.is_symlink() or base.is_junction():
         raise PermissionError('링크된 세션 저장소는 조회하지 않습니다.')
     files = []
     for path in base.glob('*/*.jsonl'):
-        if len(files) >= 1000:
+        if limit is not None and len(files) >= limit:
             raise ValueError('Claude 세션 조회 한도(1000개)를 초과했습니다.')
         try:
             UUID(path.stem)

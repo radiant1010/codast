@@ -29,6 +29,7 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
         yield
         await app.state.harness.shutdown()
         app.state.session_metrics.close()
+        app.state.session_search.close()
 
     app = FastAPI(title="AI Coding Harness", lifespan=lifespan)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
@@ -40,6 +41,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.codex_status = CodexStatus()
     app.state.claude_status = ClaudeStatus()
     app.state.session_metrics = SessionMetrics()
+    from app.core.session_search import SessionSearch
+    app.state.session_search = SessionSearch(storage)
     app.state.environment_status = EnvironmentStatus()
     from app.llm.plugins import Plugins
     app.state.plugins = Plugins()
@@ -71,6 +74,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.include_router(document_vault_router)
     from app.api.workflows import router as workflows_router
     app.include_router(workflows_router)
+    from app.api.session_search import router as session_search_router
+    app.include_router(session_search_router)
     app.mount("/static", StaticFiles(directory=BASE / "web/static"), name="static")
     templates = Jinja2Templates(directory=BASE / "web/templates")
 

@@ -15,7 +15,11 @@ def query_status(path):
     return normalize(models, limits)
 
 
-def query_readonly(path, requests):
+class ResponseLimitError(ValueError):
+    pass
+
+
+def query_readonly(path, requests, *, max_response_bytes=16 * 1024 * 1024):
     if any(method not in {'model/list', 'account/rateLimits/read', 'thread/list', 'thread/read'} for method, _ in requests):
         raise ValueError('읽기 전용 조회만 허용합니다.')
     flags = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
@@ -25,8 +29,9 @@ def query_readonly(path, requests):
 
     def read():
         try:
-            while line := process.stdout.readline(16 * 1024 * 1024 + 1):
-                if len(line) > 16 * 1024 * 1024:
+            while line := process.stdout.readline(max_response_bytes + 1):
+                if len(line) > max_response_bytes:
+                    messages.put_nowait(ResponseLimitError(f'일부 Codex 세션 응답이 {max_response_bytes // (1024 * 1024)} MiB 읽기 한도를 초과해 색인하지 못했습니다.'))
                     break
                 messages.put_nowait(json.loads(line))
         except (ValueError, OSError, queue.Full):
@@ -52,6 +57,8 @@ def query_readonly(path, requests):
             if remaining <= 0:
                 raise TimeoutError()
             message = messages.get(timeout=remaining)
+            if isinstance(message, ResponseLimitError):
+                raise message
             if message is None:
                 raise OSError('Codex status process exited')
             if message.get('id') == identity:

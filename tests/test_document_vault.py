@@ -46,6 +46,99 @@ def save(client, base, identity, doc, text):
         'connection_id': identity, 'expected_revision': doc['revision'], 'title': doc['title'], 'content': text})
 
 
+def test_first_review_marks_the_entire_snapshot_as_added(vault):
+    c, app, base, root, identity = vault
+    text = ' \t<script>sample & text</script>\r\n\r\n끝  '
+    doc = submit(c, base, identity, create(c, base, identity, text))
+    review = c.get(base + f"/documents/{doc['id']}/reviews/1?connection_id={identity}").json()
+    assert review['diff'] == [{'kind': 'insert', 'before': '', 'after': '요구사항\n\n' + text}]
+    assert review['diff_coarse'] is False
+
+
+@pytest.mark.parametrize(('before', 'after', 'changes'), [
+    ('앞\n뒤\n', '앞\n추가\n뒤\n', [
+        {'kind': 'equal', 'before': '요구사항\n\n앞\n', 'after': '요구사항\n\n앞\n'},
+        {'kind': 'insert', 'before': '', 'after': '추가\n'},
+        {'kind': 'equal', 'before': '뒤\n', 'after': '뒤\n'},
+    ]),
+    ('앞\n삭제\n뒤\n', '앞\n뒤\n', [
+        {'kind': 'equal', 'before': '요구사항\n\n앞\n', 'after': '요구사항\n\n앞\n'},
+        {'kind': 'delete', 'before': '삭제\n', 'after': ''},
+        {'kind': 'equal', 'before': '뒤\n', 'after': '뒤\n'},
+    ]),
+    ('앞\r\n \t<&>\r\n뒤  ', '앞\r\n \t<바뀜 &>\r\n뒤  ', [
+        {'kind': 'equal', 'before': '요구사항\n\n앞\r\n', 'after': '요구사항\n\n앞\r\n'},
+        {'kind': 'replace', 'before': ' \t<&>\r\n', 'after': ' \t<바뀜 &>\r\n'},
+        {'kind': 'equal', 'before': '뒤  ', 'after': '뒤  '},
+    ]),
+    ('한 줄\n', '한 줄', [
+        {'kind': 'equal', 'before': '요구사항\n\n', 'after': '요구사항\n\n'},
+        {'kind': 'replace', 'before': '한 줄\n', 'after': '한 줄'},
+    ]),
+    ('삭제할 본문', '', [
+        {'kind': 'equal', 'before': '요구사항\n\n', 'after': '요구사항\n\n'},
+        {'kind': 'delete', 'before': '삭제할 본문', 'after': ''},
+    ]),
+])
+def test_review_diff_preserves_line_changes_and_original_text(vault, before, after, changes):
+    c, app, base, root, identity = vault
+    doc = decide(c, base, identity, submit(c, base, identity, create(c, base, identity, before)))
+    doc = submit(c, base, identity, save(c, base, identity, doc, after).json())
+    review = c.get(base + f"/documents/{doc['id']}/reviews/2?connection_id={identity}").json()
+    assert review['diff'] == changes
+    assert review['diff_coarse'] is False
+    assert ''.join(part['before'] for part in review['diff']) == '요구사항\n\n' + before
+    assert ''.join(part['after'] for part in review['diff']) == '요구사항\n\n' + after
+
+
+def test_review_diff_includes_title_changes(vault):
+    c, app, base, root, identity = vault
+    doc = decide(c, base, identity, submit(c, base, identity, create(c, base, identity, '본문\n')))
+    doc['title'] = '변경한 제목'
+    doc = submit(c, base, identity, save(c, base, identity, doc, '본문\n').json())
+    review = c.get(base + f"/documents/{doc['id']}/reviews/2?connection_id={identity}").json()
+    assert review['diff'] == [
+        {'kind': 'replace', 'before': '요구사항\n', 'after': '변경한 제목\n'},
+        {'kind': 'equal', 'before': '\n본문\n', 'after': '\n본문\n'},
+    ]
+
+
+def test_review_diff_keeps_repeated_lines_around_one_change(vault):
+    c, app, base, root, identity = vault
+    repeated = '줄\n' * 40_000
+    doc = decide(c, base, identity, submit(c, base, identity, create(c, base, identity, repeated + '이전\n' + repeated)))
+    doc = submit(c, base, identity, save(c, base, identity, doc, repeated + '이후\n' + repeated).json())
+    review = c.get(base + f"/documents/{doc['id']}/reviews/2?connection_id={identity}").json()
+    assert [part['kind'] for part in review['diff']] == ['equal', 'replace', 'equal']
+    assert review['diff'][1] == {'kind': 'replace', 'before': '이전\n', 'after': '이후\n'}
+    assert review['diff_coarse'] is False
+    assert ''.join(part['after'] for part in review['diff']) == '요구사항\n\n' + repeated + '이후\n' + repeated
+
+
+def test_large_changed_region_is_bounded_and_preserves_text(vault):
+    c, app, base, root, identity = vault
+    before = '앞\n' + '기존\n' * 10_000 + '끝\n'
+    after = '앞\n' + '수정\n' * 10_000 + '끝\n'
+    doc = decide(c, base, identity, submit(c, base, identity, create(c, base, identity, before)))
+    doc = submit(c, base, identity, save(c, base, identity, doc, after).json())
+    review = c.get(base + f"/documents/{doc['id']}/reviews/2?connection_id={identity}").json()
+    assert review['diff_coarse'] is True
+    assert [part['kind'] for part in review['diff']] == ['equal', 'replace', 'equal']
+    assert ''.join(part['before'] for part in review['diff']) == '요구사항\n\n' + before
+    assert ''.join(part['after'] for part in review['diff']) == '요구사항\n\n' + after
+
+
+def test_repeated_unchanged_middle_is_not_marked_as_modified(vault):
+    c, app, base, root, identity = vault
+    repeated = '공통\n' * 500
+    doc = decide(c, base, identity, submit(c, base, identity, create(c, base, identity, '이전 시작\n' + repeated + '이전 끝')))
+    doc = submit(c, base, identity, save(c, base, identity, doc, '수정 시작\n' + repeated + '수정 끝').json())
+    review = c.get(base + f"/documents/{doc['id']}/reviews/2?connection_id={identity}").json()
+    assert [part['kind'] for part in review['diff']] == ['equal', 'replace', 'equal', 'replace']
+    assert review['diff'][2] == {'kind': 'equal', 'before': repeated, 'after': repeated}
+    assert review['diff_coarse'] is False
+
+
 def test_approval_rejection_and_restore_with_new_database(vault, tmp_path):
     c, app, base, root, identity = vault
     doc = decide(c, base, identity, submit(c, base, identity, create(c, base, identity, '전체 10MB')))
@@ -62,6 +155,11 @@ def test_approval_rejection_and_restore_with_new_database(vault, tmp_path):
     doc = save(c, base, identity, doc, '파일당 8MB').json()
     doc = decide(c, base, identity, submit(c, base, identity, doc))
     assert doc['approved'] == 3 and doc['reviews'][1]['decision'] == 'rejected'
+    review = c.get(base + f"/documents/{doc['id']}/reviews/3?connection_id={identity}").json()
+    assert review['review']['base'] == 1
+    assert review['diff'][-1] == {'kind': 'replace', 'before': '전체 10MB', 'after': '파일당 8MB'}
+    previous = c.get(base + f"/documents/{doc['id']}/reviews/2?connection_id={identity}").json()
+    assert previous['diff'][-1] == {'kind': 'replace', 'before': '전체 10MB', 'after': '파일당 10MB'}
     # A new app, project registry and database know nothing about the original runtime.
     with TestClient(create_app(tmp_path / 'fresh-projects', db_path=tmp_path / 'fresh.sqlite3')) as recovered:
         recovered.post('/api/projects', json={'name': 'recovered'})

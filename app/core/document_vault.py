@@ -1,6 +1,7 @@
 """Local document history: immutable objects, one atomic catalog, no database dependency."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from hashlib import sha256
 import json
 import os
@@ -17,6 +18,29 @@ MAX_FILE = 2 * 1024 * 1024
 MAX_TEXT = 200_000
 MAX_DOCUMENTS = 100
 MAX_REVIEWS = 100
+
+
+def line_diff(before, after):
+    left, right = before.splitlines(keepends=True), after.splitlines(keepends=True)
+    start, left_end, right_end = 0, len(left), len(right)
+    while start < min(left_end, right_end) and left[start] == right[start]:
+        start += 1
+    while left_end > start and right_end > start and left[left_end - 1] == right[right_end - 1]:
+        left_end -= 1
+        right_end -= 1
+    a, b = left[start:left_end], right[start:right_end]
+    coarse = len(a) * len(b) > 4_000_000
+    spans = [('equal', 0, start, 0, start)] if start else []
+    if coarse:
+        # shortcut: large changed regions are grouped, use a bounded diff algorithm if finer detail is needed.
+        spans.append(('replace', start, left_end, start, right_end))
+    else:
+        spans.extend((kind, i + start, j + start, k + start, end + start)
+                     for kind, i, j, k, end in SequenceMatcher(None, a, b, autojunk=False).get_opcodes())
+    if left_end < len(left):
+        spans.append(('equal', left_end, len(left), right_end, len(right)))
+    return [{'kind': kind, 'before': ''.join(left[i:j]), 'after': ''.join(right[k:end])}
+            for kind, i, j, k, end in spans], coarse
 
 
 def now():
@@ -311,7 +335,10 @@ class DocumentVault:
             before = {'title': '', 'content': ''}
             if review['base']:
                 before = self.snapshot(root, state['reviews'][review['base'] - 1])
-            return {'review': review, 'before': before, 'after': self.snapshot(root, review)}
+            after = self.snapshot(root, review)
+        diff, coarse = line_diff(before['title'] + '\n\n' + before['content'] if review['base'] else '',
+                                 after['title'] + '\n\n' + after['content'])
+        return {'review': review, 'before': before, 'after': after, 'diff': diff, 'diff_coarse': coarse}
 
     def publish(self, root, catalog, state, action):
         state['updated_at'] = now()
