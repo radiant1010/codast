@@ -65,6 +65,23 @@ def executable(client, configured=''):
     return path
 
 
+class CliExecutionError(RuntimeError):
+    def __init__(self, client, detail, message=None):
+        self.detail = detail
+        if message is None:
+            raw = detail.casefold()
+            if any(token in raw for token in ('auth_failed', 'authentication', 'unauthorized', 'not logged in', 'invalid api key', 'token_expired')):
+                message = '인증에 실패했습니다. 설정의 CLI 연결에서 계정을 확인하고 다시 로그인하세요.'
+            elif any(token in raw for token in ('rate limit', 'rate_limit', 'quota', 'usage limit')):
+                message = '사용 한도에 도달했습니다. 계정의 사용량을 확인하고 한도가 풀린 뒤 다시 시도하세요.'
+            elif any(token in raw for token in ('connection refused', 'connection reset', 'failed to connect', 'network', 'timed out', 'timeout')):
+                message = '서버에 연결하지 못했거나 응답 시간이 초과됐습니다. 네트워크를 확인하고 다시 시도하세요.'
+            else:
+                message = '실행을 완료하지 못했습니다. 설정의 CLI 연결 상태를 확인하고 다시 시도하세요.'
+            message = ('Codex' if client == 'codex' else 'Claude') + ': ' + message
+        super().__init__(message + ' 실행 과정을 펼치면 오류 상세 로그를 확인할 수 있습니다.')
+
+
 class ProcessRunner:
     limit = 4 * 1024 * 1024
 
@@ -221,13 +238,19 @@ class CliAdapter:
         options = {'on_line': self.stream_line} if self.on_event else {}
         code, stdout, stderr = await self.runner.run(self.arguments(mode, session, client_arguments(self.client, servers)), cwd, prompt, **options)
         if code:
+            detail = f'종료 코드: {code}\n\n표준 출력:\n{stdout}\n\n표준 오류:\n{stderr}'
             if self.client == 'codex' and 'thread-store conflict:' in stderr + stdout and 'already has an active writer' in stderr + stdout:
-                raise RuntimeError('다른 Codex 앱이나 CLI가 이 대화를 사용 중이어서 이어갈 수 없습니다. '
+                raise CliExecutionError(self.client, detail, '다른 Codex 앱이나 CLI가 이 대화를 사용 중이어서 이어갈 수 없습니다. '
                                    '응답이 끝났어도 앱에서 대화를 열어 둔 동안 발생할 수 있습니다. '
                                    '다른 실행을 종료한 뒤 기존 대화 불러오기로 새 채팅에 다시 연결하세요. '
                                    '실패한 연결은 해제했으며 자동으로 재실행하지 않습니다.')
-            raise RuntimeError(f'{self.client} 종료 코드 {code}: '+(stderr.strip() or stdout.strip())[-3000:])
-        return self.parse(stdout)
+            raise CliExecutionError(self.client, detail)
+        try:
+            return self.parse(stdout)
+        except ValueError as exc:
+            label = 'Codex' if self.client == 'codex' else 'Claude'
+            raise CliExecutionError(self.client, stdout + '\n\n응답 처리 오류:\n' + str(exc),
+                                    label + '의 최종 응답 형식 또는 완료 결과를 확인하지 못했습니다. CLI 연결 상태를 확인한 뒤 다시 시도하세요.') from exc
 
     def stream_line(self, channel, line):
         if channel == 'stderr':
@@ -238,7 +261,7 @@ class CliAdapter:
             event = json.loads(line)
         except json.JSONDecodeError:
             return
-        if not isinstance(event, dict):
+        if not isinstance(event, dict) or not isinstance(event.get('type'), str):
             return
         kind = event.get('type', '')
         if self.on_metrics:
@@ -250,6 +273,8 @@ class CliAdapter:
                 self.on_metrics({'session_id': event['thread_id']})
         if self.client == 'codex':
             item = event.get('item') or {}
+            if not isinstance(item, dict):
+                return
             category = item.get('type')
             if kind in ('thread.started', 'turn.started'):
                 self.on_event('status', kind)
@@ -270,7 +295,7 @@ class CliAdapter:
             elif kind in ('item.started', 'item.completed') and category in ('mcp_tool_call', 'web_search'):
                 self.on_event('tool', json.dumps(item, ensure_ascii=False))
             elif kind in ('error', 'turn.failed'):
-                self.on_event('warning', str(event.get('message') or event.get('error')))
+                self.on_event('warning', line)
         else:
             if kind == 'stream_event':
                 delta = (event.get('event') or {}).get('delta') or {}
@@ -308,9 +333,9 @@ class CliAdapter:
                 if isinstance(event, dict):
                     update_claude_metrics(metrics, event)
             if not isinstance(data, dict):
-                raise ValueError('Claude 최종 JSON 응답을 해석하지 못했습니다.')
+                raise ValueError('Claude의 최종 응답 형식을 확인하지 못했습니다.')
             if data.get('is_error') or data.get('subtype', 'success') != 'success':
-                raise RuntimeError('Claude 실행 실패: '+str(data.get('result', data))[-2000:])
+                raise CliExecutionError(self.client, stdout)
             result = data.get('result')
             if not isinstance(result, str):
                 raise ValueError('Claude 최종 결과가 없습니다.')
@@ -322,15 +347,20 @@ class CliAdapter:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(event, dict):
+                continue
             kind = event.get('type')
             if kind == 'thread.started':
                 session = event.get('thread_id')
-            elif kind == 'item.completed' and event.get('item', {}).get('type') == 'agent_message':
-                messages.append(event['item'].get('text', ''))
+            elif kind == 'item.completed' and isinstance(event.get('item'), dict) and event['item'].get('type') == 'agent_message':
+                text = event['item'].get('text', '')
+                if not isinstance(text, str):
+                    raise ValueError('잘못된 응답 텍스트: ' + repr(text))
+                messages.append(text)
             elif kind == 'turn.completed':
                 usage, completed = event.get('usage'), True
             elif kind == 'turn.failed':
-                raise RuntimeError('Codex 실행 실패: '+str(event.get('error'))[-2000:])
+                raise CliExecutionError(self.client, line)
         if not completed or not messages:
             raise ValueError('Codex의 완료 결과를 확인하지 못했습니다.')
         return AgentResult(adapter='codex', output='\n\n'.join(messages), final_output=messages[-1], session_id=session, usage=usage)

@@ -334,7 +334,7 @@ const {chromium}=require('playwright');
  await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
  assert.equal(await page.getByRole('textbox',{name:'질문에 대한 답변',exact:true}).inputValue(),'CSV');
  await page.getByRole('button',{name:'답변하고 계속',exact:true}).click();
- await page.getByText('temporary reply failure',{exact:true}).waitFor();
+ await page.locator('.user-question').getByText(/서버 처리 오류/).waitFor();
  assert.equal(await page.getByRole('textbox',{name:'질문에 대한 답변',exact:true}).inputValue(),'CSV');
  await page.getByRole('button',{name:'답변하고 계속',exact:true}).click();
  await page.getByRole('heading',{name:'답변 접수됨',exact:true}).waitFor();

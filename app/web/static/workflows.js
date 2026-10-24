@@ -82,7 +82,7 @@
     const chosen=[];
     for(const role of roles){const row=el('div',undefined,'workflow-material-row'),files=el('div'),input=el('input',undefined,'form-control');input.type='file';input.multiple=true;input.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';input.hidden=true;input.setAttribute('aria-label',role+' 파일');
       input.onchange=()=>safe(async()=>{for(const file of input.files){if(chosen.length>=10)throw Error('입력 자료는 총 10개까지 등록할 수 있습니다.');
-        const response=await fetch('/api/projects/'+encodeURIComponent(project)+'/materials?filename='+encodeURIComponent(file.name),{method:'POST',body:file});const data=await response.json();if(!response.ok)throw Error(data.detail||'파일 검사 실패');
+        const data=await request('/projects/'+encodeURIComponent(project)+'/materials?filename='+encodeURIComponent(file.name),{method:'POST',body:file});
         const entry={id:data.id,role};if(data.status!=='ready')throw Error('차단된 자료입니다. 파일 보호 설정과 내용을 확인하세요.');chosen.push(entry);
         const item=el('div',undefined,'workflow-actions');item.append(el('span',data.label),icon('file','전달 내용 확인',()=>safe(async()=>{const preview=await api('/projects/'+encodeURIComponent(project)+'/materials/'+data.id);const pre=el('pre',preview.content,'console-output');item.append(pre);})),icon('close','워크플로 입력에서 제외',()=>{chosen.splice(chosen.indexOf(entry),1);item.remove();}));files.append(item);
       }input.value='';});
@@ -121,9 +121,8 @@
     }
     if(s.status==='done'){
       body.append(el('p','모든 결과를 승인했습니다. 승인된 단계별 문서와 버전 목록, 수정, 승인 이력을 ZIP으로 내려받을 수 있습니다. 이력에는 전달한 자료의 가공본도 포함됩니다.','hint'),icon('save','승인 산출물과 이력 내려받기',()=>safe(async()=>{
-        const response=await fetch('/api'+endpoint()+'/'+s.id+'/export?connection_id='+binding.connection_id);
-        if(!response.ok){const error=await response.json();throw Error(error.detail||'내려받기 실패');}
-        const url=URL.createObjectURL(await response.blob()),link=el('a');link.href=url;link.download=s.id+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+        const blob=await request(endpoint()+'/'+s.id+'/export?connection_id='+binding.connection_id,{},'blob');
+        const url=URL.createObjectURL(blob),link=el('a');link.href=url;link.download=s.id+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
       })));
       return;
     }
@@ -200,7 +199,7 @@
       }
       body.append(card);
     }
-    if(s.status==='done')body.append(icon('save','승인 산출물과 이력 내려받기',()=>safe(async()=>{const response=await fetch('/api'+endpoint()+'/'+s.id+'/export?connection_id='+binding.connection_id);if(!response.ok)throw Error('내려받기 실패');const url=URL.createObjectURL(await response.blob()),link=el('a');link.href=url;link.download=s.id+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);})));
+    if(s.status==='done')body.append(icon('save','승인 산출물과 이력 내려받기',()=>safe(async()=>{const blob=await request(endpoint()+'/'+s.id+'/export?connection_id='+binding.connection_id,{},'blob');const url=URL.createObjectURL(blob),link=el('a');link.href=url;link.download=s.id+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);})));
     if(s.status==='running')timer=setTimeout(function poll(){if(!dialog.open)return;if(locked){timer=setTimeout(poll,1500);return;}const top=dialog.scrollTop;safe(async()=>{await load(s.id);dialog.scrollTop=top;});},1500);
   }
 })();

@@ -44,11 +44,11 @@ function notice(text,error=false,{persistent=false,success=false}={}){
 const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하는 1~64자 이름이 필요합니다. 하이픈(-)과 밑줄(_)도 사용할 수 있습니다. 예: 아호이';
 function apiErrorMessage(detail,path,status){
   if(status===405)return '지원하지 않는 요청 (405): 실행 중인 서버에서 이 작업을 처리할 수 없습니다. 서버를 재시작한 뒤 화면을 새로고침하고 다시 시도하세요.';
-  if(typeof detail==='string'&&detail.trim())return detail;
+  if(typeof detail==='string'&&/[가-힣]/.test(detail)&&!/^\s*[\[{<]/.test(detail))return detail;
   if(Array.isArray(detail)&&detail.length){
-    const labels={name:'이름',path:'경로',text:'메시지',task:'채팅 이름',model:'모델',client:'에이전트',mode:'권한',answer:'답변'};
+    const labels={name:'이름',path:'경로',filename:'파일 이름',text:'메시지',task:'채팅 이름',model:'모델',client:'에이전트',mode:'권한',answer:'답변'};
     return [...new Set(detail.map(issue=>{
-      const field=issue?.loc?.at(-1);
+      const field=Array.isArray(issue?.loc)?issue.loc.at(-1):null;
       if(field==='name'&&/^\/(?:workspaces|projects(?:\/[^/]+)?)$/.test(path)&&issue.type==='string_pattern_mismatch')return projectNameError;
       let reason='입력한 값이 허용된 형식이나 범위에 맞지 않습니다.';
       if(issue?.type==='missing')reason='필수 항목이 비어 있습니다.';
@@ -60,9 +60,38 @@ function apiErrorMessage(detail,path,status){
       return (labels[field]?labels[field]+' 입력 오류':'입력값 오류')+': '+reason;
     }))].join('\n');
   }
-  return `요청 처리 오류 (${status}): 요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.`;
+  if(status>=500)return `서버 처리 오류 (${status}): 요청을 완료하지 못했습니다. 잠시 후 다시 시도하고, 계속되면 서버 상태를 확인하세요.`;
+  if(status===401)return '로그인이 필요합니다. 연결 계정을 확인하고 다시 로그인하세요.';
+  if(status===403)return '이 작업을 수행할 권한이 없습니다. 계정과 접근 권한을 확인하세요.';
+  if(status===404)return '요청한 항목을 찾지 못했습니다. 목록을 새로고침하고 다시 선택하세요.';
+  if(status===429)return '요청 한도에 도달했습니다. 잠시 기다린 뒤 다시 시도하세요.';
+  return `요청 처리 오류 (${status}): 요청을 완료하지 못했습니다. 입력값을 확인하고 다시 시도하세요.`;
 }
-async function api(path,method='GET',body){const r=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(!r.ok){const error=Error(apiErrorMessage(d.detail,path,r.status));error.status=r.status;throw error;}return d;}
+const requestErrors=[];
+function requestError(message,path,options,status,raw){
+  const error=Error(message);error.status=status;
+  requestErrors.unshift({time:new Date().toLocaleString(),method:options.method||'GET',path,status,message,raw});
+  requestErrors.length=Math.min(requestErrors.length,20);
+  window.dispatchEvent(new Event('request-error'));
+  return error;
+}
+async function request(path,options={},type='json'){
+  let response,raw;
+  try{
+    response=await fetch('/api'+path,options);
+    if(response.ok&&type==='blob')return await response.blob();
+    raw=await response.text();
+  }catch(error){
+    if(error.name==='AbortError')throw error;
+    throw requestError('서버와 연결하지 못했거나 응답이 끊겼습니다. 서버 실행 상태와 네트워크를 확인하고 다시 시도하세요.',path,options,response?.status||0,String(error));
+  }
+  let data;try{data=JSON.parse(raw);}catch{}
+  if(!response.ok)throw requestError(apiErrorMessage(data?.detail,path,response.status),path,options,response.status,raw);
+  if(response.status===204)return null;
+  if(data===null||typeof data!=='object')throw requestError('서버 응답 형식을 확인할 수 없습니다. 화면을 새로고침하고, 계속되면 서버 상태를 확인하세요.',path,options,response.status,raw);
+  return data;
+}
+async function api(path,method='GET',body){return request(path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});}
 async function act(fn){try{await fn();}catch(e){notice(e.message,true);}}
 function button(label,fn,cls){const n=el('button',label,cls);n.type='button';n.onclick=()=>act(fn);if(cls==='secondary'||cls==='icon-action')window.decorateAction?.(n,label);return n;}
 function selectedPaths(){return [];}
@@ -164,6 +193,7 @@ function messageCard(m,b){
       if(info.execution_model)detailBody.append(el('p','CLI가 보고한 모델: '+info.execution_model,'run-usage'));
     }
     if(info.usage)detailBody.append(el('h4','사용량'),el('pre',JSON.stringify(info.usage,null,2),'run-usage'));
+    if(info.error_detail)detailBody.append(el('h4','오류 상세 로그, 원문'),el('pre',info.error_detail,'error-detail'));
     detailBody.append(el('h4',m.status==='running'&&m.cancellable?'실시간 실행 과정':'저장된 실행 과정'),log);
     answer.append(detail,consoleOutput(m.output||m.error||(m.cancellable?'에이전트가 작업 중입니다. 위에서 실행 과정을 펼쳐 볼 수 있습니다.':'서버가 이 실행을 관리하고 있지 않습니다. 프로세스가 종료됐는지 확인해 주세요.')));
     if(m.status==='running')answer.append(button(m.cancellable?'실행 취소':'종료 확인 후 기록 정리',async()=>{

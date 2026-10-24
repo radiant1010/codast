@@ -10,7 +10,7 @@ from app.core.context_builder import ContextBuilder
 from app.core.rule_loader import RuleLoader
 from app.core.routing import TaskRouter
 from app.core.storage import ExistingRun
-from app.llm.cli import CliAdapter, executable
+from app.llm.cli import CliAdapter, CliExecutionError, executable
 
 
 class Orchestrator:
@@ -156,6 +156,8 @@ class Orchestrator:
         except Exception as exc:
             # A failed native turn may have partially changed its own conversation.
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
+            if isinstance(exc, CliExecutionError):
+                metadata['error_detail'] = exc.detail
             self.storage.finish_run(run_id, "failed", error=str(exc), metadata=metadata)
             raise
         native_session = result.session_id or session

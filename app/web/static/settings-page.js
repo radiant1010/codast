@@ -27,7 +27,17 @@
     open(key=last){const hash='#settings/'+key;if(location.hash===hash)render();else location.hash=hash;},
     close(){if(wasOpen){location.hash='';}},
   };
+  const errors=el('section'),errorList=el('div');errors.id='request-errors';
+  errors.append(el('p','이 화면을 연 뒤 발생한 최근 요청 오류 20건입니다. 새로고침하면 지워집니다. 에이전트 실행 오류는 해당 채팅의 실행 과정에 저장됩니다.','hint'),errorList);
+  function renderErrors(){
+    errorList.replaceChildren();
+    if(!requestErrors.length)errorList.append(el('p','기록된 요청 오류가 없습니다.','hint'));
+    for(const entry of requestErrors){
+      const detail=el('details');detail.append(el('summary',entry.time+', '+entry.message),el('pre',entry.method+' /api'+entry.path+'\n상태: '+(entry.status||'연결 실패')+'\n\n'+(entry.raw||'(빈 응답)'),'error-detail'));errorList.append(detail);
+    }
+  }
+  window.addEventListener('request-error',renderErrors);
   window.addEventListener('hashchange',render);
   window.addEventListener('project-names-changed',()=>{context.textContent=$('project').value?'프로젝트, '+projectLabel($('project').value):'프로젝트 선택 전';});
-  window.addEventListener('load',render);
+  window.addEventListener('load',()=>{window.settingsPage.register('errors','오류 상세 로그',errors);renderErrors();render();});
 })();

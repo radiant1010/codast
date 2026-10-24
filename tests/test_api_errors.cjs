@@ -3,11 +3,47 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('app/web/static/app.js','utf8');
 
-function client(status,detail){
-  const context={fetch:async()=>({ok:status<400,status,json:async()=>({detail})})};
+function fixture(fetch){
+  const context={fetch,window:{dispatchEvent(){}},Event};
   vm.createContext(context);vm.runInContext(source.slice(0,source.indexOf('let streams=[];')),context);
-  return context.api;
+  return context;
 }
+function client(status,detail){return fixture(async()=>new Response(JSON.stringify({detail}),{status})).api;}
+
+test('non-JSON and empty server failures retain HTTP status and exact diagnostics',async()=>{
+  for(const [status,raw] of [[500,'Internal Server Error'],[502,'<html>Bad gateway</html>'],[503,''],[500,'null'],[500,'{"detail":{"code":"internal"}}']]){
+    const f=fixture(async()=>new Response(raw,{status}));
+    await assert.rejects(f.api('/projects'),error=>{
+      assert.equal(error.status,status);assert.match(error.message,/서버|연결/);
+      assert.doesNotMatch(error.message,/Unexpected|JSON|<html>|internal|Cannot read/);return true;
+    });
+    const log=vm.runInContext('requestErrors[0]',f);
+    assert.equal(log.raw,raw);assert.equal(log.status,status);assert.equal(log.path,'/projects');
+  }
+});
+
+test('invalid success responses and network failures are readable, cancellation remains cancellation',async()=>{
+  for(const raw of ['','null','broken','<html>login</html>']){
+    const f=fixture(async()=>new Response(raw));
+    await assert.rejects(f.api('/projects'),error=>/응답.*형식/.test(error.message));
+    assert.equal(vm.runInContext('requestErrors[0].raw',f),raw);
+  }
+  const f=fixture(async()=>{throw new TypeError('Failed to fetch');});
+  await assert.rejects(f.api('/projects'),/서버.*연결/);
+  assert.match(vm.runInContext('requestErrors[0].raw',f),/Failed to fetch/);
+  const aborted=new DOMException('aborted','AbortError'),cancel=fixture(async()=>{throw aborted;});
+  await assert.rejects(cancel.api('/projects'),error=>error===aborted);
+  assert.equal(vm.runInContext('requestErrors.length',cancel),0);
+});
+
+test('uploads and downloads share validation without changing binary content or request options',async()=>{
+  const detail=[{type:'string_too_long',loc:['query','filename'],ctx:{max_length:255}}];
+  const failed=fixture(async()=>new Response(JSON.stringify({detail}),{status:422}));
+  for(const type of ['json','blob'])await assert.rejects(failed.request('/materials',{method:'POST',body:'file'},type),/파일 이름.*255/);
+  const bytes=new Uint8Array([80,75,0,255]),options={method:'POST',body:bytes,signal:new AbortController().signal};
+  const success=fixture(async(url,actual)=>{assert.equal(url,'/api/export');assert.equal(actual,options);return new Response(bytes);});
+  assert.deepEqual(new Uint8Array(await (await success.request('/export',options,'blob')).arrayBuffer()),bytes);
+});
 
 test('project name validation identifies the field and correction without exposing raw input',async()=>{
   const detail=[{type:'string_pattern_mismatch',loc:['body','name'],msg:'String should match pattern',input:'가상/프로젝트',ctx:{pattern:'restricted-project-name'}}];

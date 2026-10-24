@@ -26,7 +26,7 @@ const {execFileSync}=require('node:child_process');
  assert.ok(reports[0].omissions.some(item=>item.includes('2페이지')));
  await page.locator('#attachment-picker').setInputFiles('work/material-auto-browser/scan.pdf');
  await page.waitForFunction(()=>!window.materialGuard.isUploading());
- await page.getByText(/PDF에서 읽을 수 있는 텍스트가 없습니다/).waitFor();
+ await page.locator('#composer [role=status]').filter({hasText:'PDF에서 읽을 수 있는 텍스트가 없습니다'}).waitFor();
  assert.equal((await api(base+'/materials')).materials.length,2);assert.equal((await page.evaluate(()=>window.materialGuard.selected())).length,2);
  // Workflow uploads also attach without a review gate.
  await page.getByRole('button',{name:'워크플로 설정 및 진행',exact:true}).click();

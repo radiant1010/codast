@@ -147,8 +147,7 @@
         progressText.textContent=(index+1)+' / '+files.length+' 파일 전달 및 검사 중…';
         try{
           if(file.size>8*1024*1024)throw Error('파일은 8 MiB 이하만 지원합니다.');
-          const response=await fetch('/api'+b+'/material-preparations?filename='+encodeURIComponent(file.name)+'&test_data='+test.checked,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file,signal:controller.signal});
-          const prepared=await response.json();if(!response.ok)throw Error(typeof prepared.detail==='string'?prepared.detail:'자료 업로드에 실패했습니다.');
+          const prepared=await request(b+'/material-preparations?filename='+encodeURIComponent(file.name)+'&test_data='+test.checked,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file,signal:controller.signal});
           if(controller.signal.aborted||owner!==contextVersion){await api(b+'/material-preparations/'+prepared.token,'DELETE');break;}
           cancelUpload.disabled=true;progressText.textContent=(index+1)+' / '+files.length+' 검사 완료, 저장 중…';
           const result=await api(b+'/material-preparations/'+prepared.token+'/commit','POST');
