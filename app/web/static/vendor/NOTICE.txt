@@ -15,3 +15,15 @@ Source: https://github.com/google/material-design-icons/tree/49d4db35df873165d6b
 License: material-symbols-sharp/LICENSE (Apache License 2.0)
 Selected SVG paths are bundled in symbols.svg as named symbols. Their original
 coordinate systems are preserved; the application supplies the current text color.
+
+Marked 17.0.5
+Source: https://github.com/markedjs/marked/tree/v17.0.5
+License: marked-17.0.5/LICENSE.md (MIT)
+marked.umd.js is distributed unchanged. The optional source map is not bundled.
+SHA-256: 0db7abc826b5ac76f6ed11951ae34074ba50438ce6ea8d52889203779e5cbbad
+
+DOMPurify 3.4.17
+Source: https://github.com/cure53/DOMPurify/tree/3.4.17
+License: dompurify-3.4.17/LICENSE (Apache-2.0 or MPL-2.0)
+purify.min.js is distributed unchanged. The optional source map is not bundled.
+SHA-256: cd37898f9782adf54820c413191b5691803f0f137c799d6edcfd38523b4c2c31

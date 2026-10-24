@@ -30,7 +30,7 @@ test('detached server refreshes a live card once; saved replay never loops',asyn
 });
 const presentation=source.slice(source.indexOf('function consoleText('),source.indexOf('function base('));
 test('console presentation preserves masked text, code and incomplete streamed fences',()=>{
- const context={el:()=>({})};vm.createContext(context);vm.runInContext(presentation,context);
+ const context={window:{},el:()=>({})};vm.createContext(context);vm.runInContext(presentation,context);
  const raw='```text\n아이디: qwe***\n  <script>literal</script>\n```';
  const node=context.consoleOutput(raw);
  assert.equal(node.textContent,'아이디: qwe***\n  <script>literal</script>');assert.equal(node.consoleSource,raw);

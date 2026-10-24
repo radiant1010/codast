@@ -25,9 +25,9 @@ function consoleText(value){
   }
   return lines.filter((_,i)=>!hidden.has(i)).join('\n');
 }
-function setConsoleOutput(node,text){node.consoleSource=String(text);node.textContent=consoleText(node.consoleSource);}
+function setConsoleOutput(node,text){node.consoleSource=String(text);if(!window.renderMarkdown?.(node,node.consoleSource))node.textContent=consoleText(node.consoleSource);}
 function consoleOutput(text,cls='console-output'){
-  const node=el('pre',undefined,cls);setConsoleOutput(node,text);return node;
+  const node=el('div',undefined,cls+' plain-output');setConsoleOutput(node,text);return node;
 }
 function base(){if(!$('project').value)throw Error('프로젝트를 선택하세요.');return '/projects/'+encodeURIComponent($('project').value);}
 function valid(b,e=epoch){return e===epoch&&$('project').value&&b==='/projects/'+encodeURIComponent($('project').value);}
@@ -174,7 +174,7 @@ function messageCard(m,b){
     if(m.status==='running'){queueMicrotask(()=>{if(log.isConnected)streamRun(m.run_id,b,log,m.cancellable);});}
     else{let loaded=false;detail.ontoggle=()=>{if(detail.open&&!loaded){loaded=true;streamRun(m.run_id,b,log,false);}};}
   }
-  if(m.status==='completed'){const question=window.questionCard?.(m,b,conversation);if(question){const output=card.querySelector('.answer>pre');if(output)output.hidden=true;card.append(question);}}
+  if(m.status==='completed'){const question=window.questionCard?.(m,b,conversation);if(question){const output=card.querySelector('.answer>.console-output');if(output)output.hidden=true;card.append(question);}}
   return card;
 }
 async function conversation(b=base()){
