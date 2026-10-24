@@ -126,7 +126,7 @@
     await api(b+'/guard','PUT',{level:level.value,privacy_mode:privacy.value,test_data:test.checked,fields:extra,excel_sheets:excelSelection()});if(g!==generation)return;
     const owner=contextVersion,loaded=await refresh();if(owner!==contextVersion)return;
     saveStatus.textContent=loaded?'파일 보호 설정을 저장했습니다. 다음에 첨부하는 파일부터 적용됩니다.':'저장은 완료됐지만 결과를 다시 불러오지 못했습니다. 화면을 새로고침해 주세요.';
-    notice(saveStatus.textContent);
+    notice(saveStatus.textContent,false,{success:loaded});
     }catch(e){if(g===generation){saveStatus.textContent=e.message;saveStatus.classList.add('error');}throw e;}finally{save.disabled=false;}
   });};
   let uploadController=null;

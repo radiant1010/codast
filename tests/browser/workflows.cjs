@@ -11,6 +11,7 @@ const fs=require('node:fs');
  try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(origin);await page.locator('#startup-loading').waitFor({state:'hidden'});await page.selectOption('#project',project);
+ await page.locator('#open-settings').click();await page.locator('#settings-page').waitFor({state:'visible'});
  await page.getByRole('button',{name:'워크플로 관리',exact:true}).click();
  assert.equal(await page.locator('#workflow-vault-path').inputValue(),settings.suggested_base_path);
  assert.equal((await api('/projects/'+project+'/document-vault')).binding,null);

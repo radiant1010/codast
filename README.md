@@ -87,7 +87,7 @@ Spring 프로젝트를 분석하려면 Java와 Maven 또는 Gradle 환경이 정
 
 ## 화면 구조 (IA)
 
-화면은 요청과 결과를 다루는 작업실과 실행 환경, 자료 보관을 관리하는 설정으로 나뉜다. 작업실에는 프로젝트 선택, 채팅, 작업 룰북과 워크플로가 있고, 설정에는 에이전트와 도구 연결, 실행 기록, 첨부 파일 보호와 산출물 관리 기능이 배치되어 있다.
+화면은 요청과 결과를 다루는 작업실과 실행 환경, 자료 보관을 관리하는 설정으로 나뉜다. 작업실에는 프로젝트 선택, 채팅과 워크플로 실행이 있고, 로고 옆 설정에서 시작 도움말, 작업 룰북, 워크플로 관리, 에이전트와 도구 연결, 실행 기록, 첨부 파일 보호와 산출물 관리 기능을 이용할 수 있다.
 
 ```mermaid
 flowchart TD
@@ -95,8 +95,10 @@ flowchart TD
     App --> Settings[설정]
     Workspace --> Project[프로젝트 선택]
     Workspace --> Chat[채팅 세션, 요청, 첨부와 결과]
-    Workspace --> Rules[작업 룰북]
-    Workspace --> Workflow[워크플로 관리]
+    Workspace --> Launch[워크플로 실행]
+    Settings --> Help[시작 도움말]
+    Settings --> Rules[작업 룰북]
+    Settings --> Workflow[워크플로 관리]
     Workflow --> Sequential[순차 작업]
     Workflow --> Parallel[병렬 설계와 테스트케이스 정의]
     Settings --> Execution[실행 설정]

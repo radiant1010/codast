@@ -16,6 +16,7 @@ const fs=require('node:fs');
  try{
  const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(origin);await page.locator('#startup-loading').waitFor({state:'hidden'});await page.selectOption('#project',project);
+ await page.locator('#open-settings').click();await page.locator('#settings-page').waitFor({state:'visible'});
  await page.getByRole('button',{name:'워크플로 관리',exact:true}).click();
  await page.getByRole('button',{name:'새 병렬 설계와 테스트 정의',exact:true}).click();
  await page.getByRole('button',{name:'병렬 작업 저장',exact:true}).click();

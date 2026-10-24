@@ -181,6 +181,7 @@ const {chromium}=require('playwright');
  assert.equal(fileRequests,0);
  assert.deepEqual(await page.evaluate(()=>selectedPaths()),[]);
  assert.equal(await page.locator('#document-panel,#files-panel,#open-editor').count(),0);
+ await page.locator('#open-settings').click();await page.locator('#settings-page').waitFor({state:'visible'});
  await page.getByRole('button',{name:'작업 룰북',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('#rulebook-content').value==='기본 규정');
  await page.getByText('변경 후 저장 버튼을 누르세요.',{exact:true}).waitFor();
@@ -271,7 +272,7 @@ const {chromium}=require('playwright');
   await page.getByRole('button',{name:label,exact:true}).click();
   const dialog=page.getByRole('dialog',{name:label,exact:true});assert.equal(await dialog.isVisible(),true);
   assert.equal(await page.locator('dialog[open]').count(),1);
-  for(const other of ['settings-panel','history-panel','rules-panel','setup-guide','project-tools'])if(other!==id)assert.equal(await page.locator('#'+other).isVisible(),false);
+  for(const other of ['rules-panel','setup-guide'])if(other!==id)assert.equal(await page.locator('#'+other).isVisible(),false);
   if(id==='setup-guide'){
    assert.equal(await dialog.locator('#setup-steps li').count(),4);
    assert.equal(await dialog.locator('#setup-steps').isVisible(),true);
@@ -279,7 +280,8 @@ const {chromium}=require('playwright');
   }
   await page.keyboard.press('Escape');assert.equal(await dialog.isVisible(),false);
  }
- assert.deepEqual(await page.locator('.workspace-menu>button').allTextContents(),['시작 도움말','작업 룰북','설정','워크플로']);
+ assert.deepEqual(await page.locator('#settings-page .workspace-menu>button').allTextContents(),['시작 도움말','작업 룰북','워크플로']);
+ await page.getByRole('button',{name:'← 작업실',exact:true}).click();await page.locator('#settings-page').waitFor({state:'hidden'});
  await page.fill('#text','settings navigation draft');
  const savedScroll=await page.locator('#messages').evaluate(n=>{const block=document.createElement('div');block.style.height='1800px';n.append(block);n.scrollTop=240;return n.scrollTop;});
 

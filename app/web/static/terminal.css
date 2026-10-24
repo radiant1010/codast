@@ -42,7 +42,7 @@ h1,h2,h3{font-family:inherit}
 .brand span{font-size:12px;color:var(--terminal-muted)}
 .side-content{padding:0 16px 16px}
 .side-content>#project-panel{padding:12px 0}
-summary,label,.hint,.project-location,.native-session,#connection,#status,.meta{color:var(--terminal-muted)}
+summary,label,.hint,.project-location,#connection,#status,.meta{color:var(--terminal-muted)}
 .project-location{margin-top:8px;font-size:12px;line-height:1.4}
 .project-picker{gap:8px}
 .project-picker select{padding:3px 0;min-height:26px;background-color:transparent;border:0;border-bottom:1px solid #565656}
@@ -95,7 +95,6 @@ summary,label,.hint,.project-location,.native-session,#connection,#status,.meta{
 #console>header h1{font-size:16px;font-weight:600}
 #console>header h1::before{content:none}
 #console>header button{padding:3px 5px;border-color:transparent;background:transparent}
-.native-session{padding:5px var(--workspace-gutter);font-family:inherit;font-size:12px;line-height:1.4}
 #status{padding:4px var(--workspace-gutter);min-height:22px;font-size:12px}
 .pagination{padding:2px var(--workspace-gutter) 6px;gap:6px}
 .pagination button{padding:3px 6px;background:transparent;border-color:transparent}
@@ -109,7 +108,7 @@ summary,label,.hint,.project-location,.native-session,#connection,#status,.meta{
 .event.assistant{color:#d4d4d4}
 .event.tool,.event.file{color:#d6bc82}
 .empty{padding:28px 0;color:var(--terminal-muted)}
-#composer{padding:16px var(--workspace-gutter);background:#17191c;border-top:1px solid var(--terminal-border)}
+#composer{padding:16px var(--workspace-gutter);background:#17191c;border-top:0}
 .command-entry{display:block;padding:10px;background:#202328;border:1px solid var(--terminal-border);border-radius:8px}
 .command-entry:focus-within{border-color:#6f8bb6;box-shadow:0 0 0 2px #8ab4f812}
 .command-entry::before{content:none}
@@ -232,11 +231,10 @@ select:focus-visible{outline-color:var(--terminal-accent)}
 #rulebook-trash{margin-top:16px;border-top:1px solid var(--terminal-border);padding-top:8px}
 .rulebook-trash-row{display:flex;align-items:center;gap:8px}.rulebook-trash-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
 
-/* Bottom controls share the composer boundary; long chat lists scroll above them. */
+/* Long chat lists scroll within the sidebar. */
 #sidebar .side-content{min-height:0;overflow:hidden;padding-bottom:0}
 #sidebar .side-content>#project-panel{flex-shrink:0}
 #sidebar .chat-navigation{flex:1;min-height:0;overflow-y:auto}
-#sidebar .workspace-menu{flex:none;min-height:0;overflow-y:auto;align-content:start;padding-bottom:12px;border-top:1px solid #565656}
 
 #sidebar .side-content>#project-panel{margin:0;min-height:0;overflow-y:auto;border-bottom:1px solid #565656}
 
@@ -253,6 +251,9 @@ select:focus-visible{outline-color:var(--terminal-accent)}
 .settings-layout>nav a{display:block;padding:12px;color:inherit;text-decoration:none;border-left:2px solid transparent}
 .settings-layout>nav a:hover{background:#202020}
 .settings-layout>nav a[aria-current=page]{color:var(--terminal-accent);border-color:var(--terminal-accent);background:#26354a}
+.settings-layout>nav .workspace-menu{margin-top:16px;padding-top:12px}
+.settings-layout>nav .workspace-menu>button{padding:12px;font-size:inherit;color:inherit}
+.settings-layout>nav .workspace-menu>button:hover{background:#202020}
 .settings-layout>main{padding:28px;overflow:auto;min-width:0}
 .settings-layout>main>h1{font-size:20px;margin-bottom:24px}
 .settings-content{max-width:900px;margin:0;padding:0;border:0}

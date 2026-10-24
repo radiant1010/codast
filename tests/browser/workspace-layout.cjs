@@ -36,8 +36,25 @@ const {chromium}=require('playwright');
   assert.equal(await page.locator('#workspace-status .status-label').innerText(),'접기');
   await page.selectOption('#project',keys[0]);await page.waitForFunction(()=>projectReady&&!chatLoading);
   assert.match(await page.locator('#status-toast').innerText(),/작성 상태를 복원/);
+  assert.match(await page.locator('#status-toast').getAttribute('class'),/is-success/);
   assert.equal(await page.locator('#status').isVisible(),false);
-  assert.equal(await page.locator('#native-session').isVisible(),false);
+  assert.equal(await page.locator('#native-session').count(),0);
+  assert.equal(await page.getByRole('button',{name:'확장',exact:true}).count(),0);
+  await page.locator('#sidebar .brand').getByRole('button',{name:'설정',exact:true}).click();
+  await page.locator('#settings-page').waitFor({state:'visible'});
+  assert.equal(await page.locator('#sidebar .workspace-menu').count(),0);
+  for(const label of ['시작 도움말','작업 룰북']){
+   await page.locator('#settings-page').getByRole('button',{name:label,exact:true}).click();
+   await page.getByRole('dialog',{name:label,exact:true}).waitFor({state:'visible'});
+   await page.keyboard.press('Escape');
+  }
+  await page.locator('#settings-page').getByRole('button',{name:'워크플로 관리',exact:true}).click();
+  await page.locator('#workflow-dialog').waitFor({state:'visible'});await page.keyboard.press('Escape');
+  fs.mkdirSync('docs/internal/screenshots',{recursive:true});
+  await page.screenshot({path:'docs/internal/screenshots/settings-workspace-tools.png'});
+  await page.getByRole('button',{name:'← 작업실',exact:true}).click();
+  await page.locator('#settings-page').waitFor({state:'hidden'});
+  assert.equal(await page.evaluate(()=>document.activeElement.id),'open-settings');
   await page.clock.install();
   await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
   await page.locator('#status-toast').waitFor({state:'visible'});
@@ -59,9 +76,9 @@ const {chromium}=require('playwright');
   const check=async()=>{
    const m=await page.evaluate(()=>{
     const q=s=>document.querySelector(s),send=q('#send').getBoundingClientRect();
-    return {overflowX:document.documentElement.scrollWidth>innerWidth,overflowY:document.documentElement.scrollHeight>innerHeight,sendVisible:send.bottom<=innerHeight&&send.right<=innerWidth,messages:q('#messages').clientHeight,footerOverflow:q('.workspace-menu').scrollHeight>q('.workspace-menu').clientHeight,heights:Object.fromEntries(['#console>header','#workspace-status','#status','#composer','#text','#attachment-chips','.composer-toolbar','.attachment-notice'].map(s=>[s,q(s).getBoundingClientRect().height]))};
+    return {overflowX:document.documentElement.scrollWidth>innerWidth,overflowY:document.documentElement.scrollHeight>innerHeight,sendVisible:send.bottom<=innerHeight&&send.right<=innerWidth,messages:q('#messages').clientHeight,heights:Object.fromEntries(['#console>header','#workspace-status','#status','#composer','#text','#attachment-chips','.composer-toolbar','.attachment-notice'].map(s=>[s,q(s).getBoundingClientRect().height]))};
    });
-   assert.equal(m.overflowX,false);assert.equal(m.overflowY,false);assert.equal(m.sendVisible,true);assert.ok(m.messages>=90,JSON.stringify({viewport:page.viewportSize(),...m}));assert.equal(m.footerOverflow,false);
+   assert.equal(m.overflowX,false);assert.equal(m.overflowY,false);assert.equal(m.sendVisible,true);assert.ok(m.messages>=90,JSON.stringify({viewport:page.viewportSize(),...m}));
   };
   await check();await page.locator('#workspace-status > summary').click();
   for(const [width,height] of [[480,700],[640,700],[768,700],[900,700],[901,700],[960,700],[1200,900],[1440,900]]){
@@ -106,7 +123,10 @@ const {chromium}=require('playwright');
   await page.setViewportSize({width:640,height:700});
   failMessages=true;await page.locator('#toggle-sidebar').click();await page.locator('#task-list .task').nth(1).click();
   await page.locator('#status.error').waitFor({state:'visible'});assert.match(await page.locator('#status').innerText(),/대화.*조회 실패/);await check();
+  assert.match(await page.locator('#status-toast').getAttribute('class'),/is-error/);
+  await page.screenshot({path:'docs/internal/screenshots/error-toast-640.png'});
   await page.clock.runFor(8001);assert.equal(await page.locator('#status.error').isVisible(),true,'Errors must remain visible until recovery');
+  assert.equal(await page.locator('#status-toast').isVisible(),false);
   assert.deepEqual(errors,[]);
   fs.mkdirSync('docs/internal/screenshots',{recursive:true});await page.screenshot({path:'docs/internal/screenshots/workspace-layout-error.png'});
   failMessages=false;await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});

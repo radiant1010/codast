@@ -18,7 +18,7 @@ window.questionCard=(message,b,refresh)=>{
       draft.request_id??=crypto.randomUUID();save();status.textContent='답변 전달 중…';
       await api(b+'/runs/'+message.run_id+'/reply','POST',{answer,request_id:draft.request_id});
       try{localStorage.removeItem(key);}catch{}
-      if(valid(b,generation)){await refresh(b);notice('답변을 전달했습니다. 같은 에이전트와 권한으로 이어갑니다.');}
+      if(valid(b,generation)){await refresh(b);notice('답변을 전달했습니다. 같은 에이전트와 권한으로 이어갑니다.',false,{success:true});}
     }catch(error){status.textContent=error.message;}
     finally{send.disabled=false;input.disabled=false;for(const node of choices.children)node.disabled=false;}
   });

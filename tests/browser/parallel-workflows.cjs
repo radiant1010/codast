@@ -15,6 +15,7 @@ const fs=require('node:fs');
  try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(origin);await page.locator('#startup-loading').waitFor({state:'hidden'});await page.selectOption('#project',project);
+ await page.locator('#open-settings').click();await page.locator('#settings-page').waitFor({state:'visible'});
  await page.getByRole('button',{name:'워크플로 관리',exact:true}).click();
  await page.getByRole('button',{name:'새 병렬 설계와 테스트 정의',exact:true}).click();
  await page.getByLabel('작업 이름',{exact:true}).fill('병렬 검토');
@@ -33,7 +34,7 @@ const fs=require('node:fs');
  assert.equal(dimensions.scroll<=dimensions.width+1,true);
  fs.mkdirSync('work/parallel-browser-captures',{recursive:true});await page.screenshot({path:'work/parallel-browser-captures/narrow.png',fullPage:true});
  await page.keyboard.press('Escape');await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
- await page.locator('#toggle-sidebar').click();
+ await page.locator('#settings-page').waitFor({state:'visible'});
  await page.getByRole('button',{name:'워크플로 관리',exact:true}).click();await page.getByRole('button',{name:'병렬 검토 — 결과 검토',exact:true}).click();
  await page.getByRole('button',{name:'설계 작성 결과 승인',exact:true}).click();
  await page.getByRole('button',{name:'테스트케이스 정의 결과 승인',exact:true}).click();

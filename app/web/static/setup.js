@@ -56,7 +56,7 @@
     await inspect();if(state.status!=='completed')return;
     await projects(project.value);await loadProject();$('client').value=client.value;await window.loadModelChoices();
     await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:client.value,mode:$('mode').value,model:null});
-    actionHint();dialog.close();notice('연결 설정이 완료되어 모델과 채팅을 선택하고 요청을 보낼 수 있습니다.');
+    actionHint();dialog.close();notice('연결 설정이 완료되어 모델과 채팅을 선택하고 요청을 보낼 수 있습니다.',false,{success:true});
   }
   async function open(selectedClient=null){
     if(!dialog.open)dialog.showModal();status.textContent='● 설치 경로와 로그인 상태를 자동으로 확인 중…';

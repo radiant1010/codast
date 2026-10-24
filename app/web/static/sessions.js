@@ -44,7 +44,7 @@
   chatForm.onsubmit=event=>{event.preventDefault();act(async()=>{
     const name=chatInput.value.trim();if(!name)throw Error('채팅 이름을 입력하세요.');
     if(groups.some(g=>g.task===name)||window.chatState.drafts($('project').value).includes(name))throw Error('같은 이름의 채팅이 있습니다. 목록에서 선택하세요.');
-    await api(base()+'/tasks','POST',{task:name});createChat.close();await switchChat(name);$('text').focus();notice('새 채팅을 저장했습니다. 작성 중인 내용도 이 브라우저에 보관됩니다.');
+    await api(base()+'/tasks','POST',{task:name});createChat.close();await switchChat(name);$('text').focus();notice('새 채팅을 저장했습니다. 작성 중인 내용도 이 브라우저에 보관됩니다.',false,{success:true});
   });};
   const newChat=button('',async()=>{
     if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');
@@ -55,17 +55,18 @@
   project.querySelector('.side-title').remove();
   const projectTools=el('details');projectTools.id='project-tools';projectTools.append(el('summary','프로젝트 관리'),$('project-management'),$('create'));projectTools.dataset.settingsKey='projects';
   const path=el('p','프로젝트를 선택하세요.','project-location');project.append(path);
-  const menu=el('nav',undefined,'workspace-menu');menu.setAttribute('aria-label','작업실 메뉴');
+  const menu=el('div',undefined,'workspace-menu');menu.setAttribute('role','group');menu.setAttribute('aria-label','도움말과 작업 도구');
   for(const [id,label] of [['setup-guide','시작 도움말'],['rules-panel','작업 룰북']]){
     const node=$(id);sectionDialog(node,label);menu.append(button(label,async()=>openSection(node)));
   }
-  const settingsButton=button('설정',()=>window.settingsPage.open());settingsButton.id='open-settings';menu.append(settingsButton);
+  const settingsButton=button('설정',()=>window.settingsPage.open());settingsButton.id='open-settings';$('sidebar').querySelector('.brand').append(settingsButton);
+  document.querySelector('.settings-layout>nav').append(menu);
   for(const [key,label,node] of [['execution','실행 설정',$('settings-panel')],['agents','에이전트 연결',$('clients-panel')],['projects','프로젝트 관리',projectTools],['history','실행 기록',$('history-panel')]]){
     node.dataset.settingsKey=key;window.settingsPage.register(key,label,node);
   }
   $('clients-panel').append(button('에이전트 연결 도우미',()=>window.openConnections()));
   const overview=$('overview').closest('details');projectTools.append(overview);
-  side.replaceChildren(project,chats,menu);$('setup-guide').open=false;
+  side.replaceChildren(project,chats);$('setup-guide').open=false;
   const sidebar=$('sidebar'),navToggle=$('toggle-sidebar'),compact=matchMedia('(max-width:900px)'),desktopToggle=navToggle.onclick;
   const navClose=button('닫기',()=>{});navClose.id='close-sidebar';navClose.autofocus=true;navClose.setAttribute('aria-label','프로젝트와 채팅 목록 닫기');
   navClose.setAttribute('popovertarget','sidebar');navClose.setAttribute('popovertargetaction','hide');sidebar.querySelector('.brand').append(navClose);
@@ -81,7 +82,7 @@
   navToggle.onclick=()=>{if(!compact.matches){desktopToggle();navLabel(!$('workspace').classList.contains('collapsed'));}};
   sidebar.addEventListener('toggle',()=>{if(compact.matches)navLabel(sidebar.matches(':popover-open'));});
   sidebar.addEventListener('click',event=>{
-    if(sidebar.matches(':popover-open')&&event.target.closest('.task,.new-chat,.workspace-menu button,.brand a,#rename-project,#add-workspace,#import-sessions,#open-session-search')){closeSidebar();navToggle.focus();}
+    if(sidebar.matches(':popover-open')&&event.target.closest('.task,.new-chat,#open-settings,.brand a,#rename-project,#add-workspace,#import-sessions,#open-session-search')){closeSidebar();navToggle.focus();}
   },true);
   compact.addEventListener('change',resizeSidebar);resizeSidebar();
 
@@ -130,7 +131,7 @@
         try{if($('project').value!==selected||agent!==selectedImportClient)throw Error('프로젝트가 변경되었습니다. 다시 열어 주세요.');
           window.chatState.save();
           const linked=await api('/projects/'+encodeURIComponent(selected)+'/native-threads/'+agent+'/'+encodeURIComponent(thread.id)+'/attach','POST',{task:name.value});
-          if($('project').value!==selected)throw Error('세션이 원래 프로젝트에 연결되었습니다. 해당 프로젝트의 채팅 목록에서 확인할 수 있습니다.');window.chatState.seed(selected,linked.task,{client:linked.client,cwd:'.',mode:'read-only',model:null,paths:[],fresh:false,action:'run'});importDialog.close();await switchChat(linked.task);actionHint();notice('대화를 연결했습니다. 다음 메시지부터 선택한 에이전트와 이어서 작업합니다.');
+          if($('project').value!==selected)throw Error('세션이 원래 프로젝트에 연결되었습니다. 해당 프로젝트의 채팅 목록에서 확인할 수 있습니다.');window.chatState.seed(selected,linked.task,{client:linked.client,cwd:'.',mode:'read-only',model:null,paths:[],fresh:false,action:'run'});importDialog.close();await switchChat(linked.task);actionHint();notice('대화를 연결했습니다. 다음 메시지부터 선택한 에이전트와 이어서 작업합니다.',false,{success:true});
         }catch(error){importStatus.textContent=error.message;}finally{attach.disabled=!ack.checked;}});
       attach.title='선택한 세션을 새 채팅에 연결';attach.disabled=true;ack.onchange=()=>attach.disabled=!ack.checked;
       const entry=el('div',undefined,'client-path-row');entry.append(name,attach);importPreview.append(transcript,ackLabel,entry);
@@ -291,8 +292,6 @@
   window.refreshAccountStatus=refreshAccount;
   refreshAccount();setInterval(()=>{if(!document.hidden)refreshAccount();},60000);
   const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='저장된 실행 종료 알림을 확인합니다.';top.after(alertBox);
-  const expand=button('확장',async()=>{const on=$('workspace').classList.toggle('console-expanded');expand.textContent=on?'복원':'확장';expand.setAttribute('aria-pressed',String(on));});expand.setAttribute('aria-pressed','false');$('console').querySelector('header').append(expand);
-  const native=el('div',undefined,'native-session');native.id='native-session';statusBody.append(native);
   const composer=$('composer'),picker=el('details',undefined,'model-picker');picker.id='model-picker';
   const summary=el('summary','모델 선택');summary.id='execution-summary';
   const modelMenu=el('div',undefined,'execution-menu');modelMenu.id='execution-menu';
@@ -336,11 +335,9 @@
     if($('project').value!==projectName){$('project').value=projectName;await loadProject();}
     await switchChat(task);
   }
-  function renderNative(){
+  function renderProjectLabels(){
     path.textContent=$('workspace-root').value||'프로젝트를 선택하세요.';path.title=path.textContent;
     projectName.textContent=projectLabel($('project').value)||'프로젝트를 선택하세요.';projectName.title=projectName.textContent;$('project').title=projectName.textContent;
-    native.replaceChildren();const rows=snapshot.sessions.filter(s=>s.project===$('project').value&&s.task===filter);
-    for(const s of rows){const item=el('span',s.client+', '+s.session_id+', '+s.mode);item.title=s.cwd;native.append(item);}
   }
   function contextCell(usage){
     const used=usage?.used_tokens,windowSize=usage?.window_tokens;
@@ -418,7 +415,7 @@
     runningCount.textContent='실행 중 '+snapshot.running.filter(row=>row.project===$('project').value).length;
     refreshEnvironment();
     renderUsage();
-    renderNative();refresh();
+    renderProjectLabels();refresh();
   };
   async function refresh(){
     if(inFlight)return;inFlight=true;
@@ -427,7 +424,7 @@
       const next=await api('/session-overview');snapshot=next;runningCount.textContent='실행 중 '+snapshot.running.filter(row=>row.project===$('project').value).length;list.replaceChildren();
       for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+projectLabel(run.project)+' / '+(run.command.task||'미분류')+', '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트와 실행 모델은 AI 세션 표에 표시됩니다.','hint'));list.append(item);}
       if(!next.running.length)list.append(el('p','실행 중인 세션이 없습니다.','hint'));
-      renderNative();renderUsage();
+      renderProjectLabels();renderUsage();
       sessionStatus('ready','확인 '+new Date().toLocaleTimeString());
     }catch(error){runningCount.textContent='조회 실패';sessionStatus('error','정보를 불러오지 못했습니다. 다시 시도해 주세요.');}finally{inFlight=false;}
     try{await window.runNotifications.refresh();renderNotifications();}catch{alerts.title='알림을 불러오지 못했습니다. 다시 연결되면 확인합니다.';}
@@ -443,7 +440,7 @@
     if(!state.events.length)alertBox.append(el('p','저장된 종료 알림이 없습니다.'));
   }
   renderNotifications();
-  window.addEventListener('project-names-changed',()=>{envProject.textContent=projectLabel($('project').value)||'프로젝트를 선택하세요.';renderNative();importScope.textContent='조회 범위, '+projectLabel(importProject)+' 프로젝트';renderNotifications();refresh();});
+  window.addEventListener('project-names-changed',()=>{envProject.textContent=projectLabel($('project').value)||'프로젝트를 선택하세요.';renderProjectLabels();importScope.textContent='조회 범위, '+projectLabel(importProject)+' 프로젝트';renderNotifications();refresh();});
   window.addEventListener('online',refresh);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
   $('project').addEventListener('change',()=>{refreshEnvironment();for(const c of ['codex','claude'])$('usage-'+c).textContent='수집된 토큰 정보 없음';});

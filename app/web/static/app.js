@@ -32,11 +32,13 @@ function consoleOutput(text,cls='console-output'){
 function base(){if(!$('project').value)throw Error('프로젝트를 선택하세요.');return '/projects/'+encodeURIComponent($('project').value);}
 function valid(b,e=epoch){return e===epoch&&$('project').value&&b==='/projects/'+encodeURIComponent($('project').value);}
 let noticeTimer;
-function notice(text,error=false,{persistent=false}={}){
+function notice(text,error=false,{persistent=false,success=false}={}){
   clearTimeout(noticeTimer);
   const inline=$('status'),toast=$('status-toast');
   inline.textContent=error||persistent?text:'';inline.classList.toggle('error',error);
-  toast.textContent=error||persistent?'':text;
+  toast.classList.toggle('is-success',success&&!error);toast.classList.toggle('is-error',error);
+  // Inline status already announces errors; avoid reading the same message twice.
+  toast.setAttribute('aria-hidden',String(error));toast.textContent=persistent?'':text;
   if(toast.textContent)noticeTimer=setTimeout(()=>{toast.textContent='';},4000);
 }
 const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하는 1~64자 이름이 필요합니다. 하이픈(-)과 밑줄(_)도 사용할 수 있습니다. 예: 아호이';
@@ -118,7 +120,7 @@ function drawTasks(){
 async function updateChatPreference(task,change){
   const b=base(),e=epoch;window.chatState.save();await api(b+'/tasks','PATCH',{task,chat_id:window.chatState.identity($('project').value,task),...change});if(!valid(b,e))return;
   if(change.archived&&filter===task)await switchChat(null);else await conversation(b);
-  notice(change.archived===true?'채팅을 보관했습니다. 보관된 채팅에서 복원할 수 있습니다.':change.archived===false?'채팅을 복원했습니다.':change.pinned?'채팅을 고정했습니다.':'채팅 고정을 해제했습니다.');
+  notice(change.archived===true?'채팅을 보관했습니다. 보관된 채팅에서 복원할 수 있습니다.':change.archived===false?'채팅을 복원했습니다.':change.pinned?'채팅을 고정했습니다.':'채팅 고정을 해제했습니다.',false,{success:true});
 }
 async function renameChat(task){
   const answer=prompt('새 채팅 이름',task);if(answer===null)return;
@@ -127,7 +129,7 @@ async function renameChat(task){
   const b=base(),e=epoch,name=$('project').value;window.chatState.save();
   window.chatState.checkRename(name,task,title);
   await api(b+'/tasks','PATCH',{task,title,chat_id:window.chatState.identity(name,task)});window.chatState.rename(name,task,title);if(!valid(b,e))return;
-  if(filter===task)await switchChat(title);else await switchChat(filter);notice('채팅 이름을 변경했습니다.');
+  if(filter===task)await switchChat(title);else await switchChat(filter);notice('채팅 이름을 변경했습니다.',false,{success:true});
 }
 function routeView(route){$('routing').replaceChildren(el('span',(route.task?'작업: '+route.task+', ':'')+route.reason));for(const name of route.candidates||[])$('routing').append(button(name,async()=>{$('task-name').value=name;notice('작업을 선택했습니다. 전송하면 실행이 시작됩니다.');}));}
 function metadata(value){try{return typeof value==='string'?JSON.parse(value):value||{};}catch{return {};}}
@@ -205,7 +207,7 @@ async function switchChat(task){
     const failures=results.map((result,index)=>result.status==='rejected'?(index===0?'룰북':'대화')+' 조회 실패: '+result.reason.message:null).filter(Boolean);
     chatLoading=failures.length>0;$('send').disabled=busy||chatLoading;
     if(failures.length){if(results[1].status==='rejected')$('messages').replaceChildren(el('div','대화를 불러오지 못했습니다. 대화 새로고침으로 다시 시도하세요.','empty'));notice(failures.join('. ')+'. 대화 새로고침으로 다시 시도하세요. 작성 내용은 유지됩니다.',true);return false;}
-    notice(restoreNotified?'':'프로젝트와 채팅의 작성 상태를 복원했습니다.');restoreNotified=true;return true;
+    notice(restoreNotified?'':'프로젝트와 채팅의 작성 상태를 복원했습니다.',false,{success:true});restoreNotified=true;return true;
   }catch(error){if(valid(b,e)){notice('채팅 복원 실패: '+error.message+'. 대화 새로고침으로 다시 시도하세요.',true);return false;}}
 }
 async function loadProject(){
@@ -235,7 +237,7 @@ $('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;act(as
     const data=await api(b+'/chat','POST',{...payload,request_id:requestId});
     window.chatState.acknowledge(sentProject,sentTask,requestId);
     if(!data.needs_selection)window.chatState.sent(sentProject,sentTask,sentText,payload.material_ids);if(!valid(b,generation))return;routeView(data.routing);if(data.needs_selection){notice('어떤 작업인지 선택한 뒤 다시 보내세요. 아직 실행하지 않았습니다.');return;}
-    window.setupRequestSent?.();if($('text').value===sentText)$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=data.routing.task||'';offset=0;window.chatState.save();await conversation(b);notice(data.run_id?'요청을 접수했습니다. 실행 상태는 대화에 표시됩니다.':'메시지를 저장했습니다.');
+    window.setupRequestSent?.();if($('text').value===sentText)$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=data.routing.task||'';offset=0;window.chatState.save();await conversation(b);notice(data.run_id?'요청을 접수했습니다. 실행 상태는 대화에 표시됩니다.':'메시지를 저장했습니다.',false,{success:true});
   }finally{busy=false;$('send').disabled=chatLoading;}
 });};
 $('preview-route').onclick=()=>act(async()=>{const b=base(),text=$('text').value,route=await api(b+'/route','POST',{text});if(valid(b)&&text===$('text').value)routeView(route);});
@@ -257,15 +259,15 @@ $('create').onsubmit=e=>{e.preventDefault();act(async()=>{const name=$('name').v
 $('reload').onclick=()=>act(()=>projectReady?switchChat(filter):loadProject());$('reload-rules').onclick=()=>act(()=>loadRules());
 $('messages-prev').onclick=()=>act(async()=>{offset=Math.max(0,offset-20);await conversation();});$('messages-next').onclick=()=>act(async()=>{offset+=20;await conversation();});
 $('history-prev').onclick=()=>act(async()=>{historyOffset=Math.max(0,historyOffset-20);await history();});$('history-next').onclick=()=>act(async()=>{historyOffset+=20;await history();});
-$('save-settings').onclick=()=>act(async()=>{projectDefaults=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null,...window.selectedReasoningSettings?.()});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
+$('save-settings').onclick=()=>act(async()=>{projectDefaults=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null,...window.selectedReasoningSettings?.()});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.',false,{success:true});});
 $('probe-clients').onclick=()=>act(async()=>{
-  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?', '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input',undefined,'form-control');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('CLI 경로를 저장했습니다. 다시 확인 버튼으로 연결 상태를 확인할 수 있습니다.');},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
+  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?', '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input',undefined,'form-control');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('CLI 경로를 저장했습니다. 다시 확인 버튼으로 연결 상태를 확인할 수 있습니다.',false,{success:true});},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
 });
 
 
 async function trash(){
   const d=await api('/deleted-projects');Object.assign(projectNames,d.names||{});$('deleted-projects').replaceChildren();
-  for(const name of d.projects){const row=el('div',undefined,'action-row');row.append(el('span',projectLabel(name)),button('복원',async()=>{await api('/deleted-projects/'+encodeURIComponent(name)+'/restore','POST');await projects(name);await loadProject();await trash();notice('프로젝트와 기존 기록을 복원했습니다.');},'icon-action'));$('deleted-projects').append(row);}
+  for(const name of d.projects){const row=el('div',undefined,'action-row');row.append(el('span',projectLabel(name)),button('복원',async()=>{await api('/deleted-projects/'+encodeURIComponent(name)+'/restore','POST');await projects(name);await loadProject();await trash();notice('프로젝트와 기존 기록을 복원했습니다.',false,{success:true});},'icon-action'));$('deleted-projects').append(row);}
   if(!d.projects.length)$('deleted-projects').textContent='삭제한 프로젝트가 없습니다.';
 }
 $('trash-panel').ontoggle=()=>{if($('trash-panel').open)act(trash);};
@@ -273,5 +275,5 @@ $('delete-project').onclick=()=>act(async()=>{
   const b=base(),name=$('project').value;
   if(!confirm('“'+projectLabel(name)+'” 프로젝트를 삭제할까요?\n목록에서 제거하며 파일과 대화, 실행 기록은 휴지통에서 복원할 수 있습니다.'))return;
   await api(b,'DELETE');
-  await projects();await loadProject();await trash();notice('프로젝트를 삭제했습니다. 왼쪽 휴지통에서 복원할 수 있습니다.');
+  await projects();await loadProject();await trash();notice('프로젝트를 삭제했습니다. 왼쪽 휴지통에서 복원할 수 있습니다.',false,{success:true});
 });

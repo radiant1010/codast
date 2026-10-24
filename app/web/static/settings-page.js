@@ -23,7 +23,7 @@
     content.scrollTop=0;heading.focus();selected.node.dispatchEvent(new Event('settings-open'));
   }
   window.settingsPage={
-    register(key,label,node){const link=el('a',label);link.href='#settings/'+key;nav.append(link);node.classList.add('settings-content');node.hidden=true;content.append(node);pages.set(key,{label,node,link});},
+    register(key,label,node){const link=el('a',label);link.href='#settings/'+key;nav.insertBefore(link,nav.querySelector('.workspace-menu'));node.classList.add('settings-content');node.hidden=true;content.append(node);pages.set(key,{label,node,link});},
     open(key=last){const hash='#settings/'+key;if(location.hash===hash)render();else location.hash=hash;},
     close(){if(wasOpen){location.hash='';}},
   };

@@ -29,7 +29,7 @@ const {execFileSync}=require('node:child_process');
  await page.getByText(/PDF에서 읽을 수 있는 텍스트가 없습니다/).waitFor();
  assert.equal((await api(base+'/materials')).materials.length,2);assert.equal((await page.evaluate(()=>window.materialGuard.selected())).length,2);
  // Workflow uploads also attach without a review gate.
- await page.getByRole('button',{name:'워크플로 관리',exact:true}).click();
+ await page.getByRole('button',{name:'워크플로 설정 및 진행',exact:true}).click();
  await page.getByRole('button',{name:'산출물 저장 위치 연결',exact:true}).click();
  await page.getByRole('button',{name:'새 워크플로',exact:true}).click();await page.fill('#wf-title','자동 필터 PDF');
  await page.getByLabel('요구사항 파일',{exact:true}).setInputFiles('work/material-auto-browser/mixed.pdf');
