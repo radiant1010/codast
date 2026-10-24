@@ -55,7 +55,7 @@ class TaskRouter:
                 scored.append((score, title))
         scored.sort(reverse=True)
         if scored and (len(scored) == 1 or scored[0][0] >= scored[1][0] + 2):
-            return self.result(scored[0][1], '기존 작업의 주제·최근 대화와 일치', 'matched')
+            return self.result(scored[0][1], '기존 작업의 주제와 최근 대화와 일치', 'matched')
         if scored:
             return self.result('', '여러 작업과 관련되어 작업 선택이 필요합니다.', 'ambiguous', [t for _, t in scored[:5]])
         followup = re.search(r'아까|이거|그거|그건|그럼|그러면|계속|이어서|다음.*(스텝|단계)|continue|that|this', text, re.I)

@@ -79,7 +79,7 @@ const {chromium}=require('playwright');
   await page.locator('#login-codex').waitFor();
   assert.doesNotMatch(await notice.innerText(),/로그인을 확인했습니다/);
   for(const state of ['failed','timed_out']){
-   rows[1].login={state,message:state==='failed'?'로그인을 완료하지 못했습니다. 다시 시도하세요.':'로그인 대기 시간이 지났습니다. 다시 로그인하세요.'};
+   rows[1].login={state,message:state==='failed'?'로그인을 완료하지 못했습니다. 다시 시도하세요.':'로그인 대기 시간이 지났습니다. 로그인 버튼으로 다시 시작할 수 있습니다.'};
    await refresh.click();
    await page.waitForFunction(message=>document.querySelector('#client-auth-notice').textContent.includes(message),rows[1].login.message);
    assert.equal(await page.locator('#login-claude').isEnabled(),true);
@@ -108,7 +108,7 @@ const {chromium}=require('playwright');
   assert.equal(posts,2);
   rows[1].auth='ready';rows[1].login={state:'ready',message:'로그인을 확인했습니다.'};
   await page.clock.runFor(2001);
-  await dialog.getByRole('heading',{name:'2. 프로젝트를 만들거나 선택하세요'}).waitFor();
+  await dialog.getByRole('heading',{name:'프로젝트 선택'}).waitFor();
   assert.equal(await dialog.getByRole('button',{name:'로그인',exact:true}).isVisible(),false);
   assert.deepEqual(errors,[]);
   console.log('Client login browser checks passed: startup, duplicate prevention, completion, retry, restart recovery, connection dialog, draft preservation, narrow layout');

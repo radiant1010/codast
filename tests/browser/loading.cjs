@@ -236,7 +236,7 @@ const {chromium}=require('playwright');
  assert.equal(rulebooks.two.books[1].folder,'웹');
  assert.equal(await page.locator('#rulebook-files').count(),0);
  await page.locator('#rulebook-import-files').setInputFiles({name:'RULES.md',mimeType:'text/markdown',buffer:Buffer.from('직접 추가한 규정')});
- await page.getByText('파일 내용을 추가했습니다. 적용할 룰북을 체크하고 저장하세요. 원본 파일은 변경하지 않습니다.',{exact:true}).waitFor();
+ await page.getByText('파일 내용을 추가했습니다. 룰북을 체크하고 저장하면 다음 요청부터 적용되며, 원본 파일은 변경되지 않습니다.',{exact:true}).waitFor();
  assert.equal(await page.locator('#rulebook-content').inputValue(),'직접 추가한 규정');
  await page.locator('#rulebook-tree details').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
  assert.equal(await page.getByRole('checkbox',{name:'RULES.md 적용',exact:true}).isChecked(),false);

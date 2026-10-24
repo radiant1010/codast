@@ -46,7 +46,7 @@ def read_file(path, root, *, full=False):
         return None
     return {'id': path.stem, 'name': None, 'preview': messages[0]['text'][:100] if messages else '',
             'cwd': str(root), 'updatedAt': updated, 'messages': messages,
-            'live_state': 'unknown', 'preview_scope': '최근 최대 20메시지, 메시지당 8000자 · Claude Code 로컬 기록'}
+            'live_state': 'unknown', 'preview_scope': '최근 최대 20메시지, 메시지당 8000자, Claude Code 로컬 기록'}
 
 
 def candidates(*, limit=1000):

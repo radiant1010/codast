@@ -1,7 +1,7 @@
 /* The document room reads durable files. No model calls or attachment selection. */
 (()=>{
   const panel=el('section',undefined,'vault-panel');panel.id='document-vault-panel';
-  const intro=el('p','문서를 작성하고 변경 내용을 검토하세요. 이전 승인본과 검토 결과는 문서함에 함께 보관됩니다.','hint');
+  const intro=el('p','문서함에서 문서를 작성하고 변경 내용을 검토할 수 있으며, 이전 승인본과 검토 결과도 함께 보관됩니다.','hint');
   const setup=el('form',undefined,'modal-form'),path=el('input',undefined,'form-control'),mode=el('select'),status=el('p',undefined,'hint');
   path.id='vault-path';path.required=true;path.placeholder='산출물을 보관할 폴더의 전체 경로';
   mode.id='vault-mode';mode.add(new Option('새 문서함 만들기','create'));mode.add(new Option('기존 문서함 연결','connect'));
@@ -15,12 +15,12 @@
   async function request(path,method,body){const ticket=generation;const value=await api(path,method,body);if(ticket!==generation)throw Error('프로젝트가 변경되었습니다.');return value;}
   async function run(fn){if(busy)return;const ticket=generation;busy=true;panel.setAttribute('aria-busy','true');setDisabled(true);try{await fn();}catch(e){if(ticket===generation){if(dialog.open){editorStatus.textContent=e.message;editorStatus.classList.add('error');}else report(e.message,true);}}finally{busy=false;panel.setAttribute('aria-busy','false');setDisabled(false);}}
   const pick=icon('folder','산출물 폴더 선택',()=>run(async()=>{
-    const data=await request('/workspace-folder','POST');if(data.path){report('폴더를 선택했습니다. 아직 저장 전입니다. 아래 연결 버튼을 눌러 적용하세요.');path.value=data.path;}
+    const data=await request('/workspace-folder','POST');if(data.path){report('폴더를 선택했으며 아직 연결 전입니다. 연결 버튼으로 저장하면 적용됩니다.');path.value=data.path;}
   }));
   const pathField=field('산출물 저장 위치',path),pathRow=el('div',undefined,'field-action-row');path.replaceWith(pathRow);pathRow.append(path,pick);
   const connect=icon('plug','문서함 생성 또는 연결',()=>setup.requestSubmit());connect.type='submit';connect.onclick=null;
   const modeField=field('연결 방법',mode),modeRow=el('div',undefined,'field-action-row');mode.replaceWith(modeRow);modeRow.append(mode,connect);
-  setup.append(pathField,el('p','폴더 선택만으로는 저장되지 않습니다. 연결 방법 오른쪽의 연결 버튼을 눌러 적용하세요. 선택한 보관함 아래에 프로젝트 이름의 폴더를 만들고 내부 이력은 .codast-documents, 내보내기 위치는 exports로 구분합니다. 기존 문서함은 .codast-documents 폴더를 직접 선택해 연결할 수 있습니다. 다른 문서함에 연결해도 이전 자료는 이동하거나 삭제하지 않습니다.','hint'),modeField);
+  setup.append(pathField,el('p','선택한 폴더는 연결 버튼으로 저장해야 적용됩니다. 새 문서함은 보관함 아래에 프로젝트 이름의 폴더를 만들며, 이력은 .codast-documents에, 내보낸 파일은 exports에 보관합니다. 기존 문서함은 .codast-documents 폴더를 직접 선택해 연결할 수 있으며, 연결을 바꿔도 이전 자료는 이동하거나 삭제되지 않습니다.','hint'),modeField);
   const tools=el('div',undefined,'vault-heading'),list=el('div',undefined,'vault-list'),issues=el('div',undefined,'vault-issues');
   const create=icon('plus','새 산출물 작성',()=>openNew());
   const refresh=icon('restore','문서함 다시 읽기',()=>run(()=>loadList()));
@@ -34,13 +34,13 @@
   const form=el('form',undefined,'modal-form'),title=el('input',undefined,'form-control'),content=el('textarea'),reason=el('textarea');
   title.id='vault-title';title.required=true;title.maxLength=120;
   content.id='vault-content';content.maxLength=200000;content.rows=12;content.spellcheck=false;
-  reason.id='vault-reason';reason.maxLength=2000;reason.rows=2;reason.placeholder='이번 내용을 검토해야 하는 이유를 입력하세요.';
+  reason.id='vault-reason';reason.maxLength=2000;reason.rows=2;reason.placeholder='변경 내용과 검토가 필요한 이유';
   const actions=el('div',undefined,'vault-actions'),save=icon('save','문서 초안 저장',()=>{});save.type='submit';save.onclick=null;
   const submit=icon('send','저장된 초안 검토 요청',()=>run(async()=>{
-    if(dirty)throw Error('먼저 초안을 저장한 뒤 검토를 요청하세요.');
+    if(dirty)throw Error('검토를 요청하려면 초안 저장이 필요합니다.');
     if(!reason.value.trim())throw Error('변경 이유를 입력하세요.');
     const result=await request(endpoint()+'/documents/'+doc.id+'/reviews','POST',{connection_id:binding.connection_id,expected_revision:doc.revision,reason:reason.value});
-    renderDocument(result);await loadList();editorStatus.textContent='검토를 요청했습니다. 변경 전후를 확인하고 검토 결과를 입력하세요.';
+    renderDocument(result);await loadList();editorStatus.textContent='검토를 요청했습니다. 변경 전후 비교에서 검토 결과를 기록할 수 있습니다.';
   }));
   const upload=el('input',undefined,'form-control');upload.type='file';upload.accept='.md,.txt';upload.hidden=true;
   const importFile=icon('importDocument','Markdown 또는 텍스트 불러오기',()=>upload.click());
@@ -51,7 +51,7 @@
       const text=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());
       if(text.length>200000)throw Error('본문은 200,000자 이하로 입력하세요.');
       if(!title.value)title.value=file.name.replace(/\.(md|txt)$/i,'').slice(0,120);
-      content.value=text;dirty=true;editorStatus.textContent='내용을 불러왔습니다. 확인 후 초안을 저장하세요.';
+      content.value=text;dirty=true;editorStatus.textContent='내용을 불러왔으며, 초안을 저장하면 문서함에 보관됩니다.';
     }finally{upload.value='';}
   });
   actions.append(importFile,upload,save,submit);form.append(field('문서 제목',title),field('문서 내용',content),field('변경 이유',reason),actions);
@@ -133,14 +133,14 @@
     const payload={connection_id:binding.connection_id,title:title.value,content:content.value};
     if(doc)payload.expected_revision=doc.revision;
     const result=await request(endpoint()+'/documents'+(doc?'/'+doc.id:''),doc?'PUT':'POST',payload);
-    renderDocument(result);await loadList();editorStatus.textContent='초안을 저장했습니다. 변경 이유를 입력하고 검토를 요청하세요.';
+    renderDocument(result);await loadList();editorStatus.textContent='초안을 저장했습니다. 변경 이유를 입력하면 검토를 요청할 수 있습니다.';
   });};
   async function loadList(){
     list.replaceChildren();issues.replaceChildren();if(!binding)return;
     const ticket=generation,b=endpoint(),v=binding.connection_id,data=await api(b+'/documents?connection_id='+v);
     if(ticket!==generation||binding?.connection_id!==v)return;
     for(const problem of data.issues)issues.append(el('p',problem.id+': '+problem.message,'error'));
-    if(!data.documents.length)list.append(el('p',data.issues.length?'읽을 수 있는 문서가 없습니다. 백업을 확인하세요.':'아직 문서가 없습니다. + 버튼으로 첫 산출물을 작성하세요.','hint'));
+    if(!data.documents.length)list.append(el('p',data.issues.length?'읽을 수 있는 문서가 없습니다. 백업을 확인하세요.':'아직 문서가 없습니다. 새 산출물 작성 버튼으로 문서를 추가할 수 있습니다.','hint'));
     for(const row of data.documents){
       const card=el('article'),text=el('div');text.append(el('strong',row.title),el('p',row.id+', '+stateText(row)+(row.approved?', 승인 버전 '+row.approved:''),'hint'));
       const open=icon('file',row.id+' 열기',()=>run(async()=>{const value=await api(b+'/documents/'+row.id+'?connection_id='+v);if(ticket!==generation)return;renderDocument(value);dialog.showModal();}));

@@ -86,7 +86,7 @@
   window.validateExecutionSettings=()=>{
     if(!matchesRoute())return;
     if(currentRow()?.available===false)throw Error('선택한 모델을 사용하려면 Claude Code '+currentRow().minimumVersion+' 이상이 필요합니다.');
-    if(effort.value&&(loading||!supported().includes(effort.value)))throw Error('선택한 추론 강도의 지원 여부를 확인할 수 없습니다. 모델을 선택하거나 기본 추론 설정으로 바꾸세요.');
+    if(effort.value&&(loading||!supported().includes(effort.value)))throw Error('선택한 추론 등급의 지원 여부를 확인할 수 없습니다. 모델을 다시 선택하거나 추론을 자동으로 설정해야 합니다.');
     if(ultra.checked&&(loading||!ultraSupported()))throw Error('Ultracode를 켜려면 Claude Code 2.1.284 이상과 지원 모델이 필요합니다. 토글을 끄면 실행할 수 있습니다.');
   };
   $('client').addEventListener('change',()=>act(()=>window.loadModelChoices()));

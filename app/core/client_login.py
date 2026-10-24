@@ -65,7 +65,7 @@ class ClientLogin:
                     raise ValueError('CLI 연결을 먼저 확인하세요.')
                 argv = login_instructions(client, observed['path'])['argv']
                 process = self.launch(argv)
-                job.update(state='waiting', message='로그인 창과 브라우저에서 인증을 완료하세요. 창을 닫으면 취소됩니다.')
+                job.update(state='waiting', message='CLI 로그인 창과 브라우저에서 인증을 진행할 수 있습니다. 인증이 끝나기 전에 로그인 창을 닫으면 취소됩니다.')
                 await asyncio.to_thread(process.wait, timeout=self.timeout)
                 job.update(state='verifying', message='로그인 결과를 확인하고 있습니다.')
                 observed = await probe(client, configured)
@@ -73,14 +73,14 @@ class ClientLogin:
                 await asyncio.to_thread(self._clear_usage, client)
                 job.update(state='ready', message='로그인을 확인했습니다.')
             else:
-                job.update(state='failed', message='로그인을 완료하지 못했습니다. 로그인 창을 닫았다면 다시 시도하세요.')
+                job.update(state='failed', message='로그인이 확인되지 않았습니다. 로그인 창을 닫았다면 로그인 버튼으로 다시 시작할 수 있습니다.')
         except subprocess.TimeoutExpired:
-            job.update(state='timed_out', message='로그인 대기 시간이 지났습니다. 다시 로그인하세요.')
+            job.update(state='timed_out', message='로그인 대기 시간이 지났습니다. 로그인 버튼으로 다시 시작할 수 있습니다.')
         except asyncio.CancelledError:
             job.update(state='cancelled', message='서버 종료로 로그인 대기를 취소했습니다.')
             raise
         except (OSError, ValueError, RuntimeError):
-            job.update(state='failed', message='로그인 창을 열거나 결과를 확인하지 못했습니다. CLI 연결을 확인한 뒤 다시 시도하세요.')
+            job.update(state='failed', message='로그인 창을 열거나 결과를 확인하지 못했습니다. 에이전트 연결에서 CLI 경로와 설치 상태를 확인한 뒤 다시 로그인할 수 있습니다.')
         finally:
             if process is not None:
                 await asyncio.to_thread(self._stop, process)

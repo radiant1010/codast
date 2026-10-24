@@ -182,7 +182,7 @@ async def chat(name: str, body: ChatRequest, request: Request):
             import re
             if re.search(r'(나중에\s*(하자|하죠|해줘)|보류(하자|해줘|로\s*(하자|해줘)))\s*[.!?]*$', body.text):
                 s.storage.set_task_status(name, decision['task'], 'paused')
-                decision['reason'] += ' · 보류로 기록 (실행 취소는 별도)'
+                decision['reason'] += ', 보류로 기록 (실행 취소는 별도)'
         return {'id': message_id, 'routing': decision, 'action': 'note'}
     command = Command(**body.model_dump(exclude={'action','auto_route','request_id'}))
     command.task = decision['task']
@@ -416,7 +416,7 @@ async def delete_project(name: str, request: Request):
     with s.storage.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (name,)).fetchone():
-            raise FileExistsError('실행 중이거나 종료 확인이 필요한 작업이 있습니다. 중지·종료 확인 후 삭제하세요.')
+            raise FileExistsError('실행 중이거나 종료 확인이 필요한 작업이 있습니다. 실행을 중지하고 종료를 확인한 뒤 삭제할 수 있습니다.')
         s.projects.delete(name)
     return {'deleted': True, 'recoverable': True}
 

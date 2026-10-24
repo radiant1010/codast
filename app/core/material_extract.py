@@ -26,9 +26,9 @@ def extract(filename, content, options=None, checkpoint=lambda: None):
         visited += 1
         if visited>100000: raise ValueError('항목 처리 한도를 초과했습니다.')
         text = str(text) if text is not None else ''
-        if len(text)>16000: raise ValueError('한 셀·문단은 16,000자 이하만 지원합니다.')
+        if len(text)>16000: raise ValueError('한 셀이나 문단은 16,000자 이하만 지원합니다.')
         size += len(text)
-        if size>MAX_TEXT or len(parts)>=10000: raise ValueError('추출 한도를 초과했습니다. 필요한 시트·페이지만 나누어 등록하세요.')
+        if size>MAX_TEXT or len(parts)>=10000: raise ValueError('추출 한도를 초과했습니다. 필요한 시트나 페이지만 나누어 등록하세요.')
         # Empty headers preserve column positions without retaining every blank cell.
         if text.strip() or re.search(r'R1C\d+$', location): parts.append(Part(location,text,str(field or ''),heading))
     omissions = []
@@ -56,7 +56,7 @@ def extract(filename, content, options=None, checkpoint=lambda: None):
                             xml = xml.decode('utf-16').encode('utf-8')
                         xml = xml.upper()
                         if b'\x00' in xml or b'<!DOCTYPE' in xml or b'<!ENTITY' in xml: raise ValueError('지원하지 않는 XML 구조입니다.')
-            omissions = ['이미지·도형·내장 객체·메타데이터는 전달하지 않음']
+            omissions = ['이미지, 도형, 내장 객체, 메타데이터는 전달하지 않음']
             if suffix=='.xlsx':
                 from openpyxl import load_workbook
                 book = load_workbook(io.BytesIO(content),read_only=True,data_only=False,keep_links=False)
@@ -104,7 +104,7 @@ def extract(filename, content, options=None, checkpoint=lambda: None):
                         headers = [c.text for c in block.rows[0].cells] if block.rows else []
                         for r,row in enumerate(block.rows,1):
                             for c,cell in enumerate(row.cells,1): add(f'T{table_no}R{r}C{c}',cell.text,headers[c-1] if r>1 and c<=len(headers) else '')
-                omissions.append('머리말·꼬리말·주석·중첩 표·변경 이력 제외')
+                omissions.append('머리말, 꼬리말, 주석, 중첩 표, 변경 이력 제외')
             else:
                 from pptx import Presentation
                 deck = Presentation(io.BytesIO(content))

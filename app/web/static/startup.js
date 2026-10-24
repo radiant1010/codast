@@ -18,13 +18,13 @@ async function checkInitialConnection(){
   notice('에이전트 연결을 확인하고 있습니다. 기다리는 동안 프로젝트를 선택하거나 등록할 수 있습니다.');
   let connections;
   try{connections=await api('/clients');}
-  catch{if(!$('project').value)notice('연결 상태를 확인하지 못했습니다. 에이전트 연결 메뉴에서 다시 확인하세요.',true);return;}
+  catch{if(!$('project').value)notice('연결 상태를 확인하지 못했습니다. 에이전트 연결 메뉴에서 다시 확인할 수 있습니다.',true);return;}
   if($('project').value)return;
   if(connections.clients.some(client=>client.state==='installed'&&client.auth==='ready')){
-    notice('에이전트가 연결되어 있습니다. 프로젝트를 선택하거나 등록하세요.');
+    notice('에이전트가 연결되어 있어 프로젝트를 선택하거나 등록하면 작업을 시작할 수 있습니다.');
     return;
   }
-  notice('에이전트 연결이 필요합니다. 에이전트 연결 메뉴에서 설정하세요.');
+  notice('에이전트 연결이 필요하며, 에이전트 연결 메뉴에서 설정할 수 있습니다.');
 }
 
 

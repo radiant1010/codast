@@ -39,7 +39,7 @@ function notice(text,error=false,{persistent=false}={}){
   toast.textContent=error||persistent?'':text;
   if(toast.textContent)noticeTimer=setTimeout(()=>{toast.textContent='';},4000);
 }
-const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하고, 한글, 영문, 숫자, 하이픈(-), 밑줄(_)만 사용해 1~64자로 입력하세요. 예: 아호이';
+const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하는 1~64자 이름이 필요합니다. 하이픈(-)과 밑줄(_)도 사용할 수 있습니다. 예: 아호이';
 function apiErrorMessage(detail,path,status){
   if(status===405)return '지원하지 않는 요청 (405): 실행 중인 서버에서 이 작업을 처리할 수 없습니다. 서버를 재시작한 뒤 화면을 새로고침하고 다시 시도하세요.';
   if(typeof detail==='string'&&detail.trim())return detail;
@@ -48,11 +48,11 @@ function apiErrorMessage(detail,path,status){
     return [...new Set(detail.map(issue=>{
       const field=issue?.loc?.at(-1);
       if(field==='name'&&/^\/(?:workspaces|projects(?:\/[^/]+)?)$/.test(path)&&issue.type==='string_pattern_mismatch')return projectNameError;
-      let reason='입력한 값의 형식과 허용 범위를 확인해 주세요.';
-      if(issue?.type==='missing')reason='필수 항목을 입력해 주세요.';
-      else if(issue?.type==='string_too_long'&&Number.isInteger(issue.ctx?.max_length))reason=issue.ctx.max_length.toLocaleString('ko-KR')+'자 이하로 입력해 주세요.';
-      else if(issue?.type==='string_too_short'&&Number.isInteger(issue.ctx?.min_length))reason=issue.ctx.min_length.toLocaleString('ko-KR')+'자 이상 입력해 주세요.';
-      else if(issue?.type==='literal_error')reason='선택 가능한 항목 중 하나를 선택해 주세요.';
+      let reason='입력한 값이 허용된 형식이나 범위에 맞지 않습니다.';
+      if(issue?.type==='missing')reason='필수 항목이 비어 있습니다.';
+      else if(issue?.type==='string_too_long'&&Number.isInteger(issue.ctx?.max_length))reason=issue.ctx.max_length.toLocaleString('ko-KR')+'자까지 입력할 수 있습니다.';
+      else if(issue?.type==='string_too_short'&&Number.isInteger(issue.ctx?.min_length))reason=issue.ctx.min_length.toLocaleString('ko-KR')+'자 이상 입력해야 합니다.';
+      else if(issue?.type==='literal_error')reason='선택 가능한 항목 중 하나가 필요합니다.';
       else if(issue?.type==='extra_forbidden')reason='지원하지 않는 항목이 포함되어 있습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.';
       else if(issue?.type==='value_error'&&typeof issue.msg==='string'&&/[가-힣]/.test(issue.msg))reason=issue.msg.replace(/^Value error, /,'');
       return (labels[field]?labels[field]+' 입력 오류':'입력값 오류')+': '+reason;
@@ -129,7 +129,7 @@ async function renameChat(task){
   await api(b+'/tasks','PATCH',{task,title,chat_id:window.chatState.identity(name,task)});window.chatState.rename(name,task,title);if(!valid(b,e))return;
   if(filter===task)await switchChat(title);else await switchChat(filter);notice('채팅 이름을 변경했습니다.');
 }
-function routeView(route){$('routing').replaceChildren(el('span',(route.task?'작업: '+route.task+', ':'')+route.reason));for(const name of route.candidates||[])$('routing').append(button(name,async()=>{$('task-name').value=name;notice('작업을 선택했습니다. 보내기를 눌러 실행하세요.');}));}
+function routeView(route){$('routing').replaceChildren(el('span',(route.task?'작업: '+route.task+', ':'')+route.reason));for(const name of route.candidates||[])$('routing').append(button(name,async()=>{$('task-name').value=name;notice('작업을 선택했습니다. 전송하면 실행이 시작됩니다.');}));}
 function metadata(value){try{return typeof value==='string'?JSON.parse(value):value||{};}catch{return {};}}
 function tokenCount(usage,adapter){
   const count=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
@@ -183,13 +183,13 @@ async function conversation(b=base()){
   if(!valid(b,e)||ticket!==conversationTicket)return;const follow=atBottom(),scroll=$('messages').scrollTop;closeStreams();groups=t.tasks;window.chatState.bind($('project').value,groups);if(chatId){filter=groups.find(g=>g.id===chatId)?.task||filter;$('task-name').value=filter||'';}drawTasks();$('messages').replaceChildren();
   for(const m of [...d.messages].reverse())$('messages').append(messageCard(m,b));
   for(const pending of q.messages||[])if(!d.messages.some(m=>m.run_id===pending.run_id))$('messages').append(messageCard(pending,b));
-  if(!d.messages.length)$('messages').append(el('div',filter?'아직 대화가 없습니다. 아래에서 시작하세요.':'왼쪽에서 채팅을 선택하거나 새 채팅을 만드세요.','empty'));
+  if(!d.messages.length)$('messages').append(el('div',filter?'아직 대화가 없습니다. 아래 입력창에서 첫 요청을 보낼 수 있습니다.':'왼쪽에서 채팅을 선택하거나 새 채팅을 만드세요.','empty'));
   $('messages-prev').disabled=offset===0;$('messages-next').disabled=d.messages.length<20;$('page-number').textContent=d.messages.length?(offset+1)+'–'+(offset+d.messages.length):'0개';
   const running=r.runs.filter(x=>x.status==='running');$('activity').textContent=running.length?'실행 중인 작업 '+running.length+'개':'';
   $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);window.refreshSessionView?.(r.runs);
   clearTimeout(pollTimer);if(follow)followOutput(true);else $('messages').scrollTop=scroll;
 }
-function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개를 보여 줍니다. 작업을 선택하면 관련 대화와 결과를 볼 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+', '+taskStates[g.status],async()=>{await switchChat(g.task);},'task'));}
+function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개가 표시되며, 작업을 선택하면 관련 대화와 결과를 확인할 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+', '+taskStates[g.status],async()=>{await switchChat(g.task);},'task'));}
 async function switchChat(task){
   if(!projectReady){notice('프로젝트를 먼저 불러와야 합니다. 대화 새로고침으로 다시 시도하세요.',true);return false;}
   window.chatState.pause();epoch++;conversationTicket++;closeStreams();chatLoading=true;$('send').disabled=true;
@@ -235,7 +235,7 @@ $('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;act(as
     const data=await api(b+'/chat','POST',{...payload,request_id:requestId});
     window.chatState.acknowledge(sentProject,sentTask,requestId);
     if(!data.needs_selection)window.chatState.sent(sentProject,sentTask,sentText,payload.material_ids);if(!valid(b,generation))return;routeView(data.routing);if(data.needs_selection){notice('어떤 작업인지 선택한 뒤 다시 보내세요. 아직 실행하지 않았습니다.');return;}
-    window.setupRequestSent?.();if($('text').value===sentText)$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=data.routing.task||'';offset=0;window.chatState.save();await conversation(b);notice(data.run_id?'요청을 접수했습니다. 대화에서 실행 상태를 확인하세요.':'메시지를 저장했습니다.');
+    window.setupRequestSent?.();if($('text').value===sentText)$('text').value='';$('task-name').value=data.routing.task||'';$('fresh').checked=false;actionHint();filter=data.routing.task||'';offset=0;window.chatState.save();await conversation(b);notice(data.run_id?'요청을 접수했습니다. 실행 상태는 대화에 표시됩니다.':'메시지를 저장했습니다.');
   }finally{busy=false;$('send').disabled=chatLoading;}
 });};
 $('preview-route').onclick=()=>act(async()=>{const b=base(),text=$('text').value,route=await api(b+'/route','POST',{text});if(valid(b)&&text===$('text').value)routeView(route);});
@@ -259,7 +259,7 @@ $('messages-prev').onclick=()=>act(async()=>{offset=Math.max(0,offset-20);await 
 $('history-prev').onclick=()=>act(async()=>{historyOffset=Math.max(0,historyOffset-20);await history();});$('history-next').onclick=()=>act(async()=>{historyOffset+=20;await history();});
 $('save-settings').onclick=()=>act(async()=>{projectDefaults=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:$('client').value,mode:$('mode').value,model:window.selectedConfiguredModel?.()||null,...window.selectedReasoningSettings?.()});window.setupSettingsSaved?.();notice('설정을 저장했습니다. 첫 요청을 입력해 보세요.');});
 $('probe-clients').onclick=()=>act(async()=>{
-  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?', '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input',undefined,'form-control');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('클라이언트 경로를 저장했습니다. 다시 확인을 눌러 검증하세요.');},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
+  $('probe-clients').disabled=true;$('clients').textContent='확인 중…';try{const d=await api('/clients');$('clients').replaceChildren();for(const c of d.clients){const card=el('div',undefined,'client-card');card.append(el('h3',c.client==='codex'?'Codex':'Claude'),el('p',({installed:'설치 확인',missing:'설치 필요',error:'확인 실패'}[c.state]||c.state)+(c.version?', '+c.version:'')),el('p',c.detail||(c.auth==='ready'?'인증 확인 완료':c.auth==='check_required'?'터미널에서 로그인 상태를 확인하세요.':'인증은 실제 실행 시 확인합니다.'),'hint'));const input=el('input',undefined,'form-control');input.value=c.path||'';input.placeholder='실행 파일 경로 (비우면 PATH에서 탐색)';input.setAttribute('aria-label',c.client+' 실행 파일 경로');const pathRow=el('div',undefined,'client-path-row');pathRow.append(input,button('경로 등록',async()=>{await api('/clients/'+c.client,'PUT',{path:input.value});notice('CLI 경로를 저장했습니다. 다시 확인 버튼으로 연결 상태를 확인할 수 있습니다.');},'icon-action'));card.append(pathRow);$('clients').append(card);}}finally{$('probe-clients').disabled=false;}
 });
 
 

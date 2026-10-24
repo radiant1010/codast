@@ -23,7 +23,7 @@ const {chromium}=require('playwright');
   await page.locator('#vault-status').filter({hasText:'0개 문서'}).waitFor();
   await page.getByRole('button',{name:'새 산출물 작성',exact:true}).click();
   await page.locator('#vault-editor input[type=file]').setInputFiles({name:'sample.md',mimeType:'text/markdown',buffer:Buffer.from('# 불러온 문서\n첫 내용')});
-  await page.locator('#vault-editor-status').filter({hasText:'내용을 불러왔습니다'}).waitFor();
+  await page.locator('#vault-editor-status').filter({hasText:'내용을 불러왔으며, 초안을 저장하면 문서함에 보관됩니다.'}).waitFor();
   assert.equal(await page.locator('#vault-title').inputValue(),'sample');
   assert.equal(await page.locator('#vault-content').inputValue(),'# 불러온 문서\n첫 내용');
   await page.fill('#vault-title','첨부 파일 크기 제한');

@@ -264,7 +264,7 @@ class CliAdapter:
                                   value[len(previous):] if value.startswith(previous) else value)
                 self.seen_text[key] = value
                 if category == 'command_execution' and kind == 'item.completed':
-                    self.on_event('status', f"명령 종료 · 코드 {item.get('exit_code', '?')}")
+                    self.on_event('status', f"명령 종료, 코드 {item.get('exit_code', '?')}")
             elif kind == 'item.completed' and category == 'file_change':
                 self.on_event('file', json.dumps(item.get('changes', []), ensure_ascii=False))
             elif kind in ('item.started', 'item.completed') and category in ('mcp_tool_call', 'web_search'):
@@ -285,7 +285,7 @@ class CliAdapter:
                     if isinstance(block, dict) and block.get('type') == 'tool_result':
                         self.on_event('output', str(block.get('content', '')))
             elif kind == 'system':
-                self.on_event('status', 'Claude · '+event.get('subtype', 'system'))
+                self.on_event('status', 'Claude, '+event.get('subtype', 'system'))
 
     def parse(self, stdout):
         if self.client == 'claude':

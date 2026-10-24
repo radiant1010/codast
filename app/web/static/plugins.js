@@ -103,7 +103,7 @@
     const state={client,root,tab,search,count,status,list,empty,controls:[],cards:[],ticket:0,loaded:false,busy:false,project:''};states[client]=state;
     const refresh=button('새로고침',()=>load(state));state.refresh=refresh;
     const toolbar=el('div',undefined,'plugin-toolbar');toolbar.append(search,count,refresh);
-    root.append(toolbar,el('p',client==='codex'?'Codex는 설치 상태 조회와 제거를 지원합니다. 켜기/끄기와 업데이트는 원래 관리 화면에서 확인하세요.':'모든 프로젝트 범위의 변경은 다른 프로젝트에도 적용됩니다. 실행 중인 작업은 현재 로드된 플러그인을 유지합니다.','hint'),status,list,empty);
+    root.append(toolbar,el('p',client==='codex'?'Codex 플러그인은 이 화면에서 설치 상태 조회와 제거를 지원하며, 활성화, 비활성화와 업데이트는 Codex의 플러그인 관리 화면에서 확인할 수 있습니다.':'모든 프로젝트 범위의 변경은 다른 프로젝트에도 적용됩니다. 실행 중인 작업은 현재 로드된 플러그인을 유지합니다.','hint'),status,list,empty);
     search.oninput=()=>filter(state);panel.append(root);
   }
   panel.addEventListener('settings-open',()=>load(states[selected]));

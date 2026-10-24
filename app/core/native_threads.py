@@ -13,7 +13,7 @@ def request(configured, method, params, max_response_bytes=None):
     except ResponseLimitError:
         raise
     except Exception as exc:
-        raise ValueError('Codex 세션 조회에 실패했습니다. 설치·로그인 상태를 확인하세요.') from exc
+        raise ValueError('Codex 세션 조회에 실패했습니다. 설치와 로그인 상태를 확인하세요.') from exc
     if 'result' not in reply:
         raise ValueError('Codex에서 저장된 세션을 읽지 못했습니다.')
     return reply['result']
@@ -25,7 +25,7 @@ def summary(thread):
         text = result.get(key)
         if isinstance(text, str) and text.startswith(PREFIX.split('\n')[0]):
             message = display_message('user', text)
-            result[key] = message['text'] if 'delivery_details' in message else '하네스 요청 · 대화 미리보기에서 확인'
+            result[key] = message['text'] if 'delivery_details' in message else '하네스 요청, 대화 미리보기에서 확인'
     return result
 
 

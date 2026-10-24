@@ -2,8 +2,8 @@
 window.questionCard=(message,b,refresh)=>{
   const info=metadata(message.metadata),question=info.question;if(!question)return null;
   const section=el('section',undefined,'user-question');section.append(el('h3',info.reply_run_id?'답변 접수됨':info.superseded_by?'이후 대화에서 계속됨':'사용자 답변 대기'),el('p',question.question));
-  if(info.reply_run_id||info.superseded_by){section.append(el('p',info.reply_run_id?'답변을 전달했습니다. 이어진 실행의 결과를 확인하세요.':'새 요청으로 이어졌습니다. 현재 대화에서 계속해 주세요.','hint'));return section;}
-  if(info.workflow_id||info.parallel_group){section.append(el('p','워크플로 화면에서 해당 작업을 열고 답변을 입력한 후 다시 실행하세요.','hint'));return section;}
+  if(info.reply_run_id||info.superseded_by){section.append(el('p',info.reply_run_id?'답변을 전달했으며 이어진 실행의 결과가 대화에 표시됩니다.':'새 요청으로 이어졌으며 현재 대화에서 진행 상황을 확인할 수 있습니다.','hint'));return section;}
+  if(info.workflow_id||info.parallel_group){section.append(el('p','이 질문은 워크플로 작업에 속합니다. 워크플로 화면에서 해당 작업에 답변을 입력한 뒤 다시 실행할 수 있습니다.','hint'));return section;}
   const key='codast.question.'+b+'.'+message.run_id;let draft={answer:'',request_id:null};
   try{draft={...draft,...JSON.parse(localStorage.getItem(key)||'{}')};}catch{}
   const save=()=>{try{localStorage.setItem(key,JSON.stringify(draft));}catch{}};

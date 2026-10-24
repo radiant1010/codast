@@ -1,7 +1,7 @@
 (()=>{
   const panel=$('rules-panel'),preview=$('rules'),dialog=panel.closest('dialog');
   $('reload-rules').remove();
-  panel.querySelector('.hint').textContent='드래그하여 폴더로 이동하거나 룰북 순서를 바꾸세요. 필요한 룰북만 체크하세요. 이 프로젝트의 다음 요청부터 적용됩니다.';
+  panel.querySelector('.hint').textContent='룰북은 드래그로 폴더를 이동하거나 순서를 바꿀 수 있습니다. 체크하고 저장한 룰북은 이 프로젝트의 다음 요청부터 적용됩니다.';
   let books=[],folders=[],selected=null,defaults='',loadedProject='',original='',busy=true;
   const status=el('p','프로젝트를 선택하세요.','hint');status.setAttribute('role','status');
   const fieldset=el('fieldset');fieldset.className='rulebook-library';fieldset.disabled=true;
@@ -11,12 +11,12 @@
   const name=el('input',undefined,'form-control');name.id='rulebook-name';name.maxLength=80;
   const folder=el('select');folder.id='rulebook-folder';
   const content=el('textarea');content.id='rulebook-content';content.rows=14;content.maxLength=24000;content.spellcheck=false;
-  const empty=el('p','룰북을 선택하거나 추가하세요.','hint');
+  const empty=el('p','룰북을 선택하면 내용을 편집할 수 있으며, 새 룰북도 추가할 수 있습니다.','hint');
   const fields=el('div');
   for(const [text,node] of [['이름',name],['폴더',folder],['내용',content]]){const label=el('label',text);label.htmlFor=node.id;fields.append(label,node);}
   const filePicker=el('input',undefined,'form-control');filePicker.type='file';filePicker.accept='.md,.txt';filePicker.multiple=true;filePicker.hidden=true;filePicker.id='rulebook-import-files';
   const importFiles=button('',async()=>filePicker.click());window.actionIcon(importFiles,'importDocument','룰북 파일 추가');
-  const importRow=el('div',undefined,'rulebook-import-row');importRow.append(importFiles,el('span','나만의 룰북 파일을 추가해 주세요.','hint'),filePicker);
+  const importRow=el('div',undefined,'rulebook-import-row');importRow.append(importFiles,el('span','Markdown 또는 텍스트 파일에서 룰북을 가져올 수 있습니다.','hint'),filePicker);
   filePicker.onchange=async()=>{
     const chosen=[...filePicker.files],project=loadedProject;filePicker.value='';if(!chosen.length)return;
     if(books.length+chosen.length>40){status.textContent='룰북은 휴지통을 포함해 최대 40개까지 추가할 수 있습니다.';return;}
@@ -28,7 +28,7 @@
         const text=await file.text();if(text.length>24000||text.includes('\0'))throw Error('파일 내용은 24,000자 이내의 텍스트여야 합니다.');
         imported.push({id:'file-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),name:file.name.slice(0,80),folder:current()?.folder||'',enabled:false,content:text});
       }
-      if(project!==$('project').value)return;books.push(...imported);selected=imported[0].id;renderTree();renderEditor();dirty();status.textContent='파일 내용을 추가했습니다. 적용할 룰북을 체크하고 저장하세요. 원본 파일은 변경하지 않습니다.';
+      if(project!==$('project').value)return;books.push(...imported);selected=imported[0].id;renderTree();renderEditor();dirty();status.textContent='파일 내용을 추가했습니다. 룰북을 체크하고 저장하면 다음 요청부터 적용되며, 원본 파일은 변경되지 않습니다.';
     }catch(error){status.textContent='파일 추가 실패, '+error.message;}finally{busy=false;fieldset.disabled=false;}
   };
   function payload(){return {include_project_rules:false,folders:[...folders],books:books.map(b=>({...b}))};}
@@ -56,7 +56,7 @@
         const next=(destination?destination+'/':'')+source.split('/').at(-1);if(next===source)return;
         const affected=folders.filter(f=>f===source||f.startsWith(source+'/'));
         const candidate=folders.map(f=>affected.includes(f)?next+f.slice(source.length):f);
-        if(!validFolders(candidate)){status.textContent='이동할 수 없습니다. 중복 이름 또는 최대 3단계를 확인하세요.';return;}
+        if(!validFolders(candidate)){status.textContent='폴더를 이동할 수 없습니다. 이름이 중복되지 않아야 하며 폴더 깊이는 최대 3단계입니다.';return;}
         folders=candidate;books.forEach(b=>{if(affected.includes(b.folder))b.folder=next+b.folder.slice(source.length);});
       }
       dirty();renderTree();renderEditor();
@@ -78,7 +78,7 @@
           const affected=folders.filter(v=>v===f||v.startsWith(f+'/'));
           const moved=affected.map(v=>next+v.slice(f.length));const remaining=folders.filter(v=>!affected.includes(v));
           const candidate=[...remaining,...moved];
-          if(!validFolders(candidate)){status.textContent='상위 폴더와 이름을 확인하세요. 이름이 겹치거나 폴더 깊이가 3단계를 넘으면 저장할 수 없습니다.';return;}
+          if(!validFolders(candidate)){status.textContent='상위 폴더에 같은 이름이 있거나 폴더 깊이가 3단계를 넘으면 저장할 수 없습니다.';return;}
           folders=folders.map(v=>affected.includes(v)?next+v.slice(f.length):v);
           books.forEach(book=>{if(affected.includes(book.folder))book.folder=next+book.folder.slice(f.length);});dirty();renderTree();renderEditor();
         }),icon('trash',f+' 폴더 삭제',async()=>{
@@ -94,7 +94,7 @@
   function addFolder(parent=''){
     const value=prompt(parent?'하위 폴더 이름':'인덱스 폴더 이름')?.trim();if(!value)return;
     const path=parent?parent+'/'+value:value;
-    if(value.includes('/')||!validFolders([...folders,path])){status.textContent='폴더 이름이 겹치는지 확인하세요. 폴더는 최대 3단계까지 만들 수 있습니다.';return;}
+    if(value.includes('/')||!validFolders([...folders,path])){status.textContent='같은 위치에 중복된 폴더 이름을 사용할 수 없으며, 폴더는 최대 3단계까지 만들 수 있습니다.';return;}
     folders.push(path);dirty();renderTree();renderEditor();
   }
   toolbar.append(icon('folderPlus','룰북 폴더 추가',async()=>addFolder()),icon('plus','룰북 추가',async()=>{
@@ -108,7 +108,7 @@
     for(const book of deleted){const row=el('div',undefined,'rulebook-trash-row');row.append(el('span',book.name),icon('restore',book.name+' 룰북 복원',async()=>{
       book.trashed=false;book.enabled=false;if(book.folder&&!folders.includes(book.folder))book.folder='';selected=book.id;dirty();renderTree();renderEditor();
       for(const node of tree.querySelectorAll('details'))if(book.folder===node.dataset.folder||book.folder.startsWith(node.dataset.folder+'/'))node.open=true;
-      status.textContent='복원했습니다. 적용하려면 체크하고 저장하세요.';
+      status.textContent='룰북을 복원했습니다. 체크하고 저장하면 다음 요청부터 적용됩니다.';
     }));trashList.append(row);}
   }
   const remove=icon('trash','선택한 룰북 삭제',async()=>{const book=current();if(!book||!confirm(book.name+' 룰북을 휴지통으로 옮길까요? 저장 후에도 복원할 수 있습니다.'))return;book.trashed=true;selected=books.find(b=>!b.trashed)?.id||null;dirty();renderTree();renderEditor();});

@@ -78,7 +78,7 @@
       }
       const older=button('앞 대화',()=>showContext(hit,Math.max(0,data.offset-20))),newer=button('뒤 대화',()=>showContext(hit,data.offset+20));
       older.disabled=data.offset===0;newer.disabled=!data.has_more;actions.append(older,newer);preview.append(actions);
-      preview.append(el('p','색인에 저장된 대화입니다. 최신 내용을 확인하려면 기록을 새로 읽어 주세요.','hint'));
+      preview.append(el('p','마지막으로 읽은 기록을 기준으로 표시한 대화이며, 기록 새로 읽기로 최신 내용을 반영할 수 있습니다.','hint'));
       for(const message of data.messages){
         const row=el('article',undefined,'session-search-message');row.dataset.ordinal=message.ordinal;
         row.classList.toggle('search-target',message.ordinal===data.ordinal);

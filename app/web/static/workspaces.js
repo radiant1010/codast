@@ -2,7 +2,7 @@
   let picking=false;
   const dialog=$('workspace-dialog');
   function open(){
-    $('workspace-path').value='';$('workspace-name').value='';$('folder-status').textContent='폴더를 선택하거나 전체 경로를 입력한 뒤 등록할 이름을 확인하세요.';$('register-folder').disabled=true;dialog.showModal();
+    $('workspace-path').value='';$('workspace-name').value='';$('folder-status').textContent='기존 폴더를 선택하거나 전체 경로를 입력하고, 목록에 표시할 프로젝트 이름을 지정할 수 있습니다.';$('register-folder').disabled=true;dialog.showModal();
   }
   $('workspace-path').oninput=()=>{$('register-folder').disabled=picking||!$('workspace-path').value.trim();};
   $('add-workspace').onclick=open;$('choose-workspace').onclick=open;
@@ -17,14 +17,14 @@
       if(!data.path){$('folder-status').textContent='폴더 선택을 취소했습니다.';return;}
       $('workspace-path').value=data.path;
       if(!$('workspace-name').value){const leaf=data.path.split(/[\\/]/).filter(Boolean).pop()||'';$('workspace-name').value=leaf.replace(/[^a-zA-Z0-9가-힣ㄱ-ㅣ\u1100-\u11ff_-]/g,'-').replace(/^[-_]+/,'').slice(0,64)||'my-workspace';}
-      $('folder-status').textContent='폴더를 선택했습니다. 이름과 경로를 확인한 뒤 추가하세요.';
+      $('folder-status').textContent='폴더를 선택했습니다. 이름과 경로를 확인한 뒤 추가 버튼으로 등록할 수 있습니다.';
     }catch(error){$('folder-status').textContent=error.message;}
     finally{picking=false;$('cancel-workspace').disabled=false;$('pick-folder').disabled=false;$('register-folder').disabled=!$('workspace-path').value;}
   };
   $('register-workspace').onsubmit=async event=>{
     event.preventDefault();if(picking||!$('workspace-path').value)return;
     $('register-folder').disabled=true;
-    try{const name=$('workspace-name').value;await api('/workspaces','POST',{name,path:$('workspace-path').value.trim()});dialog.close();await projects(name);await loadProject();notice('선택한 폴더를 연결했습니다. 실행 설정에서 권한과 에이전트를 확인하세요.');}
+    try{const name=$('workspace-name').value;await api('/workspaces','POST',{name,path:$('workspace-path').value.trim()});dialog.close();await projects(name);await loadProject();notice('선택한 폴더를 연결했습니다. 실행 권한과 에이전트는 실행 설정에서 확인할 수 있습니다.');}
     catch(error){$('folder-status').textContent=error.message;}
     finally{$('register-folder').disabled=false;}
   };

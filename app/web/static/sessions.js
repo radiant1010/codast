@@ -101,7 +101,7 @@
   }
   const nextThreads=button('다음 목록 ›',async()=>loadThreads(true));nextThreads.title='다음 20개 세션 보기';nextThreads.hidden=true;
   const importScope=el('p',undefined,'hint');
-  importDialog.append(importHead,importScope,importClient,el('p','현재 프로젝트와 작업 경로가 같은 세션만 표시합니다. 다른 프로젝트의 대화는 불러오지 않습니다. 세션 내용을 확인한 뒤 연결하세요.','hint'),importStatus,importList,nextThreads,importPreview);document.body.append(importDialog);
+  importDialog.append(importHead,importScope,importClient,el('p','현재 프로젝트와 작업 경로가 같은 세션만 표시하며, 미리보기에서 내용을 확인한 뒤 연결할 수 있습니다.','hint'),importStatus,importList,nextThreads,importPreview);document.body.append(importDialog);
   let importProject='',importCursor=null;
   window.openStoredSession=async(agent,thread,selected)=>{
     if($('project').value!==selected)throw Error('프로젝트가 변경되었습니다. 다시 검색하세요.');
@@ -125,12 +125,12 @@
       const transcript=el('div',undefined,'native-thread-preview');for(const message of data.messages){transcript.append(el('strong',message.role==='user'?'사용자':agent==='codex'?'Codex':'Claude'),el('pre',message.text));if(message.delivery_details){const details=el('details');details.append(el('summary','전달 내용 상세'+(message.details_truncated?', 일부 표시':'')),el('pre',message.delivery_details));transcript.append(details);}}
       if(!data.messages.length)transcript.append(el('p','표시할 저장 메시지가 없습니다.'));
       const name=el('input',undefined,'form-control');name.maxLength=120;name.value=(thread.name||'불러온 세션').slice(0,120);name.setAttribute('aria-label','연결할 새 채팅 이름');
-      const ack=el('input',undefined,'form-check-input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('다른 창이나 CLI에서 이 세션의 실행을 멈췄습니다. 동시 실행하지 않겠습니다.'));
+      const ack=el('input',undefined,'form-check-input');ack.type='checkbox';const ackLabel=el('label',undefined,'check');ackLabel.append(ack,document.createTextNode('다른 창과 CLI에서 이 세션의 실행 종료를 확인했으며, 연결 후에도 동시에 실행하지 않습니다.'));
       const attach=button('선택',async()=>{if(!ack.checked)return;attach.disabled=true;
         try{if($('project').value!==selected||agent!==selectedImportClient)throw Error('프로젝트가 변경되었습니다. 다시 열어 주세요.');
           window.chatState.save();
           const linked=await api('/projects/'+encodeURIComponent(selected)+'/native-threads/'+agent+'/'+encodeURIComponent(thread.id)+'/attach','POST',{task:name.value});
-          if($('project').value!==selected)throw Error('세션은 원래 프로젝트에 연결됐습니다. 해당 프로젝트에서 채팅을 선택하세요.');window.chatState.seed(selected,linked.task,{client:linked.client,cwd:'.',mode:'read-only',model:null,paths:[],fresh:false,action:'run'});importDialog.close();await switchChat(linked.task);actionHint();notice('대화를 연결했습니다. 다음 메시지부터 선택한 에이전트와 이어서 작업합니다.');
+          if($('project').value!==selected)throw Error('세션이 원래 프로젝트에 연결되었습니다. 해당 프로젝트의 채팅 목록에서 확인할 수 있습니다.');window.chatState.seed(selected,linked.task,{client:linked.client,cwd:'.',mode:'read-only',model:null,paths:[],fresh:false,action:'run'});importDialog.close();await switchChat(linked.task);actionHint();notice('대화를 연결했습니다. 다음 메시지부터 선택한 에이전트와 이어서 작업합니다.');
         }catch(error){importStatus.textContent=error.message;}finally{attach.disabled=!ack.checked;}});
       attach.title='선택한 세션을 새 채팅에 연결';attach.disabled=true;ack.onchange=()=>attach.disabled=!ack.checked;
       const entry=el('div',undefined,'client-path-row');entry.append(name,attach);importPreview.append(transcript,ackLabel,entry);
@@ -148,7 +148,7 @@
   }
   usage.append(el('p','현재 프로젝트에서 기록한 사용량입니다. 계정의 남은 사용량이나 대화에 남은 공간과는 다릅니다.','hint'));
   const usageDetails=el('section',undefined,'session-usage-details');usageDetails.id='recent-session-usage';usageDetails.hidden=true;
-  usageDetails.append(el('p','에이전트마다 최근에 실행한 채팅 3개를 보여 줍니다. 완료된 채팅도 포함됩니다.','hint'));
+  usageDetails.append(el('p','에이전트별 최근 실행 채팅 3개를 표시하며, 완료된 채팅도 포함합니다.','hint'));
   const toggleUsage=button('',async()=>{usageDetails.hidden=!usageDetails.hidden;window.actionIcon(toggleUsage,usageDetails.hidden?'plus':'minus',usageDetails.hidden?'최근 세션 사용량 펼치기':'최근 세션 사용량 접기');toggleUsage.setAttribute('aria-expanded',String(!usageDetails.hidden));});
   window.actionIcon(toggleUsage,'plus','최근 세션 사용량 펼치기');
   toggleUsage.setAttribute('aria-label','최근 세션 사용량 펼치기');toggleUsage.setAttribute('aria-expanded','false');toggleUsage.setAttribute('aria-controls',usageDetails.id);usageHeading.append(toggleUsage);
@@ -321,12 +321,12 @@
   });
   inputSize.observe(input);window.addEventListener('resize',window.resizeComposer);window.resizeComposer();
   $('task-name').placeholder='채팅 이름';$('task-name').parentElement.firstChild.textContent='대상 채팅';
-  $('welcome').querySelector('h2').textContent='프로젝트를 연결하고, 대화를 시작하세요.';
+  $('welcome').querySelector('h2').textContent='프로젝트를 연결하면 채팅을 시작할 수 있습니다.';
   $('welcome').querySelector('p').textContent='채팅 기록과 에이전트 세션을 한곳에서 이어갑니다.';
   // A named chat is required for native resume; no silent topic classification.
   composer.addEventListener('submit',event=>{
     if(!$('task-name').value.trim()){
-      event.preventDefault();event.stopImmediatePropagation();notice('새 채팅을 만들거나 기존 채팅을 선택하세요.',true);
+      event.preventDefault();event.stopImmediatePropagation();notice('새 채팅을 만들거나 기존 채팅을 선택하면 요청을 입력할 수 있습니다.',true);
     }
   },true);
   let snapshot={sessions:[],running:[]},inFlight=false;
@@ -425,7 +425,7 @@
     sessionStatus('loading','세션 현황 확인 중');
     try{
       const next=await api('/session-overview');snapshot=next;runningCount.textContent='실행 중 '+snapshot.running.filter(row=>row.project===$('project').value).length;list.replaceChildren();
-      for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+projectLabel(run.project)+' / '+(run.command.task||'미분류')+', '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트와 실행 모델은 AI 세션 표에서 확인하세요.','hint'));list.append(item);}
+      for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+projectLabel(run.project)+' / '+(run.command.task||'미분류')+', '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트와 실행 모델은 AI 세션 표에 표시됩니다.','hint'));list.append(item);}
       if(!next.running.length)list.append(el('p','실행 중인 세션이 없습니다.','hint'));
       renderNative();renderUsage();
       sessionStatus('ready','확인 '+new Date().toLocaleTimeString());

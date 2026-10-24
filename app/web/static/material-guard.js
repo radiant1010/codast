@@ -6,7 +6,7 @@
     privacyModes={replace:'완전 변경',partial:'일부 마스킹 (qwe***)',raw:'원본 그대로'};
   const privacyValue=prefs=>prefs.privacy_mode||(prefs.level==='medium'?'partial':['low','allow'].includes(prefs.level)?'raw':'replace');
   let project='',selected=new Set(),rows=[],options=null,generation=0,contextVersion=0,uploading=false;
-  const page=el('section'),intro=el('p','첨부한 파일에서 개인정보와 비밀 키를 찾아 가립니다. 메시지, 이전 대화, 작업 규칙이나 에이전트가 직접 읽는 파일에는 적용되지 않습니다. 이미 보낸 정보는 이 설정을 바꿔도 되돌릴 수 없습니다.','hint');
+  const page=el('section'),intro=el('p','첨부 파일에서 개인정보와 비밀 키를 찾아 선택한 보호 방식을 적용합니다. 메시지, 이전 대화, 작업 규칙과 에이전트가 직접 읽는 파일은 적용 대상이 아니며, 설정을 바꿔도 이미 보낸 정보는 회수되지 않습니다.','hint');
   const badge=el('span',undefined,'hint'),toolbar=el('div',undefined,'attachment-toolbar'),chips=el('div',undefined,'attachment-chips');chips.id='attachment-chips';
   function icon(kind,label,fn){const b=button(label,fn);window.actionIcon(b,kind,label);return b;}
   $('text').before(chips);$('composer-toolbar').prepend(toolbar);
@@ -46,8 +46,8 @@
     });
   }
   excel.append(el('summary','엑셀에서 보낼 시트와 열 선택'),excelBody);
-  excelBody.append(el('p','이 프로젝트에 올리는 XLSX 파일에 적용합니다. 선택을 추가하지 않으면 숨기지 않은 모든 시트와 열을 읽습니다. 선택을 추가하면 지정한 시트와 열만 보냅니다. 시트 번호는 숨김 시트를 포함한 파일 안의 순서이며 1부터 시작합니다. 숨김 시트는 보낼 수 없습니다.','hint'),sheetRows,icon('plus','엑셀 시트 선택 추가',()=>{if(sheetRows.children.length<50)sheetRow({sheet:sheetRows.children.length+1,columns:[]});}),el('p','예: 시트 번호 1, 보낼 열 A, C. 선택한 셀에는 위 개인정보 처리 방식을 적용합니다. 첫 번째 행을 열 이름으로 사용하며 수식은 제외합니다. 다른 파일 형식에는 이 선택이 적용되지 않습니다. 설정을 저장한 후 파일을 첨부하세요.','hint'));
-  form.append(privacyLabel,privacy,privacyHint,levelLabel,level,warning,el('p','추가로 가릴 항목이 있나요? 예를 들어 엑셀에 “담당자명” 열이 있다면, 아래에 담당자명을 입력하고 정보 유형을 이름으로 선택하세요. “담당자명: 홍길동”처럼 적힌 내용에도 적용됩니다.','hint'),fields,icon('plus','보호할 항목 추가',()=>{if(fields.children.length<30)fieldRow();}),excel,save);
+  excelBody.append(el('p','이 설정은 프로젝트에 첨부하는 XLSX 파일에 적용됩니다. 선택을 추가하면 지정한 시트와 열만 보내고, 선택이 없으면 숨기지 않은 모든 시트와 열을 읽습니다. 시트 번호는 숨김 시트를 포함한 파일 내 순서로 1부터 시작하지만, 숨김 시트 자체는 전송할 수 없습니다.','hint'),sheetRows,icon('plus','엑셀 시트 선택 추가',()=>{if(sheetRows.children.length<50)sheetRow({sheet:sheetRows.children.length+1,columns:[]});}),el('p','예를 들어 시트 번호 1과 열 A, C를 지정하면 해당 셀에 선택한 개인정보 처리 방식을 적용합니다. 첫 번째 행은 열 이름으로 사용하고 수식은 제외하며, 다른 파일 형식에는 적용하지 않습니다. 설정은 저장 후 첨부하는 파일부터 적용됩니다.','hint'));
+  form.append(privacyLabel,privacy,privacyHint,levelLabel,level,warning,el('p','추가로 가릴 항목은 필드 이름과 정보 유형으로 지정합니다. 예를 들어 필드 이름을 “담당자명”, 정보 유형을 “이름”으로 설정하면 같은 이름의 엑셀 열과 “담당자명: 홍길동” 형식의 본문에 적용됩니다.','hint'),fields,icon('plus','보호할 항목 추가',()=>{if(fields.children.length<30)fieldRow();}),excel,save);
   const picker=el('input',undefined,'form-control');picker.type='file';picker.id='attachment-picker';picker.multiple=true;picker.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';picker.hidden=true;
   const testLabel=el('label',undefined,'check'),test=el('input',undefined,'form-check-input');test.type='checkbox';test.id='guard-test-data';testLabel.append(test,document.createTextNode('테스트용 자료로 표시 (보호 설정은 그대로 적용)'));
   const upload=icon('plus','파일 첨부',()=>{if(!project)throw Error('프로젝트를 선택하세요.');picker.click();});
@@ -58,7 +58,7 @@
   page.append(intro,form);
   const dialog=el('dialog',undefined,'session-drawer'),header=el('div',undefined,'account-dialog-header');dialog.id='attachment-dialog';dialog.setAttribute('aria-label','첨부 자료');
   header.append(el('h2','첨부 자료'),icon('close','첨부 자료 닫기',()=>dialog.close()));
-  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF 파일을 지원합니다. 파일당 최대 8 MiB입니다. 긴 자료에 대한 구체적인 질문은 관련 부분과 주변 내용을 발췌해 전달합니다. 전체 요약, 분석, 구현 요청은 전체 내용을 유지합니다. 보호 설정을 바꿨다면 파일을 다시 올려 주세요.','hint'),list);document.body.append(dialog);
+  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF를 파일당 최대 8 MiB까지 첨부할 수 있습니다. 긴 자료에 대한 구체적인 질문에는 관련 부분과 주변 내용을 발췌하고, 전체 요약, 분석, 구현 요청에는 전체 내용을 전달합니다. 변경된 보호 설정을 적용하려면 파일을 다시 첨부해야 합니다.','hint'),list);document.body.append(dialog);
   const historyDialog=el('dialog',undefined,'session-drawer'),historyHeader=el('div',undefined,'account-dialog-header'),historyTitle=el('h2'),historyInfo=el('p',undefined,'hint'),historyReport=el('div'),historyContent=el('pre');
   historyDialog.id='sent-attachment-dialog';historyDialog.setAttribute('aria-label','보낸 첨부 내용');let historyTicket=0;
   historyHeader.append(historyTitle,icon('close','보낸 첨부 닫기',()=>historyDialog.close()));
@@ -80,10 +80,10 @@
   window.settingsPage.register('materials','첨부 파일 보호',page);
   function url(){if(!project)throw Error('프로젝트를 선택하세요.');return '/projects/'+encodeURIComponent(project);}
   function describe(){
-    privacyHint.textContent=privacy.value==='replace'?'찾은 개인정보를 원문이 드러나지 않는 가상 값으로 바꿉니다. 같은 프로젝트에서는 같은 값이 파일이나 시트가 달라도 동일하게 바뀝니다. 전화번호나 이름의 원래 형식은 유지하지 않습니다.':privacy.value==='partial'?'찾은 개인정보의 앞부분을 최대 세 글자 남기고 나머지를 ***로 가립니다. 예: qwerty → qwe***. 짧은 값도 최소 한 글자는 가립니다.':'찾은 개인정보를 가리지 않고 저장하고 전달합니다. 비밀 키와 비밀번호는 아래 설정을 따릅니다.';
+    privacyHint.textContent=privacy.value==='replace'?'개인정보를 원문이 드러나지 않는 가상 값으로 바꿉니다. 같은 프로젝트에서는 파일이나 시트가 달라도 같은 원문을 같은 값으로 바꾸며, 이름이나 전화번호의 원래 형식은 유지하지 않습니다.':privacy.value==='partial'?'찾은 개인정보의 앞부분을 최대 세 글자 남기고 나머지를 ***로 가립니다. 예: qwerty → qwe***. 짧은 값도 최소 한 글자는 가립니다.':'찾은 개인정보를 가리지 않고 저장하고 전달합니다. 비밀 키와 비밀번호는 아래 설정을 따릅니다.';
     if(options&&!options.privacy_mode)privacyHint.textContent+=' 현재 저장된 설정은 이전 '+levels[options.level]+' 방식입니다. 저장하면 위에서 선택한 새 방식으로 적용합니다.';
     privacyHint.classList.toggle('error',privacy.value==='raw');
-    warning.textContent=level.value==='allow'?'비밀 키와 비밀번호도 원본 그대로 저장하고 전달합니다. 개인정보는 위에서 선택한 방식으로 처리합니다.':'찾은 비밀 키와 비밀번호는 가립니다. 인증용 개인 키가 있는 첨부는 차단합니다. 개인정보 처리 방식과 별도로 적용합니다.';
+    warning.textContent=level.value==='allow'?'비밀 키와 비밀번호도 원본 그대로 저장하고 전달합니다. 개인정보는 위에서 선택한 방식으로 처리합니다.':'개인정보 처리 방식과 별도로 비밀 키와 비밀번호를 가리며, 인증용 개인 키가 포함된 첨부는 차단합니다.';
     warning.classList.toggle('error',level.value==='allow');
   }
   level.onchange=describe;privacy.onchange=describe;
@@ -157,7 +157,7 @@
           await refresh();if(owner!==contextVersion)break;
           const current=rows.find(row=>row.id===result.id);
           if(current?.status==='ready'&&!current.stale){if(selected.size>=10)throw Error('자료는 보관했지만 첨부 한도 10개에 도달했습니다. 기존 첨부를 제거하세요.');selected.add(result.id);render();window.chatState.save();error.textContent='';}
-          else{error.textContent=current?.status==='blocked'?'개인키가 포함된 자료를 차단했습니다. 해당 정보를 제거한 파일로 다시 첨부하세요.':'보호 설정이 바뀌었거나 검사 결과를 불러오지 못했습니다. 파일을 다시 첨부해 주세요.';break;}
+          else{error.textContent=current?.status==='blocked'?'개인키가 포함된 자료를 차단했습니다. 해당 정보를 제거한 파일로 다시 첨부하세요.':'보호 설정이 변경되었거나 검사 결과를 불러오지 못해 재첨부가 필요합니다.';break;}
         }catch(e){if(owner===contextVersion)error.textContent=controller.signal.aborted?'첨부 처리를 취소했습니다. 이미 완료한 '+completed+'개 파일은 유지합니다.':e.message;break;}
       }
     }finally{uploadController=null;uploading=false;upload.disabled=false;progress.hidden=true;}

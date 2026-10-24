@@ -9,7 +9,7 @@
         "codex": {"reuse": [["superpowers@openai-curated-remote"], ["superpowers@superpowers-marketplace"], ["superpowers@superpowers-dev"]]},
         "claude": {"reuse": [["superpowers@superpowers-marketplace"], ["superpowers@claude-plugins-official"], ["superpowers@superpowers-dev"], ["superpowers@synced"]]}
       },
-      "guide": "설치한 스킬은 다음 새 실행부터 확인하세요. CODAST의 작업 범위와 사용자 승인 규칙을 우선합니다.",
+      "guide": "설치한 스킬은 다음 새 실행에서 확인할 수 있으며, CODAST의 작업 범위와 사용자 승인 규칙이 우선 적용됩니다.",
       "url": "https://github.com/obra/superpowers"
     },
     {
@@ -20,7 +20,7 @@
         "codex": {"reuse": [["ponytail@ponytail"]]},
         "claude": {"reuse": [["ponytail@ponytail"], ["ponytail@synced"]]}
       },
-      "guide": "설치와 훅 신뢰 승인은 별개입니다. Codex의 /hooks에서 필요한 훅의 출처를 확인하세요. CODAST가 훅 신뢰를 대신 승인하지 않습니다.",
+      "guide": "플러그인 설치와 훅 신뢰 승인은 별개이며, 필요한 훅의 출처와 신뢰 상태는 Codex의 /hooks에서 확인합니다. CODAST는 훅 신뢰를 대신 승인하지 않습니다.",
       "url": "https://github.com/DietrichGebert/ponytail"
     },
     {
@@ -32,15 +32,15 @@
     {
       "id": "context7", "name": "Context7", "default": true, "kind": "mcp",
       "description": "현재 기술 버전의 개발 문서 조회",
-      "guide": "공식 원격 MCP를 인증키 없이 사용합니다. 이용 한도와 실제 연결은 사용할 때 확인합니다. 검색에 비공개 자료나 인증정보를 넣지 마세요.",
+      "guide": "공식 원격 MCP를 인증키 없이 사용하며, 이용 한도와 실제 연결 상태는 사용 시 확인합니다. 검색 내용에는 비공개 자료나 인증정보를 포함하지 않아야 합니다.",
       "url": "https://github.com/upstash/context7"
     },
     {
       "id": "github", "name": "GitHub", "default": false, "kind": "plugin",
       "description": "저장소, 이슈와 PR 연결", "account": true,
       "clients": {
-        "codex": {"reuse": [["github@openai-curated-remote"]], "guide": "Codex의 /plugins에서 GitHub를 선택해 설치와 계정 연결을 완료하세요. 기존 계정 연결이 있으면 해당 서비스에서 재사용합니다."},
-        "claude": {"reuse": [["github@claude-plugins-official"], ["github@synced"]], "guide": "Claude의 /plugin에서 GitHub를 선택해 설치한 뒤 /mcp에서 설정을 확인하세요. 공식 플러그인의 GITHUB_PERSONAL_ACCESS_TOKEN 설정 안내를 따르세요. 토큰을 CODAST에 입력하지 마세요."}
+        "codex": {"reuse": [["github@openai-curated-remote"]], "guide": "GitHub 설치와 계정 연결은 Codex의 /plugins에서 진행하며, 기존 계정 연결이 있으면 해당 서비스에서 재사용합니다."},
+        "claude": {"reuse": [["github@claude-plugins-official"], ["github@synced"]], "guide": "Claude의 /plugin에서 GitHub를 설치한 뒤 /mcp에서 연결 설정을 확인합니다. GITHUB_PERSONAL_ACCESS_TOKEN은 공식 플러그인의 안내에 따라 설정하며, CODAST에는 입력하지 않습니다."}
       },
       "url": "https://github.com/github/github-mcp-server"
     },
@@ -48,8 +48,8 @@
       "id": "notion", "name": "Notion", "default": false, "kind": "plugin",
       "description": "팀 문서와 작업 자료 연결", "account": true,
       "clients": {
-        "codex": {"reuse": [["notion@openai-curated-remote"]], "guide": "Codex의 /plugins에서 Notion을 선택해 설치와 계정 연결을 완료하세요. 접근할 워크스페이스는 Notion 인증 화면에서 선택합니다."},
-        "claude": {"reuse": [["notion@claude-plugins-official"], ["notion@synced"]], "guide": "Claude의 /plugin에서 Notion을 선택하고 해당 플러그인의 연결 안내를 따르세요. /mcp에서 연결 상태를 확인하세요."}
+        "codex": {"reuse": [["notion@openai-curated-remote"]], "guide": "Notion 설치와 계정 연결은 Codex의 /plugins에서 진행하고, 접근할 워크스페이스는 Notion 인증 화면에서 선택합니다."},
+        "claude": {"reuse": [["notion@claude-plugins-official"], ["notion@synced"]], "guide": "Claude의 /plugin에서 Notion 플러그인의 안내에 따라 연결하며, 연결 상태는 /mcp에서 확인할 수 있습니다."}
       },
       "url": "https://developers.notion.com/docs/mcp"
     },
@@ -57,8 +57,8 @@
       "id": "documents", "name": "문서 작업", "default": false, "kind": "plugin",
       "description": "Word, PDF, 스프레드시트와 프레젠테이션 작업",
       "clients": {
-        "codex": {"reuse": [["documents@openai-primary-runtime", "pdf@openai-primary-runtime", "spreadsheets@openai-primary-runtime", "presentations@openai-primary-runtime"]], "guide": "Codex의 기존 Documents, PDF, Spreadsheets, Presentations를 재사용합니다. 없는 항목은 Codex 플러그인 화면에서 제공 여부와 설치를 확인하세요. 제공사 실행 환경이 필요합니다."},
-        "claude": {"reuse": [["document-skills@anthropic-agent-skills"], ["document-skills@synced"]], "guide": "Claude용 공식 document-skills는 anthropics/skills의 설치 안내와 이용 조건을 확인해 Claude에서 설치하세요. 스킬이 사용하는 외부 프로그램은 별도 준비가 필요할 수 있습니다. Codex용으로 복사하지 않습니다."}
+        "codex": {"reuse": [["documents@openai-primary-runtime", "pdf@openai-primary-runtime", "spreadsheets@openai-primary-runtime", "presentations@openai-primary-runtime"]], "guide": "Codex에 설치된 Documents, PDF, Spreadsheets, Presentations를 재사용하며, 누락된 항목은 플러그인 화면에서 제공 여부와 설치 상태를 확인할 수 있습니다. 각 도구에는 제공사의 실행 환경이 필요합니다."},
+        "claude": {"reuse": [["document-skills@anthropic-agent-skills"], ["document-skills@synced"]], "guide": "Claude용 공식 document-skills는 anthropics/skills의 설치 안내와 이용 조건에 따라 Claude에 설치합니다. 스킬이 사용하는 외부 프로그램은 별도 준비가 필요할 수 있으며, Codex용으로 복사하지 않습니다."}
       },
       "url": "https://github.com/anthropics/skills"
     }

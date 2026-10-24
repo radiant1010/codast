@@ -32,7 +32,7 @@
     const value=item.clients[client];
     const link=el('a','공식 안내 보기');link.href=item.url;link.target='_blank';link.rel='noopener noreferrer';
     help.replaceChildren(el('h2',item.name+' / '+names[client]),el('p',value.guide),
-      el('p','이 안내를 여는 것만으로 로그인이나 설치가 실행되지는 않습니다. 원래 도구에서 연결한 뒤 상태를 새로고침하세요. 서비스 인증과 실제 도구 실행은 해당 도구에서 확인합니다.','hint'),
+      el('p','이 화면은 연결 절차만 안내하며 로그인이나 설치를 시작하지 않습니다. 해당 도구에서 연결과 인증을 마친 뒤 상태 새로고침으로 설치 상태를 확인할 수 있습니다. 실제 도구 실행은 해당 도구에서 별도로 확인합니다.','hint'),
       link,button('안내 닫기',()=>{help.hidden=true;origin.focus();}));
     help.hidden=false;help.focus();
   }
@@ -69,14 +69,14 @@
     try{
       const data=await (mutate?api('/toolchain/install','POST',{}):api('/toolchain'));
       render(data);
-      status.textContent=data.installing?'다른 요청에서 설치가 진행 중입니다. 잠시 후 새로고침하세요.':data.errors?.length?'일부 도구를 준비하지 못했습니다. 아래 안내를 확인한 뒤 다시 설치할 수 있습니다.':'설치 상태를 확인했습니다. 실제 작업 실행은 별도 확인이 필요합니다.';
-    }catch(error){status.textContent=error.message+' 상태를 새로고침해 확인하세요.';}
+      status.textContent=data.installing?'다른 요청에서 설치가 진행 중입니다. 설치가 끝난 뒤 상태 새로고침으로 결과를 확인할 수 있습니다.':data.errors?.length?'일부 도구를 준비하지 못했습니다. 아래 안내를 확인한 뒤 다시 설치할 수 있습니다.':'설치 상태를 확인했습니다. 실제 작업 실행은 별도 확인이 필요합니다.';
+    }catch(error){status.textContent=error.message+' 상태 새로고침으로 다시 확인할 수 있습니다.';}
     finally{busy=false;panel.setAttribute('aria-busy','false');install.disabled=refresh.disabled=false;}
   }
   search.oninput=filter.onchange=applyFilter;
-  panel.append(el('p','공통 개발 도구를 양쪽 CLI에 준비합니다. 이미 설치한 버전과 꺼 둔 설정은 유지합니다. 플러그인 신규 설치는 이 컴퓨터의 사용자 범위에 적용됩니다.','hint'),
+  panel.append(el('p','공통 개발 도구를 Codex와 Claude CLI에 준비하며, 이미 설치한 버전과 비활성 상태는 유지합니다. 새 플러그인은 이 컴퓨터의 사용자 범위에 설치됩니다.','hint'),
     accounts,toolbar,status,summary,errors,filters,help,list,empty,
-    el('p','선택 도구는 필요할 때 하나씩 연결하세요. 설치 여부만으로 서비스 로그인이나 실행 성공을 판단하지 않습니다. 등록한 프로젝트마다 적용한 플러그인은 기존 플러그인 화면에서 확인할 수 있습니다.','hint'),
+    el('p','선택 도구는 필요에 따라 개별적으로 연결하며, 서비스 로그인과 실제 실행 여부는 설치 상태와 별도로 확인합니다. 프로젝트별로 적용된 플러그인은 플러그인 화면에 표시됩니다.','hint'),
     button('설치된 전체 플러그인 관리',()=>window.settingsPage.open('plugins')));
   panel.addEventListener('settings-open',()=>load());
   window.settingsPage.register('tools','기본 도구',panel);

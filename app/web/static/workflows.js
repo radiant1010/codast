@@ -26,11 +26,11 @@
     body.replaceChildren();const form=el('form',undefined,'modal-form'),path=el('input',undefined,'form-control'),mode=select(['create','connect'],'create');
     path.value=suggested;path.required=true;path.id='workflow-vault-path';
     mode.options[0].textContent='새 문서함 만들기';mode.options[1].textContent='기존 문서함 연결';
-    const note=el('p','선택한 보관함 아래에 '+project+' 폴더를 만들고 이력(.codast-documents)과 내보내기 위치(exports)를 구분합니다. 폴더 선택 후 연결 버튼을 눌러 저장하세요.','hint');
+    const note=el('p','선택한 보관함 아래에 '+project+' 폴더를 만들고 이력(.codast-documents)과 내보내기 위치(exports)를 구분합니다. 선택한 폴더는 연결 버튼으로 저장하면 적용됩니다.','hint');
     const pick=icon('folder','워크플로 산출물 폴더 선택',()=>safe(async()=>{
       const result=await api('/workspace-folder','POST');if(!result.path)return;
       path.value=result.path;
-      note.textContent='폴더를 선택했습니다. 아직 연결 전입니다. 연결 방법을 확인하고 저장하세요.';
+      note.textContent='폴더를 선택했으며 아직 연결 전입니다. 연결 방법을 확인한 뒤 저장하면 적용됩니다.';
     }));
     const pathField=field('산출물 저장 위치',path),row=el('div',undefined,'field-action-row');path.replaceWith(row);row.append(path,pick);
     form.append(el('h3','이 프로젝트의 산출물 저장 위치 연결'),el('p',project+' 프로젝트에는 연결된 문서함이 없습니다. 작업 폴더와 산출물 저장 위치는 따로 관리합니다.','hint'),pathField,field('연결 방법',mode),note);
@@ -43,13 +43,13 @@
   async function listing(){
     clearTimeout(timer);current=null;const rows=await api(endpoint()+'?connection_id='+binding.connection_id);body.replaceChildren();
     const tools=el('div',undefined,'workflow-actions');tools.append(el('h3','보관된 워크플로'),icon('plus','새 워크플로',()=>safe(setup)),icon('route','새 병렬 설계와 테스트 정의',()=>safe(parallelSetup)));body.append(tools);
-    if(!rows.length)body.append(el('p','자료와 단계별 담당을 정해 첫 작업을 준비하세요.','hint'));
+    if(!rows.length)body.append(el('p','입력 자료와 단계별 담당 에이전트를 정하면 첫 작업을 준비할 수 있습니다.','hint'));
     for(const row of rows)body.append(button(row.title+' — '+label(row.status),()=>safe(()=>load(row.id))));
   }
   function label(value){return {ready:'실행 준비',running:'실행 중 / 종료 확인 필요',review:'결과 검토',question:'질문 답변 필요',failed:'실행 실패',cancelled:'실행 취소',partial:'작업별 확인 필요',approved:'결과 승인',done:'모든 단계 승인 완료'}[value]||value;}
   function storageNotice(container,s,attempt){
     if(attempt.storage_status==='failed')container.append(el('p','결과 보관 실패: '+attempt.storage_error,'workflow-storage-error'),el('p','실행 기록의 결과를 표시합니다. 다시 보관은 AI를 재실행하지 않습니다. 보관 후 승인할 수 있습니다.','hint'));
-    else if(attempt.storage_status==='missing')container.append(el('p','실행 기록이 없습니다. 복구할 결과를 찾을 수 없어 자동 재실행하지 않았습니다. 중단 기록을 보관하거나 필요한 작업만 새로 실행하세요. 새 실행은 AI를 호출합니다.','workflow-storage-error'));
+    else if(attempt.storage_status==='missing')container.append(el('p','실행 기록에서 복구할 결과를 찾지 못해 자동으로 재실행하지 않았습니다. 중단 기록을 보관하거나 필요한 작업을 새로 실행할 수 있으며, 새 실행은 AI를 호출합니다.','workflow-storage-error'));
     else if(attempt.storage_status==='saved')container.append(el('p','문서함 보관 완료','hint'));
   }
   function openResult(s,index,version){
@@ -97,7 +97,7 @@
     }
     addStep({title:'화면과 요구사항 연결',client:'codex',instruction:'제공한 화면 자료와 요구사항을 연결하라. 화면 ID, 요구사항 ID, 근거와 확인할 사항을 표로 제출하라. 구현과 테스트 실행은 하지 마라.'});
     addStep({title:'테스트 케이스 도출',client:'claude',instruction:'앞 단계의 승인된 결과와 기존 테스트를 검토하라. 정상, 오류, 경계 조건의 테스트 ID, 요구사항 ID, 절차, 기대 결과, 기존, 신규 구분을 제출하라. 실제 테스트 실행은 하지 마라.'});
-    form.append(steps,icon('plus','단계 추가',()=>addStep()),el('p','기본은 읽기 전용입니다. 구현, 테스트 단계는 작업 폴더 수정을 허용하도록 선택하세요. 결과를 승인해도 다음 AI는 자동 실행되지 않습니다.','hint'));
+    form.append(steps,icon('plus','단계 추가',()=>addStep()),el('p','실행 권한의 기본값은 읽기 전용이며, 작업 폴더 수정이 필요한 구현이나 테스트 단계에서는 수정 권한을 선택할 수 있습니다. 결과를 승인해도 다음 AI는 자동으로 실행되지 않습니다.','hint'));
     const footer=el('div',undefined,'workflow-actions'),save=icon('save','워크플로 저장',()=>form.requestSubmit());footer.append(el('span','순서를 저장하고 첫 지시 확인'),save,icon('back','워크플로 목록',()=>safe(listing)));form.append(footer);body.append(form);
     form.onsubmit=e=>{e.preventDefault();safe(async()=>{const result=await api(endpoint(),'POST',{connection_id:binding.connection_id,request_id:creationId,title:title.value,materials:chosen,steps:drafts.map(d=>({title:d.name.value,client:d.client.value,mode:d.mode.value,model:d.model.value.trim()||null,instruction:d.instruction.value}))});current=result;render();});};
   }
@@ -138,7 +138,7 @@
     if(s.status==='failed'&&!parallelDrafts.has(draftKey))comment.value=step.attempts.at(-1)?.comment||'';
     if(s.status==='question'){
       const question=step.attempts.at(-1)?.metadata?.question;
-      if(question){const choices=el('div',undefined,'workflow-actions');form.append(el('p',question.question));for(const choice of question.choices||[])choices.append(button(choice,()=>{comment.value=choice;parallelDrafts.set(draftKey,choice);comment.focus();}));form.append(choices,el('p','선택한 답변을 수정하거나 직접 입력한 후 다시 실행하세요.','hint'));}
+      if(question){const choices=el('div',undefined,'workflow-actions');form.append(el('p',question.question));for(const choice of question.choices||[])choices.append(button(choice,()=>{comment.value=choice;parallelDrafts.set(draftKey,choice);comment.focus();}));form.append(choices,el('p','선택한 답변을 수정하거나 직접 입력한 뒤 작업을 다시 실행할 수 있습니다.','hint'));}
     }
     const preview=el('details'),pre=el('pre');preview.append(el('summary','다음 실행에 포함할 자료'),pre);pre.textContent=s.materials.map(m=>m.role+': '+m.id).concat(s.steps.slice(0,s.current).map(p=>p.title+' ,  승인 v'+p.approved)).join('\n')||'작업 지시만 전달합니다.';form.append(preview);
     const actions=el('div',undefined,'workflow-actions'),send=icon('send',s.status==='ready'?'현재 단계 실행':'의견을 반영해 다시 실행',()=>form.requestSubmit());send.disabled=step.attempts.at(-1)?.storage_status==='failed';actions.append(send);
@@ -166,9 +166,9 @@
     }
     for(const [i,source] of sources.entries()){const option=el('option',source.label);option.value=String(i);choice.append(option);}
     choice.onchange=()=>{preview.textContent=sources[Number(choice.value)]?.content||'';};choice.onchange();
-    form.append(field('작업 이름',title),field('공통 승인 입력',choice),el('p','같은 승인 버전으로 Codex 두 세션이 설계 작성과 요구사항 기반 테스트케이스 정의를 동시에 수행합니다. 테스트케이스는 설계 결과를 기다리지 않으며 설계 결정이 필요한 조건을 미확정으로 표시합니다.','hint'),preview,el('p','읽기 전용으로 실행합니다. OS 수준의 완전한 격리 보장은 아닙니다. 저장 후 입력을 확인하고 실행하세요.','hint'));
+    form.append(field('작업 이름',title),field('공통 승인 입력',choice),el('p','같은 승인 버전으로 Codex 두 세션이 설계 작성과 요구사항 기반 테스트케이스 정의를 동시에 수행합니다. 테스트케이스는 설계 결과를 기다리지 않으며 설계 결정이 필요한 조건을 미확정으로 표시합니다.','hint'),preview,el('p','저장한 입력을 확인한 뒤 읽기 전용으로 실행할 수 있습니다. 읽기 전용 권한은 OS 수준의 완전한 격리를 보장하지 않습니다.','hint'));
     const save=icon('save','병렬 작업 저장',()=>form.requestSubmit());save.disabled=!sources.length;
-    if(!sources.length)form.append(el('p','문서함에서 요구사항 또는 분석 결과를 검토, 승인하거나 순차 워크플로 결과를 먼저 승인하세요.','hint'));
+    if(!sources.length)form.append(el('p','작업에 사용할 승인 입력이 필요합니다. 문서함에서 검토와 승인을 마친 요구사항, 분석 결과 또는 승인된 순차 워크플로 결과를 선택할 수 있습니다.','hint'));
     form.append(save,icon('back','워크플로 목록',()=>safe(listing)));body.append(form);
     form.onsubmit=e=>{e.preventDefault();safe(async()=>{const source=sources[Number(choice.value)];if(!source)throw Error('승인 입력을 선택하세요.');current=await api(endpoint()+'/parallel','POST',{connection_id:binding.connection_id,request_id:creationId,title:title.value,source:source.ref});render();});};
   }
@@ -177,7 +177,7 @@
   }
   function renderParallel(){
     clearTimeout(timer);body.replaceChildren();const s=current,tools=el('div',undefined,'workflow-actions');tools.append(el('h3',s.title),icon('back','워크플로 목록',()=>safe(listing)),icon('restore','워크플로 새로고침',()=>safe(()=>load(s.id))));body.append(tools,el('p',label(s.status),'hint'));
-    const input=el('details');input.append(el('summary','공통 승인 입력: '+s.source.title+' / v'+s.source.version),el('p',s.source.identity+' / SHA-256 '+s.source.sha256,'hint'),consoleOutput(s.source.content));body.append(input,el('p',s.fixed_at?'시작 시 고정한 입력을 유지합니다. 원본이 변경돼도 재실행 입력을 자동 교체하지 않습니다.':'저장 후 원본이 변경되면 시작을 거절합니다. 입력을 다시 선택해 새 작업을 만드세요.','hint'));
+    const input=el('details');input.append(el('summary','공통 승인 입력: '+s.source.title+' / v'+s.source.version),el('p',s.source.identity+' / SHA-256 '+s.source.sha256,'hint'),consoleOutput(s.source.content));body.append(input,el('p',s.fixed_at?'시작 시 고정한 입력을 유지합니다. 원본이 변경돼도 재실행 입력을 자동 교체하지 않습니다.':'저장 후 원본이 변경되면 실행을 시작하지 않습니다. 변경된 입력으로 실행하려면 입력을 다시 선택해 새 작업을 만들어야 합니다.','hint'));
     if(!s.fixed_at)body.append(icon('send','두 Codex 작업 동시 실행',()=>safe(()=>parallelAction(s,'start',null))));
     for(const [i,step] of s.steps.entries()){
       const card=el('section',undefined,'workflow-step modal-form');card.dataset.role=String(i);const stateLabel=el('p','● '+label(step.status),'parallel-state');stateLabel.dataset.state=step.status;card.append(el('h3',step.title),stateLabel);
