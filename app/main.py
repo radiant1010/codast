@@ -27,6 +27,7 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     @asynccontextmanager
     async def lifespan(app):
         yield
+        await app.state.client_login.close()
         await app.state.harness.shutdown()
         app.state.session_metrics.close()
         app.state.session_search.close()
@@ -40,6 +41,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.folder_picker = FolderPicker()
     app.state.codex_status = CodexStatus()
     app.state.claude_status = ClaudeStatus()
+    from app.core.client_login import ClientLogin
+    app.state.client_login = ClientLogin({'codex': app.state.codex_status, 'claude': app.state.claude_status})
     app.state.session_metrics = SessionMetrics()
     from app.core.session_search import SessionSearch
     app.state.session_search = SessionSearch(storage)

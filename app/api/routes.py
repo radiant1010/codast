@@ -89,8 +89,14 @@ def attach_codex_thread(name: str, identity: str, body: TaskUpdate, request: Req
 
 
 @router.get('/clients/codex/status')
-def codex_status(request: Request):
-    return request.app.state.codex_status.read(service(request).storage.client_path('codex'))
+def codex_status(request: Request, project: str | None = None, cwd: str = '.'):
+    s = service(request)
+    if project:
+        path = s.policy.file_path(s.projects.select(project), cwd)
+        if not path.is_dir():
+            raise FileNotFoundError('작업 폴더를 찾을 수 없습니다.')
+        return request.app.state.codex_status.read(s.storage.client_path('codex'), cwd=str(path))
+    return request.app.state.codex_status.read(s.storage.client_path('codex'))
 
 
 @router.get('/clients/claude/status')
@@ -102,7 +108,15 @@ def claude_status(request: Request):
 async def clients(request: Request):
     import asyncio
     s = service(request)
-    return {'clients': await asyncio.gather(*(probe(client, s.storage.client_path(client)) for client in ('codex','claude')))}
+    rows = await asyncio.gather(*(probe(client, s.storage.client_path(client)) for client in ('codex','claude')))
+    return {'clients': [{**row, 'login': request.app.state.client_login.view(row['client'])} for row in rows]}
+
+
+@router.post('/clients/{client}/login')
+async def login_client(client: str, request: Request):
+    if client not in ('codex', 'claude'):
+        raise ValueError('지원하지 않는 클라이언트입니다.')
+    return request.app.state.client_login.start(client, service(request).storage.client_path(client))
 
 
 @router.get('/clients/claude/options')

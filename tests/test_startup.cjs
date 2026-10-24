@@ -30,7 +30,7 @@ test('background connection checks never interrupt with an automatic modal',asyn
 
 test('startup blocks interaction until ready and offers retry after failure',async()=>{
   const nodes={};const $=id=>nodes[id]??={hidden:false,inert:false,textContent:'',classList:{add(){},remove(){}},setAttribute(k,v){this[k]=v;},focus(){}};
-  const context={$};vm.createContext(context);vm.runInContext(source,context);
+  const context={$,window:{}};vm.createContext(context);vm.runInContext(source,context);
   let release;context.initializeWorkspace=()=>new Promise(done=>release=done);
   const pending=context.startWorkspace();assert.equal($('workspace').inert,true);assert.equal($('startup-loading').hidden,false);
   release();await pending;assert.equal($('workspace').inert,false);assert.equal($('startup-loading').hidden,true);
@@ -46,6 +46,16 @@ test('saved local project does not depend on onboarding availability',async()=>{
     window:{chatState:{lastProject:()=> 'saved'}},api:()=>{throw Error('onboarding must not be requested');}};
   vm.createContext(context);vm.runInContext(source,context);
   await context.initializeWorkspace();assert.equal(loaded,1);
+});
+
+test('every workspace startup checks both logins in the background without blocking restoration',async()=>{
+  const nodes={};const $=id=>nodes[id]??={hidden:false,inert:false,classList:{remove(){}},setAttribute(){}};
+  let checks=0;
+  const context={$,window:{clientAuth:{check:()=>{checks++;return new Promise(()=>{});}}}};
+  vm.createContext(context);vm.runInContext(source,context);
+  context.initializeWorkspace=async()=>{};
+  await context.startWorkspace();
+  assert.equal(checks,1);assert.equal($('workspace').inert,false);assert.equal($('startup-loading').hidden,true);
 });
 
 test('slow connection check leaves workspace usable and ignores a later project selection',async()=>{

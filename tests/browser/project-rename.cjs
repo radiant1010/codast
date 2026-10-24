@@ -47,7 +47,6 @@ const {chromium}=require('playwright');
     assert.equal(await page.locator('#project option:checked').innerText(),'수정한프로젝트');
     assert.equal(await page.locator('#project').inputValue(),'one');assert.equal(await page.locator('#text').inputValue(),'작성 중인 초안 유지');
     assert.deepEqual(await page.evaluate(()=>({key:window.chatState.identity('one',filter),epoch,path:document.querySelector('#workspace-root').value})),before);
-    await page.locator('#workspace-status > summary').click();
     await page.locator('.environment-project').filter({hasText:'수정한프로젝트'}).waitFor();
     assert.match(await page.locator('#session-alerts').textContent(),/수정한프로젝트/);
     await page.reload();await page.waitForFunction(()=>projectReady&&!chatLoading);

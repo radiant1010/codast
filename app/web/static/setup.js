@@ -19,6 +19,7 @@
   const pathField=el('div',undefined,'form-field');pathField.append(pathLabel,pathRow);
   const autoFind=icon('restore','CLI 자동 검색',async()=>{path.value='';draftPaths[client.value]='';await api('/clients/'+client.value,'PUT',{path:''});await inspect();});
   const controls=el('div',undefined,'client-path-row');controls.append(autoFind,icon('plug','경로 저장 및 연결 확인',async()=>{await api('/clients/'+client.value,'PUT',{path:path.value.trim()});await inspect();}));
+  const login=button('로그인',()=>window.clientAuth.start(client.value));login.hidden=true;controls.prepend(login);
   const finishRow=el('div',undefined,'client-path-row');finishRow.append(icon('check','선택한 프로젝트에서 시작',finish));
   const projectRow=el('div',undefined,'client-path-row');project.style.flex='1';project.style.minWidth='0';
   projectRow.append(project,icon('folder','프로젝트 등록 열기',async()=>{await api('/onboarding','PUT',selection());dialog.close();$('add-workspace').click();}));
@@ -42,12 +43,13 @@
     await api('/onboarding','PUT',selection());
     state=await api('/onboarding/check','POST');
     observations[client.value]=state.connection;renderTabs();const ok=state.status==='completed';projectStep.hidden=state.connection?.auth!=='ready';status.style.color=ok?'#9bd4b9':'#e5bf72';
+    login.hidden=state.connection?.state!=='installed'||state.connection?.auth!=='check_required';
     status.textContent='● '+(ok?'로그인을 확인했습니다. 이제 시작할 수 있습니다.':{project:'에이전트를 연결했습니다. 아래에서 프로젝트를 만들거나 선택하세요.',client:state.connection?.detail||'CLI를 자동으로 찾지 못했습니다. 파일 선택 또는 자동 검색을 이용하세요.',authentication:'CLI 로그인이 필요하거나 인증을 확인할 수 없습니다.'}[state.step]);
     if(state.connection?.path){path.value=state.connection.path;draftPaths[client.value]=path.value;}
     if(state.step==='authentication'){
       const data=await api('/clients/'+client.value+'/login-instructions');
       const quote=value=>"'"+value.replaceAll("'","''")+"'";
-      commands.textContent='PowerShell에서 실행:\n& '+data.argv.map(quote).join(' ')+'\n\n브라우저에서 인증을 마친 뒤 연결 확인 아이콘을 다시 누르세요.';
+      commands.textContent='로그인 버튼을 누르면 CLI 로그인 창과 브라우저가 열립니다. 인증이 끝나면 자동으로 확인합니다.\n\n직접 실행하려면 PowerShell에서:\n& '+data.argv.map(quote).join(' ');
     }
   }
   async function finish(){
@@ -56,15 +58,25 @@
     await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:client.value,mode:$('mode').value,model:null});
     actionHint();dialog.close();notice('연결 설정 완료. 모델과 채팅을 선택해 첫 요청을 보내세요.');
   }
-  async function open(){
+  async function open(selectedClient=null){
     if(!dialog.open)dialog.showModal();status.textContent='● 설치 경로와 로그인 상태를 자동으로 확인 중…';
     await runConnection(async()=>{const [saved,list,connections]=await Promise.all([api('/onboarding'),api('/projects'),api('/clients')]);state=saved;
     project.replaceChildren(new Option('프로젝트 선택',''));for(const name of list.projects)project.add(new Option(list.names?.[name]||name,name));
-    project.value=saved.project||$('project').value||'';client.value=saved.client||'codex';
+    project.value=saved.project||$('project').value||'';client.value=selectedClient||saved.client||'codex';
     for(const row of connections.clients){observations[row.client]=row;draftPaths[row.client]=row.path||'';}renderTabs();path.value=draftPaths[client.value]||'';status.textContent='선택 후 연결 확인 아이콘을 누르세요.';commands.textContent='';
     projectStep.hidden=true;await inspect();});
   }
   window.openConnections=open;
+  window.refreshConnectionsAuth=rows=>{
+    const previous=observations[client.value]?.auth;
+    for(const row of rows)observations[row.client]=row;
+    renderTabs();const row=observations[client.value];
+    if(!dialog.open||!row)return;
+    login.hidden=row.state!=='installed'||row.auth!=='check_required';
+    login.disabled=['checking','waiting','verifying'].includes(row.login?.state);
+    if(row.login?.message){status.textContent=row.login.message;status.style.color=row.auth==='ready'?'#9bd4b9':'#e5bf72';}
+    if(row.auth==='ready'&&previous!=='ready'&&!connecting)void runConnection(inspect);
+  };
   client.onchange=()=>act(async()=>{const chosen=client.value;projectStep.hidden=true;path.value='';status.textContent='선택한 에이전트의 연결을 다시 확인하세요.';commands.textContent='';const data=await api('/clients');if(client.value===chosen)path.value=data.clients.find(c=>c.client===chosen)?.path||'';});
   window.refreshSetup=()=>{const chosen=!!$('project').value;$('welcome').hidden=chosen;$('messages').hidden=!chosen;$('composer').hidden=!chosen||!filter;$('messages-prev').closest('.pagination').hidden=!chosen||!filter;for(const id of ['delete-project','rename-project','manage-project-name'])$(id).disabled=!chosen;};
   window.setupSettingsSaved=()=>{};window.setupRequestSent=()=>{};

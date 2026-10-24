@@ -18,7 +18,7 @@ function screen(api){
     change(value){this.value=value;return this.listeners.change?.();}
     toggle(checked){this.checked=checked;return this.listeners.change?.();}
   }
-  for(const id of ['client','text','execution-menu','model-picker','execution-summary']){const n=new Element();n.id=id;}
+  for(const id of ['client','text','execution-menu','model-picker','execution-summary','project','cwd','task-name','fresh']){const n=new Element();n.id=id;}
   nodes.client.value='codex';
   const context={window:{chatState:{save(){}}},document:{addEventListener(){}},$:id=>nodes[id],
     el:(tag,text)=>new Element(tag,text),Option:class{constructor(text,value){this.textContent=text;this.value=value;this.disabled=false;}},
@@ -26,6 +26,74 @@ function screen(api){
   vm.runInNewContext(source,context);return {nodes,settings:context.window};
 }
 const row=(model,efforts,extra={})=>({model,displayName:model,supportedReasoningEfforts:efforts.map(reasoningEffort=>({reasoningEffort})),...extra});
+
+test('resolved default is named without changing the inherited execution setting',async()=>{
+  let request;
+  const ui=screen(async path=>{request=path;return {default_model:'configured-model',models:[row('catalog-model',['high'],{isDefault:true})]};});
+  ui.nodes.project.value='한글 프로젝트';ui.nodes.cwd.value='sub folder';
+  await ui.settings.loadModelChoices();
+  assert.match(request,/project=%ED%95%9C%EA%B8%80%20%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8&cwd=sub%20folder/);
+  assert.equal(ui.nodes['execution-summary'].textContent,'Codex / configured-model (기본)');
+  assert.equal(ui.settings.selectedConfiguredModel(),null);
+  assert.equal(ui.settings.selectedExecutionModel(),null);
+  assert.equal(ui.nodes['execution-model'].value,'');
+});
+
+test('recent measured model is scoped to the current chat and never overrides an explicit choice',async()=>{
+  const ui=screen(async()=>({models:[row('explicit-model',[])]}));
+  ui.nodes.client.value='claude';ui.nodes.project.value='one';ui.nodes['task-name'].value='chat';
+  await ui.settings.loadModelChoices();
+  ui.settings.updateExecutionModels([
+    {project:'other',task:'chat',client:'claude',execution_model:'wrong-project'},
+    {project:'one',task:'other',client:'claude',execution_model:'wrong-chat'},
+    {project:'one',task:'chat',client:'codex',execution_model:'wrong-agent'},
+    {project:'one',task:'chat',client:'claude',execution_model:'measured-model'}]);
+  assert.equal(ui.nodes['execution-summary'].textContent,'Claude / measured-model (최근 실행)');
+  assert.equal(ui.settings.selectedExecutionModel(),null);
+  ui.nodes['execution-model'].change('explicit-model');
+  ui.settings.updateExecutionModels([]);
+  assert.equal(ui.nodes['execution-summary'].textContent,'Claude / explicit-model');
+  await ui.settings.loadModelChoices();
+  assert.match(ui.nodes['execution-summary'].textContent,/모델 확인 필요/);
+  assert.match(ui.nodes['execution-hint'].textContent,/모델을 선택/);
+});
+
+test('failed lookup and new conversations do not invent a default model',async()=>{
+  const ui=screen(async()=>{throw Error('offline');});
+  ui.nodes.project.value='one';ui.nodes['task-name'].value='chat';ui.nodes.fresh.checked=true;
+  await ui.settings.loadModelChoices();
+  ui.settings.updateExecutionModels([{project:'one',task:'chat',client:'codex',execution_model:'old-model'}]);
+  assert.equal(ui.nodes['execution-summary'].textContent,'Codex / 모델 확인 필요');
+  assert.equal(ui.nodes['execution-model'].disabled,false);
+  assert.equal(ui.settings.selectedExecutionModel(),null);
+});
+
+test('inherited model exposes ordered effort grades and shows the effective default without changing it',async()=>{
+  const ui=screen(async()=>({default_model:'strong',models:[row('strong',['ultra','high','xhigh','low'],{effectiveReasoningEffort:'xhigh'})]}));
+  await ui.settings.loadModelChoices();
+  const effort=ui.nodes['reasoning-effort'];
+  assert.equal(effort.selectedOptions[0].textContent,'추론: 매우 높음 (기본)');
+  assert.deepEqual(Array.from(effort.options,option=>option.value),['','none','minimal','low','medium','high','xhigh','max','ultra']);
+  assert.equal(effort.options.find(option=>option.value==='medium').disabled,true);
+  assert.equal(effort.options.find(option=>option.value==='ultra').disabled,false);
+  assert.equal(ui.settings.selectedReasoningSettings().reasoning_effort,null);
+  effort.change('high');
+  assert.equal(ui.settings.selectedReasoningSettings(true).reasoning_effort,'high');
+  assert.doesNotThrow(ui.settings.validateExecutionSettings);
+});
+
+test('Claude grades keep provider limits and do not guess a default effort',async()=>{
+  const ui=screen(async()=>({version:'2.1.284',ultracode:true,models:[row('claude-model',['low','medium','high','xhigh','max'])]}));
+  ui.nodes.client.value='claude';await ui.settings.loadModelChoices('claude-model','max');
+  const effort=ui.nodes['reasoning-effort'];
+  assert.deepEqual(Array.from(effort.options,option=>option.value),['','low','medium','high','xhigh','max']);
+  assert.equal(effort.selectedOptions[0].textContent,'추론: 최대');
+  assert.equal(effort.options[0].textContent,'추론: 자동 (미확인)');
+  assert.equal(ui.settings.selectedReasoningSettings(true).reasoning_effort,'max');
+  await ui.settings.loadModelChoices();
+  assert.ok(effort.options.slice(1).every(option=>option.disabled));
+  assert.match(effort.title,/모델/);
+});
 
 test('model switch removes unsupported effort and cross-provider commands do not inherit settings',async()=>{
   const ui=screen(async()=>({models:[row('strong',['high','ultra']),row('small',['low','high'])]}));

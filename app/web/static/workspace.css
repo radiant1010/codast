@@ -35,6 +35,9 @@ html,body{height:100%;overflow:hidden}
 .workspace-fold #page-number{font-size:12px;white-space:nowrap}
 .workspace-fold #status{flex:none;min-height:0;max-height:72px;overflow:auto;padding:4px 24px;font-size:13px;line-height:1.6;word-break:keep-all;overflow-wrap:anywhere;margin:0}
 .workspace-fold #status:empty{display:none}
+#status-toast{position:fixed;inset:16px 16px auto auto;z-index:1200;width:max-content;max-width:min(480px,calc(100vw - 32px));padding:12px 16px;border:1px solid var(--terminal-border);border-radius:6px;background:var(--bs-body-bg);color:var(--bs-body-color);font-size:14px;line-height:1.6;word-break:keep-all;overflow-wrap:anywhere;pointer-events:none}
+#status-toast:empty{padding:0;border:0}
+.settings-page>#status:empty{display:none}
 .workspace-fold .conversation-pane{flex:1;min-width:0;min-height:0;overflow:hidden}
 .workspace-fold #messages{padding:20px 24px 20px 36px;min-height:0;scrollbar-width:thin}
 .workspace-fold #messages,.workspace-fold #task-list,.workspace-status-body{overscroll-behavior:contain}
@@ -56,14 +59,23 @@ html,body{height:100%;overflow:hidden}
 .workspace-status[open]>summary::after{transform:rotate(225deg);margin-top:4px}
 .workspace-status strong{font-weight:500;color:var(--bs-body-color)}
 .workspace-status .status-label{margin-left:auto;color:var(--terminal-accent)}
-.workspace-status-body{max-height:200px;overflow:auto;background:#1e2126}
-.workspace-fold .session-dashboard{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr);height:auto;gap:20px;padding:16px 24px;border:0;background:transparent}
-.workspace-fold .session-dashboard>section{display:flex;flex-direction:column;min-width:0;min-height:0;height:150px;max-height:none;padding:0;border:0;background:transparent;grid-column:auto}
+.workspace-status-body{max-height:none;overflow:visible;background:#1e2126}
+.client-auth-notice{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 24px;border-bottom:1px solid var(--terminal-border);font-size:13px}
+.client-auth-notice[hidden]{display:none}
+.client-auth-notice>.hint{flex-basis:100%;margin:0}
+.client-auth-list{flex:1;min-width:0}
+.client-auth-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.client-auth-row+.client-auth-row{margin-top:6px}
+.client-auth-row>span{flex:1;min-width:160px;word-break:keep-all;overflow-wrap:anywhere}
+.client-auth-notice button{min-height:32px;padding:4px 10px;font-size:13px;flex:none}
+.workspace-fold .session-dashboard{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto;align-items:start;height:auto;gap:20px;padding:16px 24px;border:0;background:transparent}
+.workspace-fold .session-dashboard>section{display:flex;flex-direction:column;min-width:0;min-height:0;height:auto;max-height:200px;padding:0;border:0;background:transparent;grid-column:auto}
 .workspace-fold .session-dashboard .dashboard-body{flex:1;min-height:0;overflow:auto}
 .workspace-fold .session-dashboard .dashboard-table,.workspace-fold .compact-session-table{font-size:12px;line-height:1.7;white-space:normal}
 .workspace-fold .session-dashboard :is(td,th){padding:6px 4px}
-.workspace-fold .environment-project{max-width:100%;font-size:12px}
+.workspace-fold .environment-project{max-width:40%;font-size:12px}
 .workspace-fold #native-session{padding:8px 24px;font-size:12px}
+.workspace-fold #native-session:empty{display:none}
 .workspace-fold.console-expanded .workspace-status{display:none}
 .workspace-fold :focus-visible{outline:2px solid var(--terminal-accent);outline-offset:2px}
 .workspace-fold #close-sidebar{margin-left:auto;font-size:13px}
@@ -71,6 +83,13 @@ html,body{height:100%;overflow:hidden}
 .workspace-fold #sidebar[popover]:popover-open{display:flex;position:fixed;inset:0 auto 0 0;margin:0;width:min(300px,calc(100vw - 48px));min-width:0;max-width:none;height:100dvh;max-height:100dvh;padding:0;border:0;border-right:1px solid var(--terminal-border);color:var(--bs-body-color);overflow:hidden}
 .workspace-fold #sidebar::backdrop{background:#080b1066}
 @media(max-width:1100px){.workspace-fold #sidebar{width:240px}.workspace-fold .session-dashboard{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.workspace-fold .session-dashboard>section:first-child{grid-column:1/-1}}
+/* When panels stack or the window is short, only their shared container scrolls. */
+@media(max-width:1100px),(max-height:700px){
+ .workspace-status-body{max-height:200px;overflow:auto}
+ .workspace-fold .session-dashboard{overflow:visible}
+ .workspace-fold .session-dashboard>section{max-height:none;overflow:visible}
+ .workspace-fold .session-dashboard .dashboard-body,.workspace-fold .session-alerts{max-height:none;overflow:visible}
+}
 @media(max-width:900px){
  .workspace-fold #console>header{min-height:56px;padding:10px 14px;gap:8px}
  #workspace.workspace-fold #toggle-sidebar{position:static;flex:none;width:36px;height:36px;z-index:auto}

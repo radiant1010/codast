@@ -14,6 +14,7 @@ async function initializeWorkspace(){
 }
 
 async function checkInitialConnection(){
+  if(window.clientAuth)return window.clientAuth.check();
   notice('에이전트 연결을 확인하고 있습니다. 기다리는 동안 프로젝트를 선택하거나 등록할 수 있습니다.');
   let connections;
   try{connections=await api('/clients');}
@@ -31,7 +32,7 @@ async function startWorkspace(){
   const overlay=$('startup-loading'),workspace=$('workspace'),retry=$('startup-retry');
   overlay.hidden=false;workspace.inert=true;workspace.setAttribute('aria-busy','true');
   retry.hidden=true;overlay.classList.remove('failed');$('startup-message').textContent='작업실을 불러오는 중…';
-  try{const afterReady=await initializeWorkspace();overlay.hidden=true;workspace.inert=false;workspace.setAttribute('aria-busy','false');if(afterReady)void afterReady();}
+  try{const afterReady=await initializeWorkspace();overlay.hidden=true;workspace.inert=false;workspace.setAttribute('aria-busy','false');void window.clientAuth?.check();if(afterReady)void afterReady();}
   catch(error){overlay.classList.add('failed');$('startup-message').textContent='작업실을 불러오지 못했습니다. '+error.message;retry.hidden=false;retry.focus();}
 }
 $('startup-retry').onclick=()=>startWorkspace();

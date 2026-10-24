@@ -14,7 +14,7 @@ function screen(snapshot){
     set textContent(value){this.text=value;this.children=[];}
   }
   const nodes=new Map(),sessionRows=new Node();
-  const context={snapshot,sessionRows,usageList:new Node(),envProject:new Node(),filter:'',
+  const context={window:{},snapshot,sessionRows,usageList:new Node(),envProject:new Node(),filter:'',
     $:id=>{if(!nodes.has(id))nodes.set(id,new Node());const n=nodes.get(id);n.value='one';return n;},
     el:(tag,text)=>new Node(text),button:text=>new Node(text),openChat:()=>{},projectLabel:name=>name};
   vm.createContext(context);

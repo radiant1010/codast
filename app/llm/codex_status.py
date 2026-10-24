@@ -8,11 +8,27 @@ import time
 from datetime import datetime, timezone
 
 from app.llm.cli import executable, ProcessRunner
+from app.llm.session_metrics import model_name
 
 
-def query_status(path):
-    models, limits = query_readonly(path, [('model/list', {'limit': 100}), ('account/rateLimits/read', {})])
-    return normalize(models, limits)
+def query_status(path, cwd=None):
+    params = {'includeLayers': False}
+    if cwd:
+        params['cwd'] = cwd
+    models, limits, config = query_readonly(path, [
+        ('model/list', {'limit': 100}), ('account/rateLimits/read', {}), ('config/read', params)])
+    result = normalize(models, limits)
+    result['default_model'] = None
+    if isinstance(config.get('result', {}).get('config'), dict):
+        result['default_model'] = model_name(config['result']['config'].get('model'))
+        if not config['result']['config'].get('model'):
+            result['default_model'] = next((model_name(row['model']) for row in result['models'] if row['isDefault']), None)
+        configured_effort = config['result']['config'].get('model_reasoning_effort')
+        for row in result['models']:
+            effort = configured_effort if configured_effort is not None else row['defaultReasoningEffort']
+            if effort and any(option['reasoningEffort'] == effort for option in row['supportedReasoningEfforts']):
+                row['effectiveReasoningEffort'] = effort
+    return result
 
 
 class ResponseLimitError(ValueError):
@@ -20,7 +36,7 @@ class ResponseLimitError(ValueError):
 
 
 def query_readonly(path, requests, *, max_response_bytes=16 * 1024 * 1024):
-    if any(method not in {'model/list', 'account/rateLimits/read', 'thread/list', 'thread/read'} for method, _ in requests):
+    if any(method not in {'model/list', 'account/rateLimits/read', 'thread/list', 'thread/read', 'config/read'} for method, _ in requests):
         raise ValueError('읽기 전용 조회만 허용합니다.')
     flags = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
     process = subprocess.Popen([path, 'app-server', '--stdio'], stdin=subprocess.PIPE,
@@ -117,21 +133,22 @@ class CodexStatus:
         self.key = None
         self.expires = 0
 
-    def read(self, configured=''):
+    def read(self, configured='', cwd=None):
+        key = (configured, cwd)
         with self.lock:
-            if self.cached is not None and self.key == configured and time.monotonic() < self.expires:
+            if self.cached is not None and self.key == key and time.monotonic() < self.expires:
                 return self.cached
             result = {'client': 'codex', 'source': 'codex app-server', 'scope': 'account',
                       'models': [], 'limits': [], 'models_state': 'unavailable', 'limits_state': 'unavailable',
                       'execution_model_state': 'not_collected', 'context_state': 'not_collected'}
             try:
                 path = executable('codex', configured)
-                result.update(self.query(path))
+                result.update(self.query(path, cwd=cwd) if cwd else self.query(path))
                 result['state'] = 'available' if result['models_state'] == result['limits_state'] == 'available' else 'partial'
             except FileNotFoundError:
                 result['state'] = 'not_installed'
             except (OSError, ValueError, TimeoutError, queue.Empty, subprocess.SubprocessError):
                 result['state'] = 'error'
             result['checked_at'] = datetime.now(timezone.utc).isoformat()
-            self.cached, self.key, self.expires = result, configured, time.monotonic() + self.ttl
+            self.cached, self.key, self.expires = result, key, time.monotonic() + self.ttl
             return result

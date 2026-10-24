@@ -32,9 +32,28 @@ const {chromium}=require('playwright');
  try{
   await page.goto('http://harness.test/');await page.locator('#startup-loading').waitFor({state:'hidden'});
   assert.equal(await page.locator('#workspace-status').count(),1,'Folded status control must exist');
-  assert.equal(await page.locator('#workspace-status').getAttribute('open'),null);
+  assert.equal(await page.locator('#workspace-status').getAttribute('open'),'');
+  assert.equal(await page.locator('#workspace-status .status-label').innerText(),'접기');
   await page.selectOption('#project',keys[0]);await page.waitForFunction(()=>projectReady&&!chatLoading);
+  assert.match(await page.locator('#status-toast').innerText(),/작성 상태를 복원/);
+  assert.equal(await page.locator('#status').isVisible(),false);
+  assert.equal(await page.locator('#native-session').isVisible(),false);
+  await page.clock.install();
+  await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+  await page.locator('#status-toast').waitFor({state:'visible'});
+  fs.mkdirSync('docs/internal/screenshots',{recursive:true});
+  for(const width of [1200,640]){
+   await page.setViewportSize({width,height:900});
+   const box=await page.locator('#status-toast').boundingBox();
+   assert.ok(box.x>=0&&box.x+box.width<=width);
+   assert.notEqual(await page.locator('#status-toast').evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+   await page.screenshot({path:`docs/internal/screenshots/restore-toast-${width}.png`});
+  }
+  await page.setViewportSize({width:1200,height:900});
+  await page.clock.runFor(4001);await page.locator('#status-toast').waitFor({state:'hidden'});
+  await page.screenshot({path:'docs/internal/screenshots/restore-toast-dismissed.png'});
   await page.locator('#task-list .task').first().click();await page.waitForFunction(()=>!chatLoading&&!!filter);
+  assert.equal(await page.locator('#status-toast').isVisible(),false,'Chat switching must not repeat restoration notices');
   await page.fill('#text','작성 중인 초안 유지');
   assert.equal(await page.locator('#reasoning-effort option[value=ultra]').isDisabled(),true);
   const check=async()=>{
@@ -44,9 +63,20 @@ const {chromium}=require('playwright');
    });
    assert.equal(m.overflowX,false);assert.equal(m.overflowY,false);assert.equal(m.sendVisible,true);assert.ok(m.messages>=90,JSON.stringify({viewport:page.viewportSize(),...m}));assert.equal(m.footerOverflow,false);
   };
+  await check();await page.locator('#workspace-status > summary').click();
   for(const [width,height] of [[480,700],[640,700],[768,700],[900,700],[901,700],[960,700],[1200,900],[1440,900]]){
    await page.setViewportSize({width,height});await page.locator('#sidebar').waitFor({state:width>900?'visible':'hidden'});
-   await check();await page.locator('#workspace-status > summary').click();await check();await page.keyboard.press('Escape');
+   await check();await page.locator('#workspace-status > summary').click();await check();
+   await page.waitForFunction(()=>document.querySelector('#workspace-status .status-label').textContent==='접기');
+   const statusScroll=await page.evaluate(()=>{
+    const scrolls=n=>n.scrollHeight>n.clientHeight+1&&['auto','scroll'].includes(getComputedStyle(n).overflowY);
+    return {outer:scrolls(document.querySelector('.workspace-status-body')),inner:[...document.querySelectorAll('.session-dashboard,.session-dashboard>section,.dashboard-body')].filter(scrolls).map(n=>n.className)};
+   });
+   assert.deepEqual(statusScroll.inner,[],'Basic status tables must not need their own scrollbar');
+   if(width>=1200)assert.equal(statusScroll.outer,false,'Basic status must fit without an outer scrollbar');
+   assert.ok(await page.locator('.compact-environment h2').evaluate(n=>n.getBoundingClientRect().height<=parseFloat(getComputedStyle(n).lineHeight)+1),'Environment title must stay on one line beside a long project name');
+   if(width===640||width===1200){fs.mkdirSync('docs/internal/screenshots',{recursive:true});await page.screenshot({path:`docs/internal/screenshots/workspace-status-open-${width}.png`});}
+   await page.keyboard.press('Escape');
    assert.equal(await page.locator('#workspace-status').getAttribute('open'),null);
    assert.equal(await page.locator('#text').inputValue(),'작성 중인 초안 유지');
    if(width===640||width===1200){fs.mkdirSync('docs/internal/screenshots',{recursive:true});await page.screenshot({path:`docs/internal/screenshots/workspace-fold-${width}.png`});}
@@ -76,8 +106,11 @@ const {chromium}=require('playwright');
   await page.setViewportSize({width:640,height:700});
   failMessages=true;await page.locator('#toggle-sidebar').click();await page.locator('#task-list .task').nth(1).click();
   await page.locator('#status.error').waitFor({state:'visible'});assert.match(await page.locator('#status').innerText(),/대화.*조회 실패/);await check();
+  await page.clock.runFor(8001);assert.equal(await page.locator('#status.error').isVisible(),true,'Errors must remain visible until recovery');
   assert.deepEqual(errors,[]);
   fs.mkdirSync('docs/internal/screenshots',{recursive:true});await page.screenshot({path:'docs/internal/screenshots/workspace-layout-error.png'});
-  console.log('PASS: folded status, one-screen layout, internal scrolling, native options, responsive navigation, draft and error visibility.');
+  failMessages=false;await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#workspace-status').getAttribute('open'),'');await check();
+  console.log('PASS: status expanded by default and after reload, collapse controls, one-screen layout, internal scrolling, native options, responsive navigation, draft and error visibility.');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

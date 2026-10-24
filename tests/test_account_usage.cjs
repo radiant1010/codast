@@ -13,7 +13,7 @@ function screen(replies){
     get textContent(){return [this.text,...this.children.map(n=>n.textContent)].join(' ');}
   }
   const rows=new Node('tbody'),body=new Node('div'),states=[];
-  const context={el:(tag,text)=>new Node(tag,text),account:{},accountRows:rows,accountBody:body,
+  const context={window:{},el:(tag,text)=>new Node(tag,text),account:{},accountRows:rows,accountBody:body,
     queryStatus:()=>((...args)=>states.push(args)),document:{hidden:false},setInterval:()=>{},
     api:async path=>{const value=replies[path.includes('/claude/')?'claude':'codex'];if(value instanceof Error)throw value;return value;}};
   vm.createContext(context);

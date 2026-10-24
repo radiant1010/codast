@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let projectDefaults={}, chatLoading=false, projectReady=false;
+let projectDefaults={}, chatLoading=false, projectReady=false, restoreNotified=false;
 let projectNames={};
 function projectLabel(name){return Object.hasOwn(projectNames,name)?projectNames[name]:name;}
 let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false, pollTimer;
@@ -31,7 +31,14 @@ function consoleOutput(text,cls='console-output'){
 }
 function base(){if(!$('project').value)throw Error('프로젝트를 선택하세요.');return '/projects/'+encodeURIComponent($('project').value);}
 function valid(b,e=epoch){return e===epoch&&$('project').value&&b==='/projects/'+encodeURIComponent($('project').value);}
-function notice(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error);}
+let noticeTimer;
+function notice(text,error=false,{persistent=false}={}){
+  clearTimeout(noticeTimer);
+  const inline=$('status'),toast=$('status-toast');
+  inline.textContent=error||persistent?text:'';inline.classList.toggle('error',error);
+  toast.textContent=error||persistent?'':text;
+  if(toast.textContent)noticeTimer=setTimeout(()=>{toast.textContent='';},4000);
+}
 const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하고, 한글, 영문, 숫자, 하이픈(-), 밑줄(_)만 사용해 1~64자로 입력하세요. 예: 아호이';
 function apiErrorMessage(detail,path,status){
   if(status===405)return '지원하지 않는 요청 (405): 실행 중인 서버에서 이 작업을 처리할 수 없습니다. 서버를 재시작한 뒤 화면을 새로고침하고 다시 시도하세요.';
@@ -76,7 +83,7 @@ function streamRun(id,b,container,refresh){
   });
   source.addEventListener('end',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)act(async()=>{await conversation(b);if(valid(b,generation))notice('실행이 종료되었습니다. 결과와 실행 과정을 확인하세요.');});});
   source.addEventListener('detached',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)act(async()=>{await conversation(b);if(valid(b,generation))notice('서버 연결이 바뀌었습니다. 실행 종료 여부를 확인한 뒤 기록을 정리하세요.',true);});});
-  source.onerror=()=>{if(valid(b,generation)&&container.isConnected&&source.readyState!==EventSource.CLOSED)notice('응답 연결을 다시 시도하고 있습니다. 마지막으로 받은 내용부터 이어집니다.');};
+  source.onerror=()=>{if(valid(b,generation)&&container.isConnected&&source.readyState!==EventSource.CLOSED)notice('응답 연결을 다시 시도하고 있습니다. 마지막으로 받은 내용부터 이어집니다.',false,{persistent:true});};
 }
 $('toggle-sidebar').onclick=()=>{const collapsed=$('workspace').classList.toggle('collapsed');$('toggle-sidebar').setAttribute('aria-expanded',String(!collapsed));$('toggle-sidebar').title=collapsed?'제어판 펼치기':'제어판 접기';$('toggle-sidebar').setAttribute('aria-label',$('toggle-sidebar').title);};
 $('new-output').onclick=()=>followOutput(true);
@@ -198,7 +205,7 @@ async function switchChat(task){
     const failures=results.map((result,index)=>result.status==='rejected'?(index===0?'룰북':'대화')+' 조회 실패: '+result.reason.message:null).filter(Boolean);
     chatLoading=failures.length>0;$('send').disabled=busy||chatLoading;
     if(failures.length){if(results[1].status==='rejected')$('messages').replaceChildren(el('div','대화를 불러오지 못했습니다. 대화 새로고침으로 다시 시도하세요.','empty'));notice(failures.join('. ')+'. 대화 새로고침으로 다시 시도하세요. 작성 내용은 유지됩니다.',true);return false;}
-    notice('프로젝트와 채팅의 작성 상태를 복원했습니다.');return true;
+    notice(restoreNotified?'':'프로젝트와 채팅의 작성 상태를 복원했습니다.');restoreNotified=true;return true;
   }catch(error){if(valid(b,e)){notice('채팅 복원 실패: '+error.message+'. 대화 새로고침으로 다시 시도하세요.',true);return false;}}
 }
 async function loadProject(){

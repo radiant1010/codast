@@ -224,8 +224,8 @@
   }
   setInterval(()=>{if(!document.hidden)refreshEnvironment();},15000);
   top.replaceChildren(sessionsPanel,account,environment);
-  const statusPanel=el('details',undefined,'workspace-status');statusPanel.id='workspace-status';
-  const statusSummary=el('summary'),runningCount=el('span','확인 중'),unreadCount=el('span','알림 0'),statusLabel=el('span','펼쳐 보기','status-label');
+  const statusPanel=el('details',undefined,'workspace-status');statusPanel.id='workspace-status';statusPanel.open=true;
+  const statusSummary=el('summary'),runningCount=el('span','확인 중'),unreadCount=el('span','알림 0'),statusLabel=el('span','접기','status-label');
   const statusBody=el('div',undefined,'workspace-status-body');
   statusSummary.append(el('strong','작업 현황'),runningCount,unreadCount,statusLabel);statusBody.append(top);statusPanel.append(statusSummary,statusBody);
   $('console').querySelector('header').after(statusPanel);
@@ -288,6 +288,7 @@
       accountStatus(failed?'error':'ready',failed?'일부 계정 정보를 불러오지 못했습니다. 각 AI의 상태를 확인하세요.':'확인 '+new Date().toLocaleTimeString());
     }catch(error){accountRows.replaceChildren(accountPlaceholder('Codex','조회 실패'),accountPlaceholder('Claude','조회 실패'));accountStatus('error','정보를 불러오지 못했습니다. 다시 시도해 주세요.');}finally{statusBusy=false;}
   }
+  window.refreshAccountStatus=refreshAccount;
   refreshAccount();setInterval(()=>{if(!document.hidden)refreshAccount();},60000);
   const alertBox=el('div',undefined,'session-alerts');alertBox.id='session-alerts';alertBox.hidden=true;alertBox.setAttribute('role','status');alertBox.textContent='저장된 실행 종료 알림을 확인합니다.';top.after(alertBox);
   const expand=button('확장',async()=>{const on=$('workspace').classList.toggle('console-expanded');expand.textContent=on?'복원':'확장';expand.setAttribute('aria-pressed',String(on));});expand.setAttribute('aria-pressed','false');$('console').querySelector('header').append(expand);
@@ -339,7 +340,6 @@
     path.textContent=$('workspace-root').value||'프로젝트를 선택하세요.';path.title=path.textContent;
     projectName.textContent=projectLabel($('project').value)||'프로젝트를 선택하세요.';projectName.title=projectName.textContent;$('project').title=projectName.textContent;
     native.replaceChildren();const rows=snapshot.sessions.filter(s=>s.project===$('project').value&&s.task===filter);
-    if(!rows.length){native.textContent=filter?'아직 연결된 대화가 없습니다. Codex나 Claude가 첫 응답을 마치면 여기에 표시됩니다.':'채팅을 선택하면 연결된 에이전트 대화를 확인할 수 있습니다.';return;}
     for(const s of rows){const item=el('span',s.client+', '+s.session_id+', '+s.mode);item.title=s.cwd;native.append(item);}
   }
   function contextCell(usage){
@@ -393,6 +393,7 @@
       row.liveState=run.cancellable?'실행 중':'종료 확인 필요';summaries.set(key,row);
       applyMetrics(row,run.metrics,run.metadata?.session_id||null);
     }
+    window.updateExecutionModels?.([...summaries.values()]);
     sessionRows.replaceChildren();
     for(const row of [...summaries.values()].sort((a,b)=>Number(Boolean(b.liveState))-Number(Boolean(a.liveState))||(b.last_started_at||'').localeCompare(a.last_started_at||''))){
       const tr=el('tr'),name=el('td');name.append(button(row.client+', '+(row.task||'미분류'),()=>openChat(row.project,row.task)));tr.append(name,el('td',row.liveState||'실행 없음'),contextCell(row.context_usage));
