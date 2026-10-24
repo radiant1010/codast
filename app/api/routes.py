@@ -349,12 +349,14 @@ def service(request: Request):
 
 @router.get("/projects")
 def projects(request: Request):
-    return {"projects": service(request).projects.list()}
+    manager = service(request).projects
+    return {'projects': manager.list(), 'names': manager.display_names()}
 
 
 @router.get('/deleted-projects')
 def deleted_projects(request: Request):
-    return {'projects': service(request).projects.list(deleted=True)}
+    manager = service(request).projects
+    return {'projects': manager.list(deleted=True), 'names': manager.display_names()}
 
 
 @router.post('/workspace-folder')
@@ -382,6 +384,16 @@ async def environment_status(name: str, request: Request):
     return await request.app.state.environment_status.read(root)
 
 
+@router.patch('/projects/{name}')
+def rename_project(name: str, body: ProjectCreate, request: Request):
+    s = service(request)
+    # The label changes; stable project keys, paths and active runs stay intact.
+    with s.storage.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        s.projects.rename(name, body.name)
+    return {'name': name, 'display_name': body.name}
+
+
 @router.delete('/projects/{name}')
 async def delete_project(name: str, request: Request):
     s = service(request)
@@ -403,7 +415,10 @@ async def restore_project(name: str, request: Request):
 
 @router.post("/projects", status_code=201)
 def create(body: ProjectCreate, request: Request):
-    service(request).projects.create(body.name)
+    s = service(request)
+    with s.storage.connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        s.projects.create(body.name)
     return {"name": body.name}
 
 

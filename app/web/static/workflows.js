@@ -15,7 +15,7 @@
   async function safe(fn){if(locked)return;locked=true;const controls=[...body.querySelectorAll('button,input,select,textarea')].map(n=>[n,n.disabled]);controls.forEach(([n])=>n.disabled=true);try{status.textContent='처리 중…';await fn();status.textContent='';}catch(e){status.textContent=e.message;if(resultDialog.open)resultStatus.textContent=e.message;}finally{locked=false;controls.forEach(([n,d])=>{if(n.isConnected)n.disabled=d;});}}
   const launch=icon('route','워크플로 설정 및 진행',()=>safe(async()=>{
     if(!$('project').value)throw Error('먼저 프로젝트를 선택하세요.');
-    project=$('project').value;current=null;heading.textContent=project+' ,  작업 순서와 결과';body.replaceChildren();dialog.showModal();
+    project=$('project').value;current=null;heading.textContent=projectLabel(project)+', 작업 순서와 결과';body.replaceChildren();dialog.showModal();
     const settings=await api('/projects/'+encodeURIComponent(project)+'/document-vault');binding=settings.binding;
     if(!binding){connectionSetup(settings.suggested_base_path);return;}
     await listing();

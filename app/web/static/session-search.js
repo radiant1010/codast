@@ -95,7 +95,7 @@
   const open=button('대화 검색',async()=>{
     if(!projectReady||!$('project').value)throw Error('프로젝트를 먼저 불러와 주세요.');
     project=$('project').value;resultOffset=0;input.value='';results.replaceChildren();preview.hidden=true;pages.hidden=true;
-    scope.textContent=project+' 프로젝트의 CODAST, Codex, Claude 대화를 이 컴퓨터에서 검색합니다.';
+    scope.textContent=projectLabel(project)+' 프로젝트의 CODAST, Codex, Claude 대화를 이 컴퓨터에서 검색합니다.';
     dialog.showModal();input.focus();await updateIndex();
   });open.id='open-session-search';
   document.querySelector('.chat-navigation .new-chat').after(open);

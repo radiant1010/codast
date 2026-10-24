@@ -92,7 +92,7 @@
     if($('project').value!==selected)throw Error('프로젝트가 변경되었습니다. 다시 검색하세요.');
     importProject=selected;selectedImportClient=agent;importCursor=null;nextThreads.hidden=true;importList.replaceChildren();importPreview.replaceChildren();
     for(const choice of importClient.children)choice.setAttribute('aria-pressed',String(choice.textContent.toLowerCase()===agent));
-    importScope.textContent=selected+' 프로젝트';importDialog.showModal();await previewThread(thread,selected,agent);
+    importScope.textContent=projectLabel(selected)+' 프로젝트';importDialog.showModal();await previewThread(thread,selected,agent);
   };
   async function loadThreads(more=false){
     const selected=importProject,agent=selectedImportClient;importStatus.textContent='조회 중…';nextThreads.disabled=true;
@@ -121,7 +121,7 @@
       const entry=el('div',undefined,'client-path-row');entry.append(name,attach);importPreview.append(transcript,ackLabel,entry);
     }catch(error){importStatus.textContent=error.message;}
   }
-  const findThreads=button('',async()=>{if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');importProject=$('project').value;importScope.textContent='조회 범위, '+importProject+' 프로젝트';importCursor=null;importPreview.replaceChildren();importList.replaceChildren();importDialog.showModal();await loadThreads();});
+  const findThreads=button('',async()=>{if(!$('project').value)throw Error('프로젝트를 먼저 선택하세요.');importProject=$('project').value;importScope.textContent='조회 범위, '+projectLabel(importProject)+' 프로젝트';importCursor=null;importPreview.replaceChildren();importList.replaceChildren();importDialog.showModal();await loadThreads();});
   window.actionIcon(findThreads,'importDocument','세션 내용 불러오기');titleActions.append(findThreads);
   const top=el('section',undefined,'session-dashboard');top.setAttribute('aria-label','에이전트와 실행 중인 세션');
   const projectSize=new ResizeObserver(()=>{
@@ -184,7 +184,8 @@
   const envStatus=queryStatus(environment,'실행 환경',refreshEnvironment);
   async function refreshEnvironment(){
     const projectName=$('project').value;
-    if(projectName!==envProjectKey){envProjectKey=projectName;envTicket++;envBusy=false;envProject.textContent=projectName||'프로젝트를 선택하세요.';for(const [name,value] of Object.entries(envFields)){value.textContent='—';value.title='';environmentState(name,projectName?'확인 중':'선택 대기',projectName?'loading':'idle');}}
+    envProject.textContent=projectLabel(projectName)||'프로젝트를 선택하세요.';
+    if(projectName!==envProjectKey){envProjectKey=projectName;envTicket++;envBusy=false;for(const [name,value] of Object.entries(envFields)){value.textContent='—';value.title='';environmentState(name,projectName?'확인 중':'선택 대기',projectName?'loading':'idle');}}
 
     if(!projectName){envStatus('idle','프로젝트 선택 대기');return;}if(envBusy)return;envBusy=true;
     envStatus('loading','실행 환경 확인 중');
@@ -341,7 +342,7 @@
   }
   function renderUsage(){
     const rows=(snapshot.usage||[]).filter(row=>row.project===$('project').value);
-    envProject.textContent=$('project').value||'프로젝트를 선택하세요.';
+    envProject.textContent=projectLabel($('project').value)||'프로젝트를 선택하세요.';
     for(const client of ['codex','claude']){
       const agentRows=rows.filter(row=>row.client===client);
       const total=kind=>agentRows.some(r=>r[kind+'_reports']>0)?agentRows.reduce((n,r)=>n+(r[kind+'_tokens']??0),0).toLocaleString():'미수신';
@@ -403,7 +404,7 @@
     sessionStatus('loading','세션 현황 확인 중');
     try{
       const next=await api('/session-overview');snapshot=next;list.replaceChildren();
-      for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+run.project+' / '+(run.command.task||'미분류')+', '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트와 실행 모델은 AI 세션 표에서 확인하세요.','hint'));list.append(item);}
+      for(const run of next.running){const item=el('div');item.append(button((run.command.client||run.adapter)+' / '+projectLabel(run.project)+' / '+(run.command.task||'미분류')+', '+(run.cancellable?'실행 중':'종료 확인 필요'),()=>openChat(run.project,run.command.task||''),'running-session'),el('p','컨텍스트와 실행 모델은 AI 세션 표에서 확인하세요.','hint'));list.append(item);}
       if(!next.running.length)list.append(el('p','실행 중인 세션이 없습니다.','hint'));
       renderNative();renderUsage();
       sessionStatus('ready','확인 '+new Date().toLocaleTimeString());
@@ -412,7 +413,7 @@
   }
   function renderNotifications(){
     const state=window.runNotifications.snapshot();alerts.textContent='알림 '+state.unread;alerts.title='최근 실행 종료 알림 100개';alertBox.replaceChildren();
-    for(const row of [...state.events].reverse()){alertBox.append(button(row.project+', '+(row.task||'미분류')+', '+(row.awaiting_answer?'답변 대기':statusNames[row.status]),async()=>{
+    for(const row of [...state.events].reverse()){alertBox.append(button(projectLabel(row.project)+', '+(row.task||'미분류')+', '+(row.awaiting_answer?'답변 대기':statusNames[row.status]),async()=>{
       const tasks=await api('/projects/'+encodeURIComponent(row.project)+'/tasks');
       const current=tasks.tasks.find(t=>row.chat_id?t.id===row.chat_id:t.task===row.task);
       if(!current)throw Error('알림에 연결된 채팅을 찾을 수 없습니다.');
@@ -421,6 +422,7 @@
     if(!state.events.length)alertBox.append(el('p','저장된 종료 알림이 없습니다.'));
   }
   renderNotifications();
+  window.addEventListener('project-names-changed',()=>{envProject.textContent=projectLabel($('project').value)||'프로젝트를 선택하세요.';importScope.textContent='조회 범위, '+projectLabel(importProject)+' 프로젝트';renderNotifications();refresh();});
   window.addEventListener('online',refresh);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
   $('project').addEventListener('change',()=>{refreshEnvironment();for(const c of ['codex','claude'])$('usage-'+c).textContent='수집된 토큰 정보 없음';});

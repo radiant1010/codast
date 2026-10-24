@@ -1,5 +1,7 @@
 const $=id=>document.getElementById(id);
 let projectDefaults={}, chatLoading=false, projectReady=false;
+let projectNames={};
+function projectLabel(name){return Object.hasOwn(projectNames,name)?projectNames[name]:name;}
 let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false, pollTimer;
 const statusNames={running:'실행 중 / 종료 미확인',completed:'완료',failed:'실패',interrupted:'중단'};
 const taskStates={active:'진행',paused:'보류',done:'완료'};
@@ -32,12 +34,13 @@ function valid(b,e=epoch){return e===epoch&&$('project').value&&b==='/projects/'
 function notice(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error);}
 const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하고, 한글, 영문, 숫자, 하이픈(-), 밑줄(_)만 사용해 1~64자로 입력하세요. 예: 아호이';
 function apiErrorMessage(detail,path,status){
+  if(status===405)return '지원하지 않는 요청 (405): 실행 중인 서버에서 이 작업을 처리할 수 없습니다. 서버를 재시작한 뒤 화면을 새로고침하고 다시 시도하세요.';
   if(typeof detail==='string'&&detail.trim())return detail;
   if(Array.isArray(detail)&&detail.length){
     const labels={name:'이름',path:'경로',text:'메시지',task:'채팅 이름',model:'모델',client:'에이전트',mode:'권한',answer:'답변'};
     return [...new Set(detail.map(issue=>{
       const field=issue?.loc?.at(-1);
-      if(field==='name'&&['/workspaces','/projects'].includes(path)&&issue.type==='string_pattern_mismatch')return projectNameError;
+      if(field==='name'&&/^\/(?:workspaces|projects(?:\/[^/]+)?)$/.test(path)&&issue.type==='string_pattern_mismatch')return projectNameError;
       let reason='입력한 값의 형식과 허용 범위를 확인해 주세요.';
       if(issue?.type==='missing')reason='필수 항목을 입력해 주세요.';
       else if(issue?.type==='string_too_long'&&Number.isInteger(issue.ctx?.max_length))reason=issue.ctx.max_length.toLocaleString('ko-KR')+'자 이하로 입력해 주세요.';
@@ -79,7 +82,7 @@ $('toggle-sidebar').onclick=()=>{const collapsed=$('workspace').classList.toggle
 $('new-output').onclick=()=>followOutput(true);
 $('messages').onscroll=()=>{if(atBottom())$('new-output').hidden=true;};
 $('history-panel').ontoggle=()=>{if($('history-panel').open&&$('project').value)act(()=>history());};
-async function projects(selected=''){const d=await api('/projects');$('project').replaceChildren(new Option('선택하세요',''));for(const p of d.projects)$('project').add(new Option(p,p));$('project').value=selected;}
+async function projects(selected=''){const d=await api('/projects');projectNames=d.names||{};$('project').replaceChildren(new Option('선택하세요',''));for(const p of d.projects)$('project').add(new Option(projectLabel(p),p));$('project').value=selected;window.dispatchEvent(new Event('project-names-changed'));}
 function drawTasks(){
   $('task-list').replaceChildren();$('task-names').replaceChildren();$('archived-chats').replaceChildren();
   const drafts=window.chatState.drafts($('project').value).filter(task=>!groups.some(g=>g.task===task)).map(task=>({task,label:task+', 작성 중'}));
@@ -254,14 +257,14 @@ $('probe-clients').onclick=()=>act(async()=>{
 
 
 async function trash(){
-  const d=await api('/deleted-projects');$('deleted-projects').replaceChildren();
-  for(const name of d.projects){const row=el('div',undefined,'action-row');row.append(el('span',name),button('복원',async()=>{await api('/deleted-projects/'+encodeURIComponent(name)+'/restore','POST');await projects(name);await loadProject();await trash();notice('프로젝트와 기존 기록을 복원했습니다.');},'icon-action'));$('deleted-projects').append(row);}
+  const d=await api('/deleted-projects');Object.assign(projectNames,d.names||{});$('deleted-projects').replaceChildren();
+  for(const name of d.projects){const row=el('div',undefined,'action-row');row.append(el('span',projectLabel(name)),button('복원',async()=>{await api('/deleted-projects/'+encodeURIComponent(name)+'/restore','POST');await projects(name);await loadProject();await trash();notice('프로젝트와 기존 기록을 복원했습니다.');},'icon-action'));$('deleted-projects').append(row);}
   if(!d.projects.length)$('deleted-projects').textContent='삭제한 프로젝트가 없습니다.';
 }
 $('trash-panel').ontoggle=()=>{if($('trash-panel').open)act(trash);};
 $('delete-project').onclick=()=>act(async()=>{
   const b=base(),name=$('project').value;
-  if(!confirm('“'+name+'” 프로젝트를 삭제할까요?\n목록에서 제거하며 파일과 대화, 실행 기록은 휴지통에서 복원할 수 있습니다.'))return;
+  if(!confirm('“'+projectLabel(name)+'” 프로젝트를 삭제할까요?\n목록에서 제거하며 파일과 대화, 실행 기록은 휴지통에서 복원할 수 있습니다.'))return;
   await api(b,'DELETE');
   await projects();await loadProject();await trash();notice('프로젝트를 삭제했습니다. 왼쪽 휴지통에서 복원할 수 있습니다.');
 });

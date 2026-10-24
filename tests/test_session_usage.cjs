@@ -16,7 +16,7 @@ function screen(snapshot){
   const nodes=new Map(),sessionRows=new Node();
   const context={snapshot,sessionRows,usageList:new Node(),envProject:new Node(),filter:'',
     $:id=>{if(!nodes.has(id))nodes.set(id,new Node());const n=nodes.get(id);n.value='one';return n;},
-    el:(tag,text)=>new Node(text),button:text=>new Node(text),openChat:()=>{}};
+    el:(tag,text)=>new Node(text),button:text=>new Node(text),openChat:()=>{},projectLabel:name=>name};
   vm.createContext(context);
   vm.runInContext(source.slice(source.indexOf('  function contextCell('),source.indexOf('  window.refreshSessionView=')),context);
   context.renderUsage();

@@ -28,4 +28,29 @@
     catch(error){$('folder-status').textContent=error.message;}
     finally{$('register-folder').disabled=false;}
   };
+  const renameDialog=$('rename-project-dialog'),renameInput=$('rename-project-name'),renameStatus=$('rename-project-status');
+  let renameTarget='',renaming=false;
+  renameInput.pattern=$('workspace-name').pattern;
+  function openRename(){
+    if(renaming)return;
+    renameTarget=$('project').value;if(!renameTarget){notice('프로젝트를 선택하세요.',true);return;}
+    renameInput.value=projectLabel(renameTarget);renameStatus.textContent='';renameDialog.showModal();renameInput.focus();renameInput.select();
+  }
+  $('rename-project').onclick=openRename;$('manage-project-name').onclick=openRename;
+  $('cancel-project-name').onclick=()=>{if(!renaming)renameDialog.close();};
+  renameDialog.addEventListener('cancel',event=>{if(renaming)event.preventDefault();});
+  renameInput.oninvalid=event=>{event.preventDefault();renameStatus.textContent=projectNameError;renameInput.focus();};
+  renameInput.oninput=()=>{renameStatus.textContent='';};
+  $('rename-project-form').onsubmit=async event=>{
+    event.preventDefault();if(renaming||!renameTarget)return;
+    const target=renameTarget;renaming=true;renameStatus.textContent='저장 중…';
+    for(const id of ['rename-project-name','save-project-name','cancel-project-name'])$(id).disabled=true;
+    try{
+      const result=await api('/projects/'+encodeURIComponent(target),'PATCH',{name:renameInput.value});
+      projectNames[target]=result.display_name;
+      for(const option of $('project').options)if(option.value===target)option.textContent=result.display_name;
+      window.dispatchEvent(new Event('project-names-changed'));renameDialog.close();notice('프로젝트 이름을 변경했습니다.');
+    }catch(error){renameStatus.textContent=error.message;}
+    finally{renaming=false;for(const id of ['rename-project-name','save-project-name','cancel-project-name'])$(id).disabled=false;}
+  };
 })();

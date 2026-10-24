@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import datetime, timezone
 import json
+from unicodedata import normalize
 from app.guards.filesystem import confined
 from app.models.schemas import ProjectCreate
 
@@ -26,6 +27,42 @@ class ProjectManager:
             return self.validate_workspace(json.loads(descriptor.read_text(encoding='utf-8'))['path'])
         return entry
 
+    def display_name(self, name):
+        path = confined(self.entry(name, include_deleted=True), '.harness/project-name.json')
+        if not path.exists():
+            return name
+        try:
+            return ProjectCreate.model_validate_json(path.read_text(encoding='utf-8')).name
+        except (OSError, ValueError) as exc:
+            raise ValueError('프로젝트 이름 정보를 읽을 수 없습니다.') from exc
+
+    def display_names(self):
+        return {name: self.display_name(name) for name in self.list() + self.list(deleted=True)}
+
+    def validate_name(self, name, *, excluding=None):
+        ProjectCreate(name=name)
+        confined(self.root, name)
+        key = normalize('NFC', name).casefold()
+        for existing, label in self.display_names().items():
+            if existing != excluding and any(normalize('NFC', value).casefold() == key for value in (existing, label)):
+                raise FileExistsError('이미 사용 중인 프로젝트 이름입니다. 휴지통을 포함해 다른 이름을 입력하세요.')
+
+    def rename(self, name, label):
+        entry = self.entry(name)
+        self.validate_name(label, excluding=name)
+        if self.display_name(name) == label:
+            return
+        path = confined(entry, '.harness/project-name.json')
+        temporary = confined(entry, '.harness/project-name.tmp')
+        path.parent.mkdir(exist_ok=True)
+        try:
+            temporary.write_text(json.dumps({'name': label}, ensure_ascii=False), encoding='utf-8')
+            temporary.replace(path)
+        except OSError as exc:
+            raise ValueError('프로젝트 이름을 저장하지 못했습니다. 저장 공간과 권한을 확인한 뒤 다시 시도하세요.') from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+
     def validate_workspace(self, value):
         path = Path(value)
         if not path.is_absolute() or path == Path(path.anchor):
@@ -48,8 +85,8 @@ class ProjectManager:
             entry = self.entry(existing, include_deleted=True)
             descriptor = confined(entry, '.harness/workspace.json')
             if descriptor.exists() and Path(json.loads(descriptor.read_text(encoding='utf-8'))['path']) == target:
-                raise FileExistsError(f'이미 등록한 폴더입니다: {existing}. 삭제한 프로젝트라면 휴지통에서 복원하세요.')
-        ProjectCreate(name=name)
+                raise FileExistsError(f'이미 등록한 폴더입니다: {self.display_name(existing)}. 삭제한 프로젝트라면 휴지통에서 복원하세요.')
+        self.validate_name(name)
         entry = confined(self.root, name)
         entry.mkdir(exist_ok=False)
         (entry / '.harness').mkdir()
@@ -82,7 +119,7 @@ class ProjectManager:
         self.deletion_marker(path).unlink(missing_ok=True)
 
     def create(self, name: str) -> Path:
-        ProjectCreate(name=name)
+        self.validate_name(name)
         path = confined(self.root, name)
         path.mkdir(exist_ok=False)
         for directory in (".harness", "documents", "source", "generated"):

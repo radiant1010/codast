@@ -32,7 +32,7 @@ def test_connection_check_does_not_execute_or_register(tmp_path, monkeypatch):
         result = c.post('/api/connections/check').json()
         assert len(result['attention']) == 2
         assert result['configuration_changed'] is False and result['execution'] == 'not_started'
-        assert c.get('/api/projects').json() == {'projects': []}
+        assert c.get('/api/projects').json() == {'projects': [], 'names': {}}
         assert app.state.harness.active == {}
         assert c.get('/api/clients/unknown/login-instructions').status_code == 400
 

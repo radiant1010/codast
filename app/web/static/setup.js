@@ -59,14 +59,14 @@
   async function open(){
     if(!dialog.open)dialog.showModal();status.textContent='● 설치 경로와 로그인 상태를 자동으로 확인 중…';
     await runConnection(async()=>{const [saved,list,connections]=await Promise.all([api('/onboarding'),api('/projects'),api('/clients')]);state=saved;
-    project.replaceChildren(new Option('프로젝트 선택',''));for(const name of list.projects)project.add(new Option(name,name));
+    project.replaceChildren(new Option('프로젝트 선택',''));for(const name of list.projects)project.add(new Option(list.names?.[name]||name,name));
     project.value=saved.project||$('project').value||'';client.value=saved.client||'codex';
     for(const row of connections.clients){observations[row.client]=row;draftPaths[row.client]=row.path||'';}renderTabs();path.value=draftPaths[client.value]||'';status.textContent='선택 후 연결 확인 아이콘을 누르세요.';commands.textContent='';
     projectStep.hidden=true;await inspect();});
   }
   window.openConnections=open;
   client.onchange=()=>act(async()=>{const chosen=client.value;projectStep.hidden=true;path.value='';status.textContent='선택한 에이전트의 연결을 다시 확인하세요.';commands.textContent='';const data=await api('/clients');if(client.value===chosen)path.value=data.clients.find(c=>c.client===chosen)?.path||'';});
-  window.refreshSetup=()=>{const chosen=!!$('project').value;$('welcome').hidden=chosen;$('messages').hidden=!chosen;$('composer').hidden=!chosen||!filter;$('messages-prev').closest('.pagination').hidden=!chosen||!filter;$('delete-project').disabled=!chosen;};
+  window.refreshSetup=()=>{const chosen=!!$('project').value;$('welcome').hidden=chosen;$('messages').hidden=!chosen;$('composer').hidden=!chosen||!filter;$('messages-prev').closest('.pagination').hidden=!chosen||!filter;for(const id of ['delete-project','rename-project','manage-project-name'])$(id).disabled=!chosen;};
   window.setupSettingsSaved=()=>{};window.setupRequestSent=()=>{};
   $('setup-steps').replaceChildren(...[
     ['에이전트 연결','설치된 Codex 또는 Claude CLI의 연결과 로그인 상태를 확인합니다.'],

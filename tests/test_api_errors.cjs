@@ -11,7 +11,7 @@ function client(status,detail){
 
 test('project name validation identifies the field and correction without exposing raw input',async()=>{
   const detail=[{type:'string_pattern_mismatch',loc:['body','name'],msg:'String should match pattern',input:'가상/프로젝트',ctx:{pattern:'restricted-project-name'}}];
-  for(const path of ['/workspaces','/projects']){
+  for(const path of ['/workspaces','/projects','/projects/legacy']){
     await assert.rejects(client(422,detail)(path,'POST',{}),error=>{
       assert.equal(error.status,422);
       assert.match(error.message,/프로젝트 이름 형식 오류/);
@@ -43,6 +43,13 @@ test('unrecognized error details produce a readable fallback without dumping ser
 test('existing readable server errors and successful responses stay intact',async()=>{
   await assert.rejects(client(409,'이미 등록한 폴더입니다.')('/workspaces'),error=>error.status===409&&error.message==='이미 등록한 폴더입니다.');
   assert.equal((await client(200,'정상')('/projects')).detail,'정상');
+});
+
+test('unsupported server requests explain how to apply a server update',async()=>{
+  await assert.rejects(client(405,'Method Not Allowed')('/projects/legacy','PATCH',{name:'변경'}),error=>{
+    assert.equal(error.status,405);assert.match(error.message,/405/);assert.match(error.message,/서버.*재시작/);
+    assert.match(error.message,/새로고침/);assert.doesNotMatch(error.message,/Method Not Allowed/);return true;
+  });
 });
 
 test('both project name inputs enforce the server character rules in current browsers',()=>{
