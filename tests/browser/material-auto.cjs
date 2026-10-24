@@ -13,7 +13,7 @@ const {execFileSync}=require('node:child_process');
  try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(10000);
  await page.goto(origin);await page.locator('#startup-loading').waitFor({state:'hidden'});await page.selectOption('#project',project);await page.waitForFunction(()=>projectReady&&!chatLoading);
- await page.getByRole('button',{name:'＋ 새 채팅',exact:true}).click();await page.fill('#new-chat-name','자동 첨부');await page.getByRole('button',{name:'새 채팅 만들기',exact:true}).click();await page.locator('#text').waitFor({state:'visible'});
+ await page.getByRole('button',{name:'새 채팅',exact:true}).click();await page.fill('#new-chat-name','자동 첨부');await page.getByRole('button',{name:'새 채팅 만들기',exact:true}).click();await page.locator('#text').waitFor({state:'visible'});
  await page.locator('#attachment-picker').setInputFiles({name:'list.csv',mimeType:'text/csv',buffer:Buffer.from('고객명,요청사항\n테스트인물가,배송 확인')});
  await page.waitForFunction(()=>window.materialGuard.selected().length===1);
  assert.equal(await page.locator('#material-review-dialog').count(),0);

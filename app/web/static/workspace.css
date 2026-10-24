@@ -1,0 +1,116 @@
+/* The workspace owns the viewport; lists, history and status own their scroll. */
+html,body{height:100%;overflow:hidden}
+#workspace.workspace-fold{height:100dvh;min-height:0;overflow:hidden}
+.workspace-fold #sidebar{width:288px;min-width:240px;flex-shrink:0;resize:none;background:#1e2126}
+.workspace-fold .brand{height:64px;min-height:64px}
+.workspace-fold .side-content{padding:0 16px;min-height:0;overflow:hidden}
+.workspace-fold #project-panel{height:auto;min-height:0;overflow:visible;flex:none;padding:16px 0;border-bottom:1px solid var(--terminal-border)}
+.workspace-fold #project-panel>summary{display:none}
+.project-caption{display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--terminal-muted);font-size:13px}
+.project-caption>span{flex:1}
+.workspace-fold .project-caption .action-icon{width:28px;min-width:28px;height:28px;min-height:28px;padding:4px}
+.workspace-fold .project-picker{display:block}
+.workspace-fold .project-picker select{width:100%;height:40px;min-height:40px;padding:8px 32px 8px 10px;font-size:14px}
+.project-fullname{margin:8px 0 0;font-size:13px;color:var(--terminal-muted);line-height:1.65;word-break:keep-all;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.workspace-fold .project-location{display:none}
+.workspace-fold .chat-navigation{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding-top:14px}
+.workspace-fold .side-title{flex:none;margin:0 0 8px}
+.workspace-fold .side-title h2{font-size:13px;margin:0}
+.workspace-fold .new-chat{margin:0 0 10px;min-height:38px;text-align:center;font-size:14px}
+.workspace-fold #open-session-search{margin:0 0 12px;min-height:34px;font-size:13px}
+.workspace-fold #task-list{flex:1;min-height:0;max-height:none;overflow:auto;scrollbar-width:thin}
+.workspace-fold .chat-list-row{flex:none;margin-bottom:3px}
+#workspace.workspace-fold #task-list .task{min-height:42px;padding:10px 70px 10px 10px;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;text-overflow:clip;font-size:13px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.workspace-fold .chat-row-actions{right:4px}
+.workspace-fold #chat-archive{flex:none;margin:8px 0;padding:0;border:0;max-height:30dvh;overflow:auto}
+.workspace-fold .workspace-menu{height:auto;min-height:0;flex:none;grid-template-columns:1fr 1fr;gap:2px;padding:10px 0 14px;overflow:visible;border-color:var(--terminal-border)}
+.workspace-fold .workspace-menu>button{font-size:13px;min-height:34px;padding:6px 8px;text-align:left}
+.workspace-fold #console{min-width:0;min-height:0;position:relative}
+.workspace-fold #console>header{flex:none;min-height:60px;padding:10px 24px;gap:10px;border-bottom:1px solid var(--terminal-border)}
+.workspace-fold #chat-title{flex:1;min-width:0;font-size:16px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.workspace-fold #connection{display:none}
+.workspace-fold #activity{max-width:25%;font-size:12px;overflow-wrap:anywhere}
+.workspace-fold .pagination{flex:none;display:flex;align-items:center;gap:6px;margin:0;padding:0}
+.workspace-fold .pagination button{min-height:28px;width:28px;padding:4px}
+.workspace-fold #page-number{font-size:12px;white-space:nowrap}
+.workspace-fold #status{flex:none;min-height:0;max-height:72px;overflow:auto;padding:4px 24px;font-size:13px;line-height:1.6;word-break:keep-all;overflow-wrap:anywhere;margin:0}
+.workspace-fold #status:empty{display:none}
+.workspace-fold .conversation-pane{flex:1;min-width:0;min-height:0;overflow:hidden}
+.workspace-fold #messages{padding:20px 24px 20px 36px;min-height:0;scrollbar-width:thin}
+.workspace-fold #messages,.workspace-fold #task-list,.workspace-status-body{overscroll-behavior:contain}
+.workspace-fold .message{max-width:76ch;margin:0 auto 28px;padding:0 0 20px}
+.workspace-fold .message .meta{font-size:12px;line-height:1.5;gap:4px 10px;flex-wrap:wrap;overflow-wrap:anywhere}
+.workspace-fold .message pre{font-size:14px;line-height:1.8;overflow-wrap:anywhere}
+.workspace-fold #composer{flex:none;padding:12px 24px 18px}
+.workspace-fold .command-entry{padding:0;border-radius:6px;box-shadow:none}
+.workspace-fold #text{min-height:72px;max-height:min(160px,22dvh);padding:16px 16px 8px;font-size:14px;line-height:1.65}
+.workspace-fold .composer-toolbar{padding:6px 10px 10px;gap:6px;flex-wrap:wrap}
+.workspace-fold .composer-toolbar>select{font-size:13px;min-height:34px;max-width:210px}
+.workspace-fold #execution-summary{font-size:13px;max-width:240px;min-height:34px}
+.workspace-fold .hint{font-size:13px;line-height:1.7;word-break:keep-all;overflow-wrap:anywhere}
+.workspace-fold #welcome{min-height:0;overflow:auto}
+.workspace-status{flex:none;margin:0;padding:0;border-bottom:1px solid var(--terminal-border)}
+.workspace-status>summary{display:flex;align-items:center;gap:14px;min-height:44px;padding:8px 24px;background:#1e2126;list-style:none;font-size:13px;line-height:1.6}
+.workspace-status>summary::-webkit-details-marker{display:none}
+.workspace-status>summary::after{content:"";width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);margin-top:-4px;flex:none}
+.workspace-status[open]>summary::after{transform:rotate(225deg);margin-top:4px}
+.workspace-status strong{font-weight:500;color:var(--bs-body-color)}
+.workspace-status .status-label{margin-left:auto;color:var(--terminal-accent)}
+.workspace-status-body{max-height:200px;overflow:auto;background:#1e2126}
+.workspace-fold .session-dashboard{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr);height:auto;gap:20px;padding:16px 24px;border:0;background:transparent}
+.workspace-fold .session-dashboard>section{display:flex;flex-direction:column;min-width:0;min-height:0;height:150px;max-height:none;padding:0;border:0;background:transparent;grid-column:auto}
+.workspace-fold .session-dashboard .dashboard-body{flex:1;min-height:0;overflow:auto}
+.workspace-fold .session-dashboard .dashboard-table,.workspace-fold .compact-session-table{font-size:12px;line-height:1.7;white-space:normal}
+.workspace-fold .session-dashboard :is(td,th){padding:6px 4px}
+.workspace-fold .environment-project{max-width:100%;font-size:12px}
+.workspace-fold #native-session{padding:8px 24px;font-size:12px}
+.workspace-fold.console-expanded .workspace-status{display:none}
+.workspace-fold :focus-visible{outline:2px solid var(--terminal-accent);outline-offset:2px}
+.workspace-fold #close-sidebar{margin-left:auto;font-size:13px}
+.workspace-fold #sidebar[popover]:not(:popover-open){display:none}
+.workspace-fold #sidebar[popover]:popover-open{display:flex;position:fixed;inset:0 auto 0 0;margin:0;width:min(300px,calc(100vw - 48px));min-width:0;max-width:none;height:100dvh;max-height:100dvh;padding:0;border:0;border-right:1px solid var(--terminal-border);color:var(--bs-body-color);overflow:hidden}
+.workspace-fold #sidebar::backdrop{background:#080b1066}
+@media(max-width:1100px){.workspace-fold #sidebar{width:240px}.workspace-fold .session-dashboard{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.workspace-fold .session-dashboard>section:first-child{grid-column:1/-1}}
+@media(max-width:900px){
+ .workspace-fold #console>header{min-height:56px;padding:10px 14px;gap:8px}
+ #workspace.workspace-fold #toggle-sidebar{position:static;flex:none;width:36px;height:36px;z-index:auto}
+ .workspace-status>summary{min-height:40px;padding:8px 14px;gap:10px}
+ .workspace-status-body{max-height:min(180px,30dvh)}
+ .workspace-fold .session-dashboard{grid-template-columns:minmax(0,1fr);padding:12px 14px}
+ .workspace-fold .session-dashboard>section:first-child{grid-column:auto}
+ .workspace-fold #messages{padding:18px 20px 18px 32px}
+ .workspace-fold #composer{padding:10px 14px 12px}
+ .workspace-fold #status{padding-inline:14px}
+}
+@media(max-width:620px){
+ .workspace-fold #chat-title{font-size:14px}
+ .workspace-fold #console>header{flex-wrap:wrap}
+ .workspace-fold .pagination{margin-left:auto}
+ .workspace-fold .composer-toolbar{display:grid;grid-template-columns:36px minmax(0,1fr) 36px 40px;gap:6px}
+ .workspace-fold .attachment-toolbar{grid-column:1;grid-row:1}
+ .workspace-fold #model-picker{grid-column:2;grid-row:1;max-width:100%}
+ .workspace-fold #execution-summary{width:100%;max-width:100%}
+ .workspace-fold #reasoning-effort{grid-column:1/3;grid-row:2;width:100%;max-width:100%}
+ .workspace-fold .workflow-launch{grid-column:3;grid-row:1}
+ .workspace-fold #send{grid-column:4;grid-row:1/3;margin:0;align-self:end}
+ .workspace-fold .ultracode-toggle{grid-column:1/4}
+ .workspace-fold .execution-menu{left:-42px;max-width:calc(100vw - 40px)}
+}
+@media(max-height:700px){
+ .workspace-fold #console>header{min-height:48px;padding-block:6px;flex-wrap:nowrap}
+ .workspace-fold #text{min-height:56px;max-height:min(110px,16dvh);padding-top:10px}
+ .workspace-fold #composer{padding-block:8px}
+ .workspace-status-body{max-height:min(100px,16dvh)}
+ .workspace-fold #attachment-chips{max-height:64px}
+ .workspace-fold .brand{height:48px;min-height:48px;padding-block:8px}
+ .workspace-fold #project-panel{padding-block:10px}
+ .workspace-fold .workspace-menu{padding-block:6px}
+}
+@media(max-height:550px){
+ .workspace-fold #text{max-height:56px}
+ .workspace-fold #attachment-chips{max-height:36px}
+ .workspace-fold #composer{padding-block:4px}
+ .workspace-fold .composer-toolbar{padding-block:2px;gap:2px}
+ .workspace-status-body{max-height:48px}
+ .workspace-fold #status{max-height:40px}
+}

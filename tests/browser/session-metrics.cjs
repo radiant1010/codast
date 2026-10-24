@@ -25,6 +25,7 @@ const {chromium}=require('playwright');
   });
   await page.goto('http://harness.test/');
   await page.locator('#startup-loading').waitFor({state:'hidden'});
+  await page.locator('#workspace-status > summary').click();
   await page.selectOption('#project','sample');
   const table=page.locator('.compact-session-table');
   await page.waitForFunction(()=>document.querySelector('.compact-session-table').textContent.includes('recorded-model'));

@@ -4,6 +4,7 @@ const {chromium}=require('playwright');
 (async()=>{
  const browser=await chromium.launch({headless:true,channel:"msedge",args:["--unsafely-treat-insecure-origin-as-secure=http://harness.test"]});const page=await browser.newPage({viewport:{width:1440,height:1000}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const openStatus=async()=>{if(await page.locator('#workspace-status').getAttribute('open')===null)await page.locator('#workspace-status > summary').click();};
  let fail=false,hold=true,releaseEnvironment;const waiting=[];
  const chats={one:[{task:'one-chat',count:0,status:'active',pinned:0,archived:0}],two:[{task:'regular',count:0,status:'active',pinned:0,archived:0},{task:'other',count:0,status:'active',pinned:0,archived:0}]};
  for(const rows of Object.values(chats))for(const row of rows)row.id=require('node:crypto').randomBytes(16).toString('hex');
@@ -62,6 +63,7 @@ const {chromium}=require('playwright');
  await page.goto('http://harness.test/');
  await page.locator('#startup-loading').waitFor({state:'hidden'});
  assert.equal(await page.locator('#workspace').evaluate(n=>n.inert),false);
+ await openStatus();
  assert.match(await page.locator('.codex-account-summary .query-refresh').getAttribute('title'),/확인 중/);
  hold=false;waiting.splice(0).forEach(done=>done());
  await page.waitForFunction(()=>document.querySelector('.codex-account-summary').textContent.includes('25%'));
@@ -114,6 +116,7 @@ const {chromium}=require('playwright');
  const boxes=await chatRow('renamed').locator('.chat-row-actions button').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
  assert.equal(boxes.length,3);
  for(let i=1;i<3;i++){assert.equal(boxes[i].y,boxes[0].y);assert.equal(boxes[i].w,boxes[0].w);assert.equal(boxes[i].h,boxes[0].h);assert.equal(boxes[i].x,boxes[i-1].x+boxes[i-1].w);}
+ await openStatus();
  assert.match(await page.locator('.account-table').innerText(),/주간 63%/);
  assert.match(await page.locator('.account-table').innerText(),/Claude\s+5시간 0%/);
  assert.deepEqual(await page.locator('.environment-table th').allTextContents(),['항목','상태','값']);
@@ -147,11 +150,12 @@ const {chromium}=require('playwright');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  assert.equal(await page.locator('.compact-session-panel .dashboard-body').evaluate(n=>n.scrollWidth<=n.clientWidth),true);
  await page.fill('#text','홈 이동 후 복원할 초안');
+ await page.locator('#toggle-sidebar').click();
  await page.getByRole('link',{name:'CODAST 홈으로'}).click();
  await page.locator('#welcome').waitFor({state:'visible'});
  assert.equal(await page.locator('#project').inputValue(),'');
  assert.equal(await page.locator('#composer').isVisible(),false);
- await page.selectOption('#project','two');
+ await page.locator('#toggle-sidebar').click();await page.selectOption('#project','two');await page.keyboard.press('Escape');
  await page.waitForFunction(()=>document.querySelector('#send').disabled===false);
  assert.equal(await page.locator('#text').inputValue(),'홈 이동 후 복원할 초안');
  await page.evaluate(()=>{
@@ -182,7 +186,7 @@ const {chromium}=require('playwright');
  await page.getByText('변경 후 저장 버튼을 누르세요.',{exact:true}).waitFor();
  await page.fill('#rulebook-content','내 작업 규정');
  const checkStyle=await page.locator('#rulebook-tree input[type=checkbox]').first().evaluate(n=>({radius:getComputedStyle(n).borderRadius,bg:getComputedStyle(n).backgroundColor,width:n.getBoundingClientRect().width,height:n.getBoundingClientRect().height}));
- assert.deepEqual(checkStyle,{radius:'0px',bg:'rgb(237, 155, 95)',width:14,height:14});
+ assert.deepEqual(checkStyle,{radius:'3.5px',bg:'rgb(13, 110, 253)',width:16,height:16});
  await page.locator('#rulebook-tree input[type=checkbox]').first().focus();await page.keyboard.press('Space');
  assert.equal(await page.locator('#rulebook-tree input[type=checkbox]').first().isChecked(),false);
  await page.keyboard.press('Space');assert.equal(await page.locator('#rulebook-tree input[type=checkbox]').first().isChecked(),true);
@@ -275,7 +279,7 @@ const {chromium}=require('playwright');
   }
   await page.keyboard.press('Escape');assert.equal(await dialog.isVisible(),false);
  }
- assert.deepEqual(await page.locator('.workspace-menu>button').allTextContents(),['시작 도움말','작업 룰북','설정']);
+ assert.deepEqual(await page.locator('.workspace-menu>button').allTextContents(),['시작 도움말','작업 룰북','설정','워크플로']);
  await page.fill('#text','settings navigation draft');
  const savedScroll=await page.locator('#messages').evaluate(n=>{const block=document.createElement('div');block.style.height='1800px';n.append(block);n.scrollTop=240;return n.scrollTop;});
 
@@ -312,7 +316,7 @@ const {chromium}=require('playwright');
  await page.waitForFunction(()=>document.querySelector('#session-notifications').textContent==='알림 1');
  await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
  await page.waitForFunction(()=>document.querySelector('#session-notifications').textContent==='알림 1');
- await page.locator('#session-notifications').click();assert.equal(await page.locator('#session-notifications').textContent(),'알림 0');
+ await openStatus();await page.locator('#session-notifications').click();assert.equal(await page.locator('#session-notifications').textContent(),'알림 0');
  assert.equal(await page.locator('#session-alerts button').count(),1);
  notificationOffline=true;notificationRows.push({seq:2,run_id:'offline-failure',project:'two',task:'renamed',status:'failed'});
  await page.evaluate(()=>window.dispatchEvent(new Event('online')));

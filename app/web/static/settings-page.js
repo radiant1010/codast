@@ -11,7 +11,7 @@
     const match=location.hash.match(/^#settings\/([a-z-]+)$/),selected=match&&pages.get(match[1]);
     if(!selected){
       if(wasOpen){shell.hidden=true;$('workspace').style.removeProperty('display');
-        statusHome?.parent.insertBefore($('status'),statusHome.next);$('messages').scrollTop=workspaceScroll;back.blur();$('open-settings').focus();wasOpen=false;}
+        statusHome?.parent.insertBefore($('status'),statusHome.next);$('messages').scrollTop=workspaceScroll;back.blur();($('open-settings').getClientRects().length?$('open-settings'):$('toggle-sidebar')).focus();wasOpen=false;}
       return;
     }
     if(!wasOpen){window.chatState.save();workspaceScroll=$('messages').scrollTop;statusHome={parent:$('status').parentNode,next:$('status').nextSibling};shell.append($('status'));}
