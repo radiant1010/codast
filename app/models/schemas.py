@@ -2,12 +2,15 @@ from typing import Literal
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
+PROJECT_NAME_PATTERN = r"^[a-zA-Z0-9가-힣ㄱ-ㅣ\u1100-\u11ff][a-zA-Z0-9가-힣ㄱ-ㅣ\u1100-\u11ff_-]{0,63}$"
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
 class ProjectCreate(StrictModel):
-    name: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
+    name: str = Field(pattern=PROJECT_NAME_PATTERN)
 
 
 class WorkspaceRegister(ProjectCreate):
@@ -87,7 +90,7 @@ class ClientConfig(StrictModel):
 
 
 class OnboardingSelection(StrictModel):
-    project: str | None = Field(default=None, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$')
+    project: str | None = Field(default=None, pattern=PROJECT_NAME_PATTERN)
     client: Literal['codex', 'claude'] | None = None
     deferred: bool = False
 

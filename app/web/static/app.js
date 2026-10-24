@@ -30,7 +30,27 @@ function consoleOutput(text,cls='console-output'){
 function base(){if(!$('project').value)throw Error('프로젝트를 선택하세요.');return '/projects/'+encodeURIComponent($('project').value);}
 function valid(b,e=epoch){return e===epoch&&$('project').value&&b==='/projects/'+encodeURIComponent($('project').value);}
 function notice(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error);}
-async function api(path,method='GET',body){const r=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(!r.ok){const error=Error(typeof d.detail==='string'?d.detail:JSON.stringify(d.detail));error.status=r.status;throw error;}return d;}
+const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하고, 한글, 영문, 숫자, 하이픈(-), 밑줄(_)만 사용해 1~64자로 입력하세요. 예: 아호이';
+function apiErrorMessage(detail,path,status){
+  if(typeof detail==='string'&&detail.trim())return detail;
+  if(Array.isArray(detail)&&detail.length){
+    const labels={name:'이름',path:'경로',text:'메시지',task:'채팅 이름',model:'모델',client:'에이전트',mode:'권한',answer:'답변'};
+    return [...new Set(detail.map(issue=>{
+      const field=issue?.loc?.at(-1);
+      if(field==='name'&&['/workspaces','/projects'].includes(path)&&issue.type==='string_pattern_mismatch')return projectNameError;
+      let reason='입력한 값의 형식과 허용 범위를 확인해 주세요.';
+      if(issue?.type==='missing')reason='필수 항목을 입력해 주세요.';
+      else if(issue?.type==='string_too_long'&&Number.isInteger(issue.ctx?.max_length))reason=issue.ctx.max_length.toLocaleString('ko-KR')+'자 이하로 입력해 주세요.';
+      else if(issue?.type==='string_too_short'&&Number.isInteger(issue.ctx?.min_length))reason=issue.ctx.min_length.toLocaleString('ko-KR')+'자 이상 입력해 주세요.';
+      else if(issue?.type==='literal_error')reason='선택 가능한 항목 중 하나를 선택해 주세요.';
+      else if(issue?.type==='extra_forbidden')reason='지원하지 않는 항목이 포함되어 있습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.';
+      else if(issue?.type==='value_error'&&typeof issue.msg==='string'&&/[가-힣]/.test(issue.msg))reason=issue.msg.replace(/^Value error, /,'');
+      return (labels[field]?labels[field]+' 입력 오류':'입력값 오류')+': '+reason;
+    }))].join('\n');
+  }
+  return `요청 처리 오류 (${status}): 요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.`;
+}
+async function api(path,method='GET',body){const r=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const d=await r.json();if(!r.ok){const error=Error(apiErrorMessage(d.detail,path,r.status));error.status=r.status;throw error;}return d;}
 async function act(fn){try{await fn();}catch(e){notice(e.message,true);}}
 function button(label,fn,cls){const n=el('button',label,cls);n.type='button';n.onclick=()=>act(fn);if(cls==='secondary'||cls==='icon-action')window.decorateAction?.(n,label);return n;}
 function selectedPaths(){return [];}
@@ -218,6 +238,11 @@ $('project').onchange=()=>act(loadProject);
 $('home').onclick=event=>{event.preventDefault();act(async()=>{
   window.chatState.pause();$('project').value='';await loadProject();window.refreshSessionView?.();
 });};
+for(const id of ['name','workspace-name']){
+  const input=$(id);
+  input.oninvalid=event=>{event.preventDefault();if(id==='workspace-name')$('folder-status').textContent=projectNameError;else notice(projectNameError,true);input.focus();};
+  input.oninput=()=>{if(id==='workspace-name'&&$('folder-status').textContent===projectNameError)$('folder-status').textContent='';else if(id==='name'&&$('status').textContent===projectNameError)notice('');};
+}
 $('create').onsubmit=e=>{e.preventDefault();act(async()=>{const name=$('name').value;await api('/projects','POST',{name});await projects(name);await loadProject();});};
 $('reload').onclick=()=>act(()=>projectReady?switchChat(filter):loadProject());$('reload-rules').onclick=()=>act(()=>loadRules());
 $('messages-prev').onclick=()=>act(async()=>{offset=Math.max(0,offset-20);await conversation();});$('messages-next').onclick=()=>act(async()=>{offset+=20;await conversation();});

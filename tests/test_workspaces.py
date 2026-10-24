@@ -2,10 +2,58 @@ import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.parse import quote
 
+import pytest
 from fastapi.testclient import TestClient
 from app.main import create_app
 from app.core.folder_picker import FolderPicker, choose_folder
+
+
+@pytest.mark.parametrize('linked', [False, True])
+@pytest.mark.parametrize('name', ['가상프로젝트', '테스트-Project_1', 'ㄱㄴ_실험', '\u1100\u1161'])
+def test_korean_names_support_creation_selection_and_restore(tmp_path, linked, name):
+    root = tmp_path / 'managed'
+    external = tmp_path / 'external'
+    external.mkdir()
+    original = external / 'original.txt'
+    original.write_text('keep this', encoding='utf-8')
+    base = '/api/projects/' + quote(name, safe='')
+    with TestClient(create_app(root)) as client:
+        assert client.post('/api/projects', json={'name': 'legacy'}).status_code == 201
+        route, body = ('/api/workspaces', {'name': name, 'path': str(external)}) if linked else ('/api/projects', {'name': name})
+        response = client.post(route, json=body)
+        assert response.status_code == 201, response.text
+        expected_path = str((external if linked else root / name).resolve())
+        assert client.get(base + '/workspace').json()['path'] == expected_path
+        assert set(client.get('/api/projects').json()['projects']) == {'legacy', name}
+        selected = client.put('/api/onboarding', json={'project': name, 'client': 'codex', 'deferred': True})
+        assert selected.status_code == 200, selected.text
+        assert selected.json()['project'] == name
+        assert client.delete(base).status_code == 200
+        assert client.get('/api/projects').json()['projects'] == ['legacy']
+        assert name in client.get('/api/deleted-projects').json()['projects']
+        assert client.post('/api/deleted-projects/' + quote(name, safe='') + '/restore').status_code == 200
+    with TestClient(create_app(root)) as client:
+        assert client.get(base + '/workspace').json()['path'] == expected_path
+        assert client.get('/api/onboarding').json()['project'] == name
+        assert set(client.get('/api/projects').json()['projects']) == {'legacy', name}
+    assert original.read_text(encoding='utf-8') == 'keep this'
+    assert not (external / '.harness').exists()
+
+
+def test_korean_name_support_keeps_path_and_length_restrictions(tmp_path):
+    root = tmp_path / 'managed'
+    external = tmp_path / 'external'
+    external.mkdir()
+    with TestClient(create_app(root)) as client:
+        for name in ('../가상', '가상/하위', '가상\\하위', '가상:비밀', '가상.', '가상 ', '가상 프로젝트', '-가상', '가' * 65, '가\n'):
+            assert client.post('/api/projects', json={'name': name}).status_code == 422
+            assert client.post('/api/workspaces', json={'name': name, 'path': str(external)}).status_code == 422
+        for name in ('CON', 'NUL'):
+            assert client.post('/api/projects', json={'name': name}).status_code == 403
+        assert client.get('/api/projects').json()['projects'] == []
+    assert list(external.iterdir()) == []
 
 
 def test_external_workspace_registration_and_restore(tmp_path):

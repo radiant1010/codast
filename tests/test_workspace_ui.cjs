@@ -26,3 +26,10 @@ test('successful selection populates path and suggested project name',async()=>{
  const f=fixture();f.$('add-workspace').onclick();f.reply({path:'C:/sample-project'});await f.$('pick-folder').onclick();
  assert.equal(f.$('workspace-path').value,'C:/sample-project');assert.equal(f.$('workspace-name').value,'sample-project');assert.equal(f.$('register-folder').disabled,false);
 });
+
+test('Korean folder names are preserved in the suggestion and registration',async()=>{
+ const f=fixture();f.$('add-workspace').onclick();f.reply({path:'C:/가상프로젝트'});await f.$('pick-folder').onclick();
+ assert.equal(f.$('workspace-name').value,'가상프로젝트');
+ await f.$('register-workspace').onsubmit({preventDefault(){}});
+ assert.equal(f.calls[1][2].name,'가상프로젝트');assert.equal(f.$('workspace-dialog').open,false);
+});
