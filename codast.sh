@@ -10,7 +10,7 @@ case "$command" in
     init|start|test) ;;
     help)
         printf '%s\n' \
-            'sh ./codast.sh init   - Install uv, Python and project packages' \
+            'sh ./codast.sh init   - Install packages and shared Serena/Context7 tools' \
             'sh ./codast.sh start  - Prepare packages and start CODAST (default)' \
             'sh ./codast.sh test   - Prepare packages and run Python tests'
         exit 0
@@ -66,6 +66,7 @@ fi
 
 case "$command" in
     init)
+        "$uv_path" run --no-sync python -m app.core.toolchain --uv "$uv_path"
         printf '%s\n' \
             'Setup complete. Run sh ./codast.sh start to open the server.' \
             'Install and sign in to Codex or Claude Code separately to use AI.'

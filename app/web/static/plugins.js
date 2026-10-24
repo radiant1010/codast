@@ -1,6 +1,7 @@
 /* Installed plugin settings use native state, with independent provider views. */
 (()=>{
   const panel=el('section');panel.id='plugins-panel';
+  panel.append(button('CODAST 기본 도구 설치와 연결',()=>window.settingsPage.open('tools')));
   const tabs=el('div',undefined,'plugin-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','플러그인 에이전트');
   panel.append(el('p','현재 프로젝트에서 CLI가 사용하는 플러그인을 관리합니다. 데스크톱 앱의 연결 목록과 다를 수 있습니다.','hint'),tabs);
   const states={},scopes={user:'모든 프로젝트, 나',project:'현재 프로젝트, 모든 사용자',local:'현재 프로젝트, 나',managed:'관리자 지정',cli:'CLI 사용자 설치',unknown:'범위 확인 필요'};

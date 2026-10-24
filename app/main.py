@@ -46,6 +46,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.environment_status = EnvironmentStatus()
     from app.llm.plugins import Plugins
     app.state.plugins = Plugins()
+    from app.core.tool_catalog import ToolCatalog
+    app.state.tool_catalog = ToolCatalog(app.state.plugins)
     app.state.onboarding = Onboarding(app.state.harness)
     from app.core.document_vault import DocumentVault
     app.state.document_vault = DocumentVault(projects)
@@ -68,6 +70,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.include_router(router)
     from app.api.plugins import router as plugins_router
     app.include_router(plugins_router)
+    from app.api.toolchain import router as toolchain_router
+    app.include_router(toolchain_router)
     from app.api.materials import router as materials_router
     app.include_router(materials_router)
     from app.api.document_vault import router as document_vault_router

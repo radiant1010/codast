@@ -1,0 +1,12 @@
+.tool-accounts,.tool-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+.tool-account{padding:8px 12px;border:1px solid var(--terminal-border);border-radius:6px;font-size:13px}
+.tool-toolbar input{flex:1;min-width:160px}.tool-toolbar select{width:auto;min-width:140px}
+.tool-summary{font-weight:600}.tool-list{display:grid;gap:12px;margin:16px 0}
+.tool-card{border:1px solid var(--terminal-border);padding:18px;border-radius:8px}
+.tool-card[hidden]{display:none}.tool-title{display:flex;align-items:center;gap:12px}.tool-title h2{font-size:17px;margin:0}.tool-title .plugin-scope{margin:0}
+.tool-card>.hint{margin:8px 0 14px}.tool-clients{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.tool-client{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-top:12px;border-top:1px solid var(--terminal-border)}
+.tool-client strong{font-size:13px}.tool-state{display:block;font-size:14px;margin:5px 0}.tool-version{display:block;font-size:12px;color:var(--terminal-muted);overflow-wrap:anywhere}
+.tool-client button{white-space:nowrap;font-size:12px}.tool-help{padding:20px;border:1px solid var(--terminal-accent);border-radius:8px;margin:16px 0}.tool-help h2{font-size:18px}.tool-help button{margin-left:16px}
+.tool-errors:empty{display:none}.tool-errors{border-left:3px solid #e5bf72;padding-left:12px}.tool-errors p{font-size:13px;overflow-wrap:anywhere}
+@media(max-width:600px){.tool-clients{grid-template-columns:1fr}.tool-toolbar input{flex-basis:100%}.tool-card{padding:14px}}

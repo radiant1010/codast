@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "id": "superpowers", "name": "Superpowers", "default": true, "kind": "plugin",
+      "description": "설계, 테스트, 디버깅과 검토 절차",
+      "install": {"id": "superpowers@superpowers-marketplace", "repo": "obra/superpowers-marketplace"},
+      "clients": {
+        "codex": {"reuse": [["superpowers@openai-curated-remote"], ["superpowers@superpowers-marketplace"], ["superpowers@superpowers-dev"]]},
+        "claude": {"reuse": [["superpowers@superpowers-marketplace"], ["superpowers@claude-plugins-official"], ["superpowers@superpowers-dev"], ["superpowers@synced"]]}
+      },
+      "guide": "설치한 스킬은 다음 새 실행부터 확인하세요. CODAST의 작업 범위와 사용자 승인 규칙을 우선합니다.",
+      "url": "https://github.com/obra/superpowers"
+    },
+    {
+      "id": "ponytail", "name": "Ponytail", "default": true, "kind": "plugin",
+      "description": "기존 구현을 재사용하고 필요한 범위만 개발하는 규칙",
+      "install": {"id": "ponytail@ponytail", "repo": "DietrichGebert/ponytail"},
+      "clients": {
+        "codex": {"reuse": [["ponytail@ponytail"]]},
+        "claude": {"reuse": [["ponytail@ponytail"], ["ponytail@synced"]]}
+      },
+      "guide": "설치와 훅 신뢰 승인은 별개입니다. Codex의 /hooks에서 필요한 훅의 출처를 확인하세요. CODAST가 훅 신뢰를 대신 승인하지 않습니다.",
+      "url": "https://github.com/DietrichGebert/ponytail"
+    },
+    {
+      "id": "serena", "name": "Serena", "default": true, "kind": "mcp",
+      "description": "코드 심볼과 참조 관계 탐색",
+      "guide": "CODAST가 실행하는 양쪽 CLI에 같은 탐색용 MCP를 전달합니다. 프로젝트의 언어 서버와 실제 분석은 첫 사용 시 확인합니다.",
+      "url": "https://github.com/oraios/serena"
+    },
+    {
+      "id": "context7", "name": "Context7", "default": true, "kind": "mcp",
+      "description": "현재 기술 버전의 개발 문서 조회",
+      "guide": "공식 원격 MCP를 인증키 없이 사용합니다. 이용 한도와 실제 연결은 사용할 때 확인합니다. 검색에 비공개 자료나 인증정보를 넣지 마세요.",
+      "url": "https://github.com/upstash/context7"
+    },
+    {
+      "id": "github", "name": "GitHub", "default": false, "kind": "plugin",
+      "description": "저장소, 이슈와 PR 연결", "account": true,
+      "clients": {
+        "codex": {"reuse": [["github@openai-curated-remote"]], "guide": "Codex의 /plugins에서 GitHub를 선택해 설치와 계정 연결을 완료하세요. 기존 계정 연결이 있으면 해당 서비스에서 재사용합니다."},
+        "claude": {"reuse": [["github@claude-plugins-official"], ["github@synced"]], "guide": "Claude의 /plugin에서 GitHub를 선택해 설치한 뒤 /mcp에서 설정을 확인하세요. 공식 플러그인의 GITHUB_PERSONAL_ACCESS_TOKEN 설정 안내를 따르세요. 토큰을 CODAST에 입력하지 마세요."}
+      },
+      "url": "https://github.com/github/github-mcp-server"
+    },
+    {
+      "id": "notion", "name": "Notion", "default": false, "kind": "plugin",
+      "description": "팀 문서와 작업 자료 연결", "account": true,
+      "clients": {
+        "codex": {"reuse": [["notion@openai-curated-remote"]], "guide": "Codex의 /plugins에서 Notion을 선택해 설치와 계정 연결을 완료하세요. 접근할 워크스페이스는 Notion 인증 화면에서 선택합니다."},
+        "claude": {"reuse": [["notion@claude-plugins-official"], ["notion@synced"]], "guide": "Claude의 /plugin에서 Notion을 선택하고 해당 플러그인의 연결 안내를 따르세요. /mcp에서 연결 상태를 확인하세요."}
+      },
+      "url": "https://developers.notion.com/docs/mcp"
+    },
+    {
+      "id": "documents", "name": "문서 작업", "default": false, "kind": "plugin",
+      "description": "Word, PDF, 스프레드시트와 프레젠테이션 작업",
+      "clients": {
+        "codex": {"reuse": [["documents@openai-primary-runtime", "pdf@openai-primary-runtime", "spreadsheets@openai-primary-runtime", "presentations@openai-primary-runtime"]], "guide": "Codex의 기존 Documents, PDF, Spreadsheets, Presentations를 재사용합니다. 없는 항목은 Codex 플러그인 화면에서 제공 여부와 설치를 확인하세요. 제공사 실행 환경이 필요합니다."},
+        "claude": {"reuse": [["document-skills@anthropic-agent-skills"], ["document-skills@synced"]], "guide": "Claude용 공식 document-skills는 anthropics/skills의 설치 안내와 이용 조건을 확인해 Claude에서 설치하세요. 스킬이 사용하는 외부 프로그램은 별도 준비가 필요할 수 있습니다. Codex용으로 복사하지 않습니다."}
+      },
+      "url": "https://github.com/anthropics/skills"
+    }
+  ]
+}

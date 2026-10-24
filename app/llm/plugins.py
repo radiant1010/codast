@@ -3,13 +3,34 @@ import asyncio
 import hashlib
 from itertools import islice
 import json
+import os
 from pathlib import Path
 import re
+import shutil
+from urllib.parse import urlsplit
 
 from app.llm import cli
 
 
 SELECTOR = r'^[A-Za-z0-9][A-Za-z0-9._-]*(?:@[A-Za-z0-9][A-Za-z0-9._-]*)?$'
+
+
+def matches_repository(source, repo):
+    if not isinstance(source, str):
+        return False
+    source, repo = source.lower(), repo.lower()
+    if source == repo:
+        return True
+    if source.startswith('git@github.com:'):
+        source = 'ssh://git@github.com/' + source.partition(':')[2]
+    try:
+        url = urlsplit(source)
+        transport = (url.scheme == 'https' and url.username is None and url.port in (None, 443) or
+                     url.scheme == 'ssh' and url.username == 'git' and url.port in (None, 22))
+        return (transport and url.hostname == 'github.com' and not url.password and not url.query and not url.fragment
+                and url.path.rstrip('/').removesuffix('.git') == '/' + repo)
+    except ValueError:
+        return False
 
 
 def metadata(folder):
@@ -93,12 +114,69 @@ class Plugins:
 
     async def run(self, path, args, cwd, timeout=25):
         try:
-            code, output, _ = await cli.ProcessRunner().run([path, 'plugin', *args], cwd, timeout=timeout)
+            code, output, _ = await cli.ProcessRunner().run([path, 'plugin', *args], cwd, timeout=timeout,
+                env={**os.environ, 'GIT_TERMINAL_PROMPT': '0', 'GCM_INTERACTIVE': '0'})
         except (OSError, TimeoutError, RuntimeError) as exc:
             raise ValueError('플러그인 명령이 완료되지 않았습니다. 목록을 새로고침해 상태를 확인하세요.') from exc
         if code:
             raise ValueError('CLI가 플러그인 명령을 완료하지 못했습니다. 연결, 관리 정책, 의존 플러그인을 확인하세요. 추가 승인이 필요한 업데이트는 원래 CLI에서 진행하세요.')
         return output
+
+    async def marketplaces(self, path, client, cwd):
+        try:
+            data = json.loads(await self.run(path, ['marketplace', 'list', '--json'], cwd))
+            rows = data.get('marketplaces') if client == 'codex' and isinstance(data, dict) else data
+            if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get('name'), str) for row in rows):
+                raise ValueError()
+            return rows
+        except ValueError as exc:
+            raise ValueError('마켓플레이스 목록을 확인하지 못했습니다. CLI 버전과 연결을 확인하세요.') from exc
+
+    async def verify_marketplace(self, row, repo, cwd):
+        source = row.get('repo') if row.get('source') == 'github' else None
+        if row.get('source') == 'git':
+            source = row.get('url')
+        declared = row.get('marketplaceSource')
+        if isinstance(declared, dict):
+            source = declared.get('source') if declared.get('sourceType') in ('git', 'github') else ''
+        if source is None and row.get('root'):
+            git = shutil.which('git')
+            if git:
+                try:
+                    code, output, _ = await cli.ProcessRunner().run(
+                        [git, '-C', row['root'], 'config', '--get', 'remote.origin.url'], cwd, timeout=10)
+                    if code == 0:
+                        source = output.strip()
+                except (OSError, ValueError, RuntimeError, TimeoutError):
+                    pass
+        if not matches_repository(source, repo):
+            raise ValueError('같은 이름의 마켓플레이스 출처가 기본 목록과 다르거나 확인되지 않습니다. 기존 설정은 유지했습니다. 원래 CLI에서 출처를 확인하세요.')
+
+    async def install(self, path, client, cwd, specification):
+        """Called under the provider lock, only with a repository-owned catalog entry."""
+        identity, repo = specification['id'], specification['repo']
+        if not re.fullmatch(SELECTOR, identity) or not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
+            raise ValueError('기본 플러그인 목록의 설치 출처가 올바르지 않습니다.')
+        action = 'add' if client == 'codex' else 'install'
+        help_text = await self.run(path, [action, '--help'], cwd)
+        required = ['--json'] + (['--scope'] if client == 'claude' else [])
+        if any(flag not in help_text for flag in required):
+            raise ValueError('이 CLI 버전은 자동 설치 명령을 지원하지 않습니다. CLI를 업데이트한 뒤 다시 시도하세요.')
+        market = identity.split('@')[-1]
+        rows = await self.marketplaces(path, client, cwd)
+        matches = [row for row in rows if row['name'] == market]
+        if not matches:
+            flags = ['--json'] if client == 'codex' else ['--scope', 'user']
+            help_text = await self.run(path, ['marketplace', 'add', '--help'], cwd)
+            if flags[0] not in help_text:
+                raise ValueError('이 CLI 버전은 마켓플레이스 자동 등록을 지원하지 않습니다.')
+            await self.run(path, ['marketplace', 'add', f'https://github.com/{repo}.git', *flags], cwd, timeout=120)
+            matches = [row for row in await self.marketplaces(path, client, cwd) if row['name'] == market]
+        if len(matches) != 1:
+            raise ValueError('마켓플레이스 등록 결과를 확인하지 못했습니다. 원래 CLI에서 확인하세요.')
+        await self.verify_marketplace(matches[0], repo, cwd)
+        args = [action, identity] + (['--scope', 'user'] if client == 'claude' else []) + ['--json']
+        await self.run(path, args, cwd, timeout=180)
 
     async def inventory(self, client, path, cwd):
         output = await self.run(path, ['list', '--json'], cwd)

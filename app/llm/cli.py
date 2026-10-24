@@ -68,9 +68,9 @@ def executable(client, configured=''):
 class ProcessRunner:
     limit = 4 * 1024 * 1024
 
-    async def run(self, argv, cwd, prompt='', timeout=600, on_line=None):
+    async def run(self, argv, cwd, prompt='', timeout=600, on_line=None, env=None):
         cancel = threading.Event()
-        worker = asyncio.create_task(asyncio.to_thread(self._run, argv, cwd, prompt, timeout, cancel, on_line))
+        worker = asyncio.create_task(asyncio.to_thread(self._run, argv, cwd, prompt, timeout, cancel, on_line, env))
         try:
             return await asyncio.shield(worker)
         except asyncio.CancelledError:
@@ -99,9 +99,9 @@ class ProcessRunner:
             except ProcessLookupError:
                 pass
 
-    def _run(self, argv, cwd, prompt, timeout, cancel, on_line=None):
+    def _run(self, argv, cwd, prompt, timeout, cancel, on_line=None, env=None):
         kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
-        process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, **kwargs)
         buffers = [bytearray(), bytearray()]
         overflow = threading.Event()
@@ -179,13 +179,13 @@ class CliAdapter:
         self.reasoning_effort = None
         self.ultracode = None
 
-    def arguments(self, mode, session=None):
+    def arguments(self, mode, session=None, mcp_args=None):
         if self.client == 'codex':
             # Global config applies to both new and resumed exec sessions.
             args = [self.path, '-c', 'approval_policy="never"', '-c', f'sandbox_mode="{mode}"']
             if self.reasoning_effort:
                 args += ['-c', f'model_reasoning_effort="{self.reasoning_effort}"']
-            args += ['exec']
+            args += (mcp_args or []) + ['exec']
             if session:
                 args += ['resume', session]
             if self.model:
@@ -199,7 +199,7 @@ class CliAdapter:
             args += ['--model', self.model]
         if self.reasoning_effort:
             args += ['--effort', self.reasoning_effort]
-        args += ['--settings', json.dumps({'ultracode': self.ultracode is True})]
+        args += (mcp_args or []) + ['--settings', json.dumps({'ultracode': self.ultracode is True})]
         return args
 
     async def execute(self, context, cwd, mode, session=None):
@@ -215,9 +215,11 @@ class CliAdapter:
                 raise ValueError('Ultracode를 켜려면 Claude Code 2.1.284 이상이 필요합니다.')
             if self.ultracode and 'xhigh' not in efforts:
                 raise ValueError('Ultracode를 켜려면 Extra high를 지원하는 모델을 선택하세요.')
-        prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + QUESTION_INSTRUCTION + context
+        from app.core.toolchain import Toolchain, TOOL_GUIDE, client_arguments
+        servers = Toolchain().configuration(cwd)
+        prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + QUESTION_INSTRUCTION + (TOOL_GUIDE if servers else '') + context
         options = {'on_line': self.stream_line} if self.on_event else {}
-        code, stdout, stderr = await self.runner.run(self.arguments(mode, session), cwd, prompt, **options)
+        code, stdout, stderr = await self.runner.run(self.arguments(mode, session, client_arguments(self.client, servers)), cwd, prompt, **options)
         if code:
             if self.client == 'codex' and 'thread-store conflict:' in stderr + stdout and 'already has an active writer' in stderr + stdout:
                 raise RuntimeError('다른 Codex 앱이나 CLI가 이 대화를 사용 중이어서 이어갈 수 없습니다. '

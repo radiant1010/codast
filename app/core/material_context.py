@@ -1,6 +1,7 @@
 """Local search over filtered Markdown. Offsets always refer to the saved copy."""
 import json
 import re
+from html import unescape
 
 
 EXCERPT_NOTICE = ('[첨부 자료의 관련 부분 발췌입니다. 생략된 내용이 있으므로 문서 전체에 대한 '
@@ -14,6 +15,18 @@ STOP = set('자료 문서 파일 내용 설명 관련 대해 대한 어떻게 �
            '있어 있나요 인가요 무엇인가요 the a an is are of to in for about please what where which when how find explain'.split())
 HEADING = re.compile(r'^(#{1,6})\s+')
 SEPARATOR = re.compile(r'^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$')
+CODE = (r'[A-Z가-힣][A-Z0-9가-힣]*(?:\s*[._‐‑–—-]\s*[A-Z가-힣][A-Z0-9가-힣]*)*'
+        r'\s*[-_‐‑–—]\s*\d+(?:[.-]\d+)*')
+REFERENCE_CODE = re.compile(r'(?<![A-Za-z0-9_.-])' + CODE + r'(?![A-Za-z0-9_-])', re.I)
+DEFINITION = re.compile(r'(?m)^\s*(?:\|\s*(?:고유번호|요구\s*사항\s*(?:고유\s*)?(?:번호|ID|식별자)|'
+                        r'Requirement\s*(?:ID|number))\s*\|(?:\s*\|)*\s*|#{1,6}\s+)(' + CODE + r')(?=\s|\||:|$)', re.I)
+UNCERTAIN_REFERENCE = re.compile(
+    r'(?:앞(?:서|의)?|이전|다음|위|아래|상기|전술|후술)\s*(?:절|장|항|표|내용|조건|규정|요구\s*사항)|'
+    r'별첨|별표|부록|첨부\s*(?:자료|문서)|\b(?:section|clause|appendix|annex)\b|'
+    r'\b(?:above|below|previous|following)\s+(?:table|conditions?|requirements?|features?)\b|'
+    + CODE + r'\s*(?:~|～|부터|\bthrough\b|\bto\b)\s*(?:' + CODE + r')', re.I)
+REFERENCE_CUE = re.compile(r'참조|참고|준용|따른|따라|관련\s*요구\s*사항|'
+                           r'\b(?:see|refer\w*|follows?|according to)\b', re.I)
 
 
 def search_terms(query):
@@ -106,6 +119,65 @@ def render_excerpt(text, ranges):
     return EXCERPT_NOTICE + '\n\n' + '\n\n'.join(f'[문자 {start + 1}-{end}]\n{text[start:end]}' for start, end in ranges)
 
 
+def complete_references(text, ranges, budget, whole_pages, terms):
+    """Expand explicit requirement definitions; uncertain references keep the full copy."""
+    def key(code):
+        return re.sub(r'\s+', '', code).upper().translate(str.maketrans('‐‑–—_', '-----'))
+
+    headings = [(m.start(), len(m[1])) for m in re.finditer(r'(?m)^(#{1,6})\s+.*$', text)
+                if not re.fullmatch(r'## T\d+\s*', m[0])]
+    if whole_pages:
+        headings = [(m.start(), 1) for m in re.finditer(r'(?m)^# (?:PDF 페이지|PPT 슬라이드) \d+\s*$', text)]
+    definitions = {}
+    for match in DEFINITION.finditer(text):
+        heading = next((h for h in reversed(headings) if h[0] <= match.start()), None)
+        if heading is None:
+            span = [0, len(text)]
+        else:
+            start, depth = heading
+            end = next((p for p, level in headings if p > start and level <= depth), len(text))
+            span = [start, end]
+        definitions.setdefault(key(match[1]), []).append(span)
+    seen = set()
+    while ranges:
+        body = re.sub(r'<br\s*/?>', ' ', unescape('\n'.join(text[start:end] for start, end in ranges)))
+        # A keyword/value lookup cannot establish scope among independent requirements.
+        if REFERENCE_CODE.search(body) and not any(REFERENCE_CODE.fullmatch(term) for term in terms):
+            return text, []
+        if UNCERTAIN_REFERENCE.search(body):
+            return text, []
+        for sentence in re.split(r'\n|(?<=[.!?])\s+', body):
+            if REFERENCE_CUE.search(sentence) and not REFERENCE_CODE.search(sentence):
+                return text, []
+        codes = {key(m[0]) for m in REFERENCE_CODE.finditer(body)} - seen
+        if not codes:
+            break
+        additions = []
+        for code in codes:
+            targets = definitions.get(code, [])
+            if len(targets) != 1:
+                return text, []
+            additions.append(targets[0])
+        seen.update(codes)
+        ranges = merge_ranges(ranges + additions)
+        if len(json.dumps(render_excerpt(text, ranges), ensure_ascii=False)) > budget:
+            return text, []
+    if seen:
+        # Unlinked prose can qualify a requirement; lexical checks cannot prove it irrelevant.
+        gaps, cursor = [], 0
+        for start, end in ranges:
+            gaps.append(text[cursor:start])
+            cursor = end
+        gaps.append(text[cursor:])
+        omitted = re.sub(r'(?m)^# (?:PDF 페이지|PPT 슬라이드) \d+\s*$|^## T\d+\s*$', '', '\n'.join(gaps))
+        if omitted.strip():
+            return text, []
+    excerpt = render_excerpt(text, ranges)
+    if not ranges or len(excerpt) >= len(text) or len(json.dumps(excerpt, ensure_ascii=False)) > budget:
+        return text, []
+    return excerpt, ranges
+
+
 def retrieve(db, identity, text, terms, budget, whole_pages=False):
     if not terms or len(text) <= 8000 or budget < 500:
         return text, []
@@ -117,7 +189,7 @@ def retrieve(db, identity, text, terms, budget, whole_pages=False):
                                if all(term in text[start:end].lower() for term in terms)])
         excerpt = render_excerpt(text, ranges)
         if ranges and len(excerpt) < len(text) and len(json.dumps(excerpt,ensure_ascii=False)) <= budget:
-            return excerpt, ranges
+            return complete_references(text, ranges, budget, whole_pages=True, terms=terms)
         return text, []
     rows = db.execute('SELECT * FROM material_chunks WHERE material=? ORDER BY ordinal', (identity,)).fetchall()
     if not rows:
@@ -176,4 +248,4 @@ def retrieve(db, identity, text, terms, budget, whole_pages=False):
     excerpt = render_excerpt(text, ranges)
     if not ranges or len(excerpt) >= len(text) or not all(term in excerpt.lower() for term in terms):
         return text, []
-    return excerpt, ranges
+    return complete_references(text, ranges, budget, whole_pages=False, terms=terms)

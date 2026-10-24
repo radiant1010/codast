@@ -60,11 +60,12 @@ def test_init_prepares_project_environment_without_starting(shell_launcher):
     result = run('init')
     assert result.returncode == 0, result.stderr
     lines = log.read_text().splitlines()
-    assert len(lines) == 1
+    assert len(lines) == 2
     cwd, environment, command = lines[0].split('|')
     assert cwd.endswith('/project with spaces')
     assert environment == cwd + '/.venv'
     assert command == 'sync --locked --inexact --python 3.12'
+    assert '|run --no-sync python -m app.core.toolchain --uv ' in lines[1]
 
 
 def test_existing_environment_keeps_its_python(shell_launcher):
@@ -103,6 +104,14 @@ def test_server_status_is_returned(shell_launcher):
     assert run('start').returncode == 9
 
 
+def test_toolchain_failure_does_not_report_setup_complete(shell_launcher):
+    _, _, env, _, run = shell_launcher
+    env['CODAST_TEST_RUN_EXIT'] = '9'
+    result = run('init')
+    assert result.returncode == 9
+    assert 'Setup complete' not in result.stdout
+
+
 @pytest.mark.parametrize('args,success', [(('help',), True), (('build',), False), (('init', 'extra'), False)])
 def test_help_and_invalid_arguments_do_not_install(shell_launcher, args, success):
     _, _, _, log, run = shell_launcher
@@ -117,7 +126,7 @@ def test_local_uv_is_reused_before_path_uv(shell_launcher):
     shutil.copy2(tools / 'uv', local_uv)
     (tools / 'uv').write_text('#!/bin/sh\nexit 99\n', encoding='ascii', newline='\n')
     assert run('init').returncode == 0
-    assert len(log.read_text().splitlines()) == 1
+    assert len(log.read_text().splitlines()) == 2
 
 
 @pytest.mark.parametrize('downloader', ['curl', 'wget'])
@@ -142,7 +151,7 @@ def test_bootstrap_installs_uv_locally_and_then_syncs(shell_launcher, downloader
     result = run('init')
     assert result.returncode == 0, result.stderr
     assert (project / '.local/uv/uv').is_file()
-    assert len(log.read_text().splitlines()) == 1
+    assert len(log.read_text().splitlines()) == 2
 
 
 def test_failed_download_never_executes_partial_installer(shell_launcher):

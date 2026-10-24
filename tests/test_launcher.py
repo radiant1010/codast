@@ -42,10 +42,11 @@ def test_init_syncs_locked_packages_in_project_without_starting_server(launcher)
     result = run_launcher(project, env, 'init')
     assert result.returncode == 0, result.stderr.decode(errors='replace')
     lines = log.read_text().splitlines()
-    assert len(lines) == 1
+    assert len(lines) == 2
     assert lines[0].startswith(str(project) + ' | sync ')
     assert '--locked' in lines[0] and '--inexact' in lines[0]
     assert '--python 3.12' in lines[0]
+    assert 'run --no-sync python -m app.core.toolchain --uv ' in lines[1]
 
 
 def test_existing_environment_keeps_its_python_version(launcher):
@@ -80,6 +81,14 @@ def test_server_failure_is_returned_to_caller(launcher):
     project, env, _ = launcher
     env['CODAST_TEST_RUN_EXIT'] = '9'
     assert run_launcher(project, env, 'start').returncode == 9
+
+
+def test_toolchain_failure_is_returned_without_setup_complete_message(launcher):
+    project, env, _ = launcher
+    env['CODAST_TEST_RUN_EXIT'] = '9'
+    result = run_launcher(project, env, 'init')
+    assert result.returncode == 9
+    assert b'Setup complete' not in result.stdout
 
 
 @pytest.mark.parametrize('command,expected', [('help', 0), ('build', 1)])

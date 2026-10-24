@@ -370,3 +370,125 @@ def test_native_body_cannot_create_a_page_boundary(tmp_path, monkeypatch, suffix
     assert marker in selected[0].content
     assert 'Exception: temporary users are prohibited.' in selected[0].content
     assert 'Unrelated appendix' not in selected[0].content
+
+
+@pytest.mark.parametrize('native', [False, True])
+@pytest.mark.parametrize('reference', ['Aurora support follows EDU-202.', 'Aurora 지원은 EDU-202의 요구사항과 같이 제공한다.',
+                                      'Aurora 지원은 EDU-<br>202의 요구사항과 같이 제공한다.'])
+def test_requirement_references_follow_a_chain_and_stop_at_a_cycle(tmp_path, native, reference):
+    from app.core.material_context import retrieve
+    _, store = setup_store(tmp_path)
+    titles = ['# PDF 페이지 ' + str(i) if native else '# Policy ' + str(i) for i in range(1, 5)]
+    if not native:
+        titles[-1] = '# Background'
+    text = (titles[0] + '\n\n| 고유번호 | OPS-101 |\n| --- | --- |\n'
+            '| 내용 | ' + reference + ' |\n\n' + titles[1] +
+            '\n\n| 고유번호 | EDU-202 |\n| --- | --- |\n'
+            '| 내용 | Training lasts at least 47 minutes; see EXC-303. |\n\n' + titles[2] +
+            '\n\n| 고유번호 | EXC-303 |\n| --- | --- |\n'
+            '| 내용 | Emergency accounts are excluded; see OPS-101. |\n\n' + titles[3] +
+            '\n\n' + 'Unrelated background. ' * 500)
+    report = store.import_file('one', 'chain.md', text.encode())
+    full = store.read('one', report['id'])['content']
+    with store.storage.connect() as db:
+        sent, ranges = retrieve(db, report['id'], full, ['ops-101'], 6000, whole_pages=native)
+    assert ranges == []
+    assert sent == full
+    assert 'Training lasts at least 47 minutes' in sent
+    assert 'Emergency accounts are excluded' in sent
+
+
+@pytest.mark.parametrize('reference', [
+    'See MISSING-909.', '앞 절의 예외 조건을 따른다.', '앞<br>절의 예외 조건을 따른다.', 'See the previous section.',
+    'See EDU-202 and Appendix A.', 'REQ-10 through REQ-12 apply.',
+])
+def test_unresolved_or_ambiguous_reference_delivers_full_text(tmp_path, reference):
+    _, store = setup_store(tmp_path)
+    text = '# OPS-101\n\nAurora needs approval. ' + reference
+    text += '\n\n# Appendix\n\n' + 'Background. ' * 900
+    report = store.import_file('one', 'uncertain.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is OPS-101?')
+    assert audit['materials'][0]['delivery']['mode'] == 'full'
+    assert selected[0].content == store.read('one', report['id'])['content']
+
+
+def test_duplicate_requirement_definition_delivers_full_text(tmp_path):
+    _, store = setup_store(tmp_path)
+    text = '# OPS-101\n\nAurora follows EDU-202.\n\n'
+    for name, condition in [('Training', '47 minutes'), ('Alternative', '93 minutes')]:
+        text += f'# {name}\n\n| 고유번호 | EDU-202 |\n| --- | --- |\n| 내용 | {condition} |\n\n'
+    text += '# Appendix\n\n' + 'Background. ' * 900
+    report = store.import_file('one', 'ambiguous.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is OPS-101?')
+    assert audit['materials'][0]['delivery']['mode'] == 'full'
+    assert selected[0].content == store.read('one', report['id'])['content']
+
+
+def test_reference_expansion_over_budget_preserves_full_text_and_blocks_dispatch(tmp_path):
+    harness, store = setup_store(tmp_path)
+    text = '# OPS-101\n\nAurora follows EDU-202.\n\n# Training\n\n'
+    text += '| 고유번호 | EDU-202 |\n| --- | --- |\n| 내용 | Training lasts 47 minutes. |\n\n'
+    text += 'Other training conditions.\n\n' * 1800
+    text += '# Appendix\n\nBackground.'
+    report = store.import_file('one', 'oversize.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is OPS-101?')
+    assert audit['materials'][0]['delivery']['mode'] == 'full'
+    assert selected[0].content == store.read('one', report['id'])['content']
+    with pytest.raises(ValueError) as error:
+        harness.prepare('one', Command(text='What is OPS-101?', material_ids=[report['id']]))
+    assert '32,000' in str(error.value)
+    assert '전체 전달' in str(error.value)
+    assert harness.storage.runs('one', 10, 0) == []
+
+
+def test_reference_definition_with_blank_table_cells_and_unicode_codes(tmp_path):
+    _, store = setup_store(tmp_path)
+    text = '# OPS-101\n\nAurora follows 교육‐202.\n\n# Training\n\n'
+    text += '| 요구사항 고유번호 |  | 교육 - 202 |  |\n| --- | --- | --- | --- |\n'
+    text += '| 내용 | Training must last at least 47 minutes. | | |\n\n'
+    text += '# Appendix\n\n' + 'Background. ' * 900
+    report = store.import_file('one', 'unicode.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is OPS-101?')
+    assert audit['materials'][0]['delivery']['mode'] == 'full'
+    assert 'Training must last at least 47 minutes.' in selected[0].content
+    assert selected[0].content == store.read('one', report['id'])['content']
+
+
+def test_requirement_code_range_keeps_intermediate_requirements_in_full_text(tmp_path):
+    _, store = setup_store(tmp_path)
+    text = '# OPS-101\n\nAurora follows REQ-10 through REQ-12.\n\n'
+    for code, condition in [('REQ-10', 'Standard approval.'), ('REQ-11', 'Emergency users are excluded.'), ('REQ-12', 'Valid for 47 minutes.')]:
+        text += f'# {code}\n\n{condition}\n\n'
+    text += '# Appendix\n\n' + 'Background. ' * 900
+    report = store.import_file('one', 'range.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is OPS-101?')
+    assert audit['materials'][0]['delivery']['mode'] == 'full'
+    assert selected[0].content == store.read('one', report['id'])['content']
+    assert 'Emergency users are excluded.' in selected[0].content
+
+
+@pytest.mark.parametrize('native', [False, True])
+def test_value_lookup_without_requirement_id_keeps_competing_conditions(tmp_path, native):
+    from app.core.material_context import retrieve
+    _, store = setup_store(tmp_path)
+    text = ('# PDF 페이지 1\n\n# OPS-101\n\n장애 접수 후 8시간 이내 대응 체계를 마련한다.\n\n'
+            '# PDF 페이지 2\n\n# OPS-202\n\n장애 접수 후 4시간 이내 처리한다.\n\n'
+            '# PDF 페이지 3\n\n' + 'General background. ' * 600)
+    report = store.import_file('one', 'competing.md', text.encode())
+    full = store.read('one', report['id'])['content']
+    with store.storage.connect() as db:
+        sent, ranges = retrieve(db, report['id'], full, ['8시간'], 6000, whole_pages=native)
+    assert ranges == []
+    assert sent == full
+    assert '4시간' in sent
+
+
+def test_unlinked_general_condition_outside_requirement_closure_keeps_full_text(tmp_path):
+    _, store = setup_store(tmp_path)
+    text = '# OPS-101\n\nSupport follows EDU-202.\n\n# EDU-202\n\nTraining lasts 1 hour weekly.\n\n'
+    text += '# General support\n\n교육은 최소 2개월 이상, 주 2회 실시해야 한다.\n\n'
+    text += '# Background\n\n' + 'Background. ' * 900
+    report = store.import_file('one', 'general.md', text.encode())
+    selected, audit = store.selected('one', [report['id']], query='What is OPS-101?')
+    assert audit['materials'][0]['delivery']['mode'] == 'full'
+    assert selected[0].content == store.read('one', report['id'])['content']

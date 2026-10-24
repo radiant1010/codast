@@ -1,0 +1,10 @@
+description: CODAST code navigation
+prompt: |
+  Inspect symbols and references for the current task.
+  Follow the task's existing modification and approval rules.
+single_project: true
+structured_tool_output: false
+fixed_tools:
+  - get_symbols_overview
+  - find_symbol
+  - find_referencing_symbols

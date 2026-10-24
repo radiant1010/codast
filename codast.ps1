@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ($Command -eq 'help') {
-    Write-Host '.\codast.cmd init   - Install uv, Python and project packages'
+    Write-Host '.\codast.cmd init   - Install packages and shared Serena/Context7 tools'
     Write-Host '.\codast.cmd start  - Prepare packages and start CODAST (default)'
     Write-Host '.\codast.cmd test   - Prepare packages and run Python tests'
     exit 0
@@ -53,6 +53,8 @@ try {
         exit $LASTEXITCODE
     }
     if ($Command -eq 'init') {
+        & $uvPath run --no-sync python -m app.core.toolchain --uv $uvPath
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         Write-Host 'Setup complete. Run .\codast.cmd start to open the server.'
         Write-Host 'Install and sign in to Codex or Claude Code separately to use AI.'
         exit 0

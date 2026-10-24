@@ -29,6 +29,7 @@
   }));projectStep.append(createRow);
   dialog.append(head,el('p','Codex와 Claude를 각각 연결할 수 있습니다. 설치 경로와 기존 로그인을 자동으로 확인하며, 하나만 연결해도 시작할 수 있습니다.','hint'),
     el('h3','1. 에이전트에 로그인하고 연결하세요'),tabs,pathField,el('p','자동 검색은 PATH와 기본 설치 위치를 확인합니다. 직접 입력했다면 연결 아이콘으로 저장하세요.','hint'),status,commands,controls,projectStep,finishRow);
+  dialog.append(button('기본 도구 설치와 연결 안내',()=>{dialog.close();window.settingsPage.open('tools');}));
   renderTabs();
   projectStep.hidden=true;
   document.body.append(dialog);
