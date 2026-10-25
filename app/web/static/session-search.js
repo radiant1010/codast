@@ -88,7 +88,7 @@
       const target=preview.querySelector('.search-target')||preview;target.tabIndex=-1;target.focus();target.scrollIntoView({block:'nearest'});
     }catch(error){if(dialog.open&&project===selected&&previewTicket===generation)preview.replaceChildren(el('p',error.message,'error'));}
   }
-  form.onsubmit=event=>{event.preventDefault();clearTimeout(debounce);resultOffset=0;previewTicket++;preview.hidden=true;act(search);};
+  form.onsubmit=event=>{event.preventDefault();clearTimeout(debounce);resultOffset=0;previewTicket++;preview.hidden=true;void act(search);};
   input.oninput=()=>{clearTimeout(debounce);clearTimeout(poll);ticket++;previewTicket++;resultOffset=0;preview.hidden=true;debounce=setTimeout(()=>act(search),250);};
   dialog.addEventListener('close',()=>{clearTimeout(poll);clearTimeout(debounce);ticket++;previewTicket++;});
   $('project').addEventListener('change',()=>dialog.close());

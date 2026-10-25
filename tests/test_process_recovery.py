@@ -31,7 +31,7 @@ def test_cancel_waits_until_parent_and_child_stop(tmp_path):
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize('overlap', ['runner', 'cancel', 'shutdown'])
+@pytest.mark.parametrize('overlap', ['runner', 'cancel', 'shutdown', 'request'])
 def test_repeated_cancel_keeps_run_active_until_process_tree_stops(tmp_path, overlap):
     from app.main import create_app
     from app.models.schemas import AgentResult, Command
@@ -91,6 +91,8 @@ def test_repeated_cancel_keeps_run_active_until_process_tree_stops(tmp_path, ove
                 task.cancel()
             elif overlap == 'cancel':
                 waiters.append(asyncio.create_task(service.cancel('one', run_id)))
+            elif overlap == 'request':
+                waiters[0].cancel()
             else:
                 waiters.append(asyncio.create_task(service.shutdown()))
             # Yield through the second cancellation, while OS termination is held.
@@ -107,7 +109,11 @@ def test_repeated_cancel_keeps_run_active_until_process_tree_stops(tmp_path, ove
             release.set()
             with pytest.raises(asyncio.CancelledError):
                 await task
-            await asyncio.gather(*waiters)
+            if overlap == 'request':
+                with pytest.raises(asyncio.CancelledError):
+                    await waiters[0]
+            else:
+                await asyncio.gather(*waiters)
             assert stopped.is_set()
             stamps = [path.stat().st_mtime_ns for path in (parent, child)]
             await asyncio.sleep(.3)

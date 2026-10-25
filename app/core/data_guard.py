@@ -138,7 +138,8 @@ def guard(parts, options, pseudonym_key=None, checkpoint=lambda: None):
         if kind and text.strip():
             start = len(text)-len(text.lstrip()); end = len(text.rstrip())
             spans.append((start, end, kind))
-        for match in re.finditer(r'(?m)^\s*([\w가-힣 -]{1,60})\s*[:=]\s*(.+)$', text):
+        # Consume indentation once without retrying it as a field name.
+        for match in re.finditer(r'(?m)^[^\S\n]*+([\w가-힣 -]{1,60})\s*+[:=]\s*+(.+)$', text):
             labeled = field_kind(match.group(1), options)
             if labeled: spans.append((*match.span(2), labeled))
         for match in ASSIGNMENT.finditer(text):

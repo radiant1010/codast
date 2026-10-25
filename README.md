@@ -170,3 +170,41 @@ uv run python -m pytest -q
 ```
 
 저장소의 개발 규칙은 [AGENTS.md](AGENTS.md)에 정리되어 있으며, 작업 요청에 필요한 내용과 작성 형식은 [작업 지시서 예시](docs/task-request-example.md)에서 확인할 수 있다.
+
+### SonarQube 로컬 검사
+
+로컬 SonarQube에 프로젝트 키가 `CODAST`인 프로젝트를 만든다. Docker의 SonarQube 서버는 검사하는 동안 실행되어 있어야 한다. 프로젝트 폴더에서 다음 초기 설정을 한 번 수행한다. Python 버전은 `.python-version`의 3.12를 사용한다.
+
+```powershell
+uv sync --locked
+uv tool install pysonar
+Copy-Item .env.sonar.example .env.sonar
+```
+
+이미 `.env.sonar`가 있으면 복사하지 않는다. 파일의 `SONAR_TOKEN`에 CODAST 분석 토큰을 넣고 `SONAR_HOST_URL`을 확인한다. 이 파일은 Git, Docker 빌드, Git archive에서 제외한다. 실제 토큰을 명령줄이나 `sonar-project.properties`에 넣지 않는다.
+
+테스트, 커버리지 측정, SonarQube 분석과 Quality Gate 확인은 다음 한 명령으로 실행한다.
+
+```powershell
+uv run --locked --env-file .env.sonar python quality_check.py
+```
+
+수동 명령은 Git에서 무시되지 않은 현재 파일을 검사하므로 아직 커밋하지 않은 변경사항도 반영된다. 검사할 코드를 임시 폴더에 보관하고, 별도의 임시 테스트 폴더에서 잠긴 의존성을 설치한 뒤 테스트한다. 테스트에서 생성된 실행 자료는 SonarQube에 복사하지 않으며, 테스트 프로세스에는 SonarQube 토큰을 전달하지 않는다. 임시 폴더는 실행 후 정리한다.
+
+커버리지는 `tests` 폴더의 테스트 개수가 아니라 `app`의 Python 코드가 실제 실행된 정도를 측정한다. 실행되지 않은 모듈도 포함하고 조건 분기도 측정한다. `pyproject.toml`의 `fail_under = 87.0`은 Windows에서 측정한 초기 기준 87.00%를 하한으로 사용한다. 소수 둘째 자리까지 표시한 커버리지가 이 값보다 낮거나 테스트가 실패하면 중단한다. 코드가 좋아져 기준을 높일 때는 이 값을 함께 변경한다. 보고서는 Git에 포함되지 않는 `.local/sonar/coverage.xml`에 저장한다.
+
+`sonar-project.properties`는 Python 커버리지 보고서를 읽도록 설정되어 있다. 직접 작성한 Python, JavaScript, HTML, CSS는 정적 분석 대상이며 외부 라이브러리 `app/web/static/vendor`는 제외한다. 현재 커버리지 계산은 Python 앱 코드로 제한한다. 루트 실행 및 검사 스크립트, 프런트엔드 자산은 커버리지 분모에서 제외하며 정적 분석에는 유지한다. JavaScript 커버리지와 브라우저 E2E는 별도 구성이 필요하다.
+
+push 전에 자동 실행하려면 이 저장소에서 훅을 활성화한다. 새로 clone한 PC에서도 한 번 필요하다.
+
+```powershell
+git config --local core.hooksPath .githooks
+```
+
+이후 평소처럼 `git push`하면 전송할 각 브랜치나 태그의 최종 커밋을 검사한다. 작업 폴더의 미커밋 변경사항은 push 검사에 섞이지 않는다. 테스트 실패, 커버리지 미달, SonarQube 연결 실패 또는 Quality Gate 실패 시 push가 중단된다. 최초에는 검사 스크립트, `.githooks`, 테스트, `pyproject.toml`, `uv.lock`, `.python-version`, `sonar-project.properties`를 함께 커밋해야 한다. 검사 설정이 없는 과거 커밋의 push도 차단한다. 검사 스크립트나 훅 자체를 수정했다면 해당 변경도 먼저 커밋해야 한다. 중간 커밋 각각과 Git 이력 전체의 비밀정보를 검사하는 기능은 아니다.
+
+SonarQube의 새 코드 기준은 서버에 연결된 Quality Gate를 따른다. 기본 게이트는 새 코드 커버리지 80%를 사용하지만, 변경 규모가 작으면 해당 조건을 생략할 수 있다. 로컬 전체 Python 커버리지 87% 기준은 변경 규모와 관계없이 검사한다. 로컬 훅은 `--no-verify`나 설정 변경으로 우회할 수 있으므로 서버에서 강제하는 보호 규칙은 아니다.
+
+분석 결과는 로컬 SonarQube 웹에서 확인한다. 테스트 없이 정적 분석만 다시 실행해야 할 때는 `uv run --no-project --env-file .env.sonar python scan_sonar.py`를 사용한다. 이 명령은 커버리지를 새로 측정하지 않으므로 일반 검증에는 `quality_check.py`를 사용한다.
+
+Python 분석기 5.32가 소스 범위 밖의 폴더까지 탐색하는 문제를 피하기 위해 검사에는 깨끗한 소스 사본을 사용한다. `.local`, `work`, `outputs`, `workspaces`, `.env.sonar` 같은 무시된 로컬 자료를 복사하지 않는다. 제외 규칙을 무시하고 강제로 Git에 추가한 파일, 연결된 경로, 서브모듈은 검사 전에 중단한다. 분석 작업 정보는 원래 프로젝트의 `.scannerwork`에 남긴다.

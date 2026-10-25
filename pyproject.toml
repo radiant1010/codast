@@ -18,9 +18,26 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8,<10", "httpx>=0.27,<1"]
+dev = [
+    "pytest>=8,<10",
+    "httpx>=0.27,<1",
+    "pytest-cov>=7,<8",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 
+[tool.coverage.run]
+source = ["app"]
+branch = true
+relative_files = true
+data_file = ".local/sonar/.coverage"
+
+[tool.coverage.report]
+# Windows baseline: 87.00% across application statements and branches.
+fail_under = 87.0
+precision = 2
+
+[tool.coverage.xml]
+output = ".local/sonar/coverage.xml"

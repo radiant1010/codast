@@ -37,7 +37,7 @@
   let state=null;
   const selection=()=>({project:project.value||null,client:client.value});
   async function defer(){await api('/onboarding','PUT',{...selection(),deferred:true});dialog.close();}
-  dialog.addEventListener('cancel',event=>{event.preventDefault();if(!connecting)runConnection(defer);});
+  dialog.addEventListener('cancel',event=>{event.preventDefault();if(!connecting)void runConnection(defer);});
   async function inspect(){
     status.textContent='● 연결 확인 중';status.style.color='#7ab8ff';commands.textContent='';
     await api('/onboarding','PUT',selection());
@@ -90,5 +90,5 @@
   $('setup-next').onclick=()=>act(async()=>{$('setup-guide').closest('dialog').close();await open();});window.actionIcon($('setup-next'),'plug','에이전트 연결 열기');
   $('setup-skip').hidden=true;$('welcome-start').textContent='처음 시작하기';$('welcome-start').onclick=()=>act(open);
   window.refreshSetup();
-  startWorkspace();
+  void startWorkspace();
 })();

@@ -247,14 +247,18 @@ def test_large_result_and_accumulated_inputs_survive_vault_only_restore(flow, mo
 
 def test_failed_capture_is_readable_and_explicit_recapture_never_dispatches(flow, monkeypatch):
     client, app, url, cid, s, seen, _ = flow
-    started = change(flow, s, 'run', instruction='분석').json()
     import app.core.workflows as module
     write = module.atomic_write
     failures = []
     def fail(path, value):
+        # Allow dispatch persistence, then fail capture even if the worker finishes immediately.
+        stored = app.state.document_vault.workflow(path.parent, value['workflows'][s['id']])
+        if stored['status'] == 'running':
+            return write(path, value)
         failures.append(path)
         raise ValueError('가상 저장 공간 부족')
     monkeypatch.setattr(module, 'atomic_write', fail)
+    started = change(flow, s, 'run', instruction='분석').json()
     s = wait(flow)
     attempt = s['steps'][0]['attempts'][0]
     assert s['status'] == 'review' and attempt['output'].startswith('결과 v1')

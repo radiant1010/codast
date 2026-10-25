@@ -13,7 +13,7 @@ choices는 선택 사항이며 자유 입력을 허용합니다. 선택적인 �
 
 
 def parse_question(output):
-    match = re.fullmatch(r'\s*```codast-question\s*\n(.*?)\n```\s*', output, re.DOTALL)
+    match = re.fullmatch(r'\s*```codast-question(?:[^\S\n]*\n)++(.*?)\n```\s*', output, re.DOTALL)
     if not match:
         return None
     try:

@@ -96,7 +96,7 @@
     if(value.reviews.length)select.value=String(value.pending||value.reviews.length);
     auditList.replaceChildren();const names={created:'문서 등록',saved:'초안 저장',submitted:'검토 요청',approved:'승인',rejected:'반려'};
     for(const event of value.history.slice().reverse())auditList.append(el('li',names[event.action]+', '+new Date(event.at).toLocaleString()+', 로컬 사용자'));
-    setDisabled(busy);if(value.reviews.length)loadReview();
+    setDisabled(busy);if(value.reviews.length)void loadReview();
   }
   function renderDiff(node,parts,side){
     const fragment=document.createDocumentFragment();
@@ -129,7 +129,7 @@
     const result=await request(endpoint()+'/documents/'+doc.id+'/reviews/'+number+'/decision','POST',{connection_id:binding.connection_id,expected_revision:doc.revision,decision,comment:comment.value});
     renderDocument(result);await loadList();editorStatus.textContent=decision==='approved'?'이 버전을 승인 기준으로 기록했습니다.':'반려했습니다. 초안을 수정한 뒤 다시 검토를 요청할 수 있습니다.';
   });}
-  form.onsubmit=event=>{event.preventDefault();run(async()=>{
+  form.onsubmit=event=>{event.preventDefault();void run(async()=>{
     const payload={connection_id:binding.connection_id,title:title.value,content:content.value};
     if(doc)payload.expected_revision=doc.revision;
     const result=await request(endpoint()+'/documents'+(doc?'/'+doc.id:''),doc?'PUT':'POST',payload);
@@ -148,7 +148,7 @@
     }
     report(data.issues.length?'문서함에서 손상되거나 누락된 자료를 발견했습니다.':'연결됨: '+(binding.project_path||binding.path)+' — '+data.documents.length+'개 문서를 읽었습니다.',Boolean(data.issues.length));
   }
-  setup.onsubmit=event=>{event.preventDefault();run(async()=>{
+  setup.onsubmit=event=>{event.preventDefault();void run(async()=>{
     const target=path.value.trim();
     if(binding&&(binding.base_path||binding.path)!==target&&!window.confirm('이전 자료는 그대로 두고 선택한 문서함으로 연결을 변경할까요?'))return;
     const result=await request(endpoint(),'PUT',{path:target,mode:mode.value,layout:'project',expected_connection_id:binding?.connection_id||null});

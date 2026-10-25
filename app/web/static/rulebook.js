@@ -26,7 +26,7 @@
       for(const file of chosen){
         if(!/\.(md|txt)$/i.test(file.name)||file.size>96000)throw Error('96KB 이하의 Markdown 또는 텍스트 파일을 선택하세요.');
         const text=await file.text();if(text.length>24000||text.includes('\0'))throw Error('파일 내용은 24,000자 이내의 텍스트여야 합니다.');
-        imported.push({id:'file-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),name:file.name.slice(0,80),folder:current()?.folder||'',enabled:false,content:text});
+        imported.push({id:'file-'+crypto.randomUUID(),name:file.name.slice(0,80),folder:current()?.folder||'',enabled:false,content:text});
       }
       if(project!==$('project').value)return;books.push(...imported);selected=imported[0].id;renderTree();renderEditor();dirty();status.textContent='파일 내용을 추가했습니다. 룰북을 체크하고 저장하면 다음 요청부터 적용되며, 원본 파일은 변경되지 않습니다.';
     }catch(error){status.textContent='파일 추가 실패, '+error.message;}finally{busy=false;fieldset.disabled=false;}
@@ -99,7 +99,7 @@
   }
   toolbar.append(icon('folderPlus','룰북 폴더 추가',async()=>addFolder()),icon('plus','룰북 추가',async()=>{
     if(books.length>=40){status.textContent='룰북은 휴지통을 포함해 최대 40개까지 만들 수 있습니다.';return;}
-    const book={id:'book-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),name:'새 룰북',folder:current()?.folder||'',enabled:true,content:''};books.push(book);selected=book.id;dirty();renderTree();renderEditor();name.focus();name.select();
+    const book={id:'book-'+crypto.randomUUID(),name:'새 룰북',folder:current()?.folder||'',enabled:true,content:''};books.push(book);selected=book.id;dirty();renderTree();renderEditor();name.focus();name.select();
   }));
   const trash=el('details');trash.id='rulebook-trash';const trashTitle=el('summary','삭제한 룰북'),trashList=el('div');trash.append(trashTitle,trashList);
   function renderTrash(){

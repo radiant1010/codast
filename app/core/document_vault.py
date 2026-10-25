@@ -262,26 +262,30 @@ class DocumentVault:
         if identity not in catalog['documents']:
             raise FileNotFoundError('문서를 찾을 수 없습니다.')
         state = self.get_object(root, catalog['documents'][identity])
+        def require(condition):
+            if not condition:
+                raise ValueError('문서 상태가 손상되었습니다.')
+
         try:
-            assert state['id'] == identity and type(state['revision']) is int and state['revision'] >= 1
-            assert isinstance(state['title'], str) and isinstance(state['content'], str)
-            assert isinstance(state['reviews'], list) and len(state['reviews']) <= MAX_REVIEWS
-            assert isinstance(state['history'], list) and isinstance(state['updated_at'], str)
-            assert state['pending'] is None or 1 <= state['pending'] <= len(state['reviews'])
-            assert state['approved'] is None or 1 <= state['approved'] <= len(state['reviews'])
+            require(state['id'] == identity and type(state['revision']) is int and state['revision'] >= 1)
+            require(isinstance(state['title'], str) and isinstance(state['content'], str))
+            require(isinstance(state['reviews'], list) and len(state['reviews']) <= MAX_REVIEWS)
+            require(isinstance(state['history'], list) and isinstance(state['updated_at'], str))
+            require(state['pending'] is None or 1 <= state['pending'] <= len(state['reviews']))
+            require(state['approved'] is None or 1 <= state['approved'] <= len(state['reviews']))
             for number, review in enumerate(state['reviews'], 1):
-                assert review['number'] == number and review['decision'] in ('pending', 'approved', 'rejected')
-                assert isinstance(review['reason'], str) and isinstance(review['submitted_at'], str)
-                assert re.fullmatch(r'[a-f0-9]{64}', review['snapshot'])
-                assert review['base'] is None or type(review['base']) is int and 1 <= review['base'] < number
-                assert isinstance(review['comment'], str)
-                assert review['decided_at'] is None or isinstance(review['decided_at'], str)
-            assert [r['number'] for r in state['reviews'] if r['decision'] == 'pending'] == ([state['pending']] if state['pending'] else [])
+                require(review['number'] == number and review['decision'] in ('pending', 'approved', 'rejected'))
+                require(isinstance(review['reason'], str) and isinstance(review['submitted_at'], str))
+                require(re.fullmatch(r'[a-f0-9]{64}', review['snapshot']))
+                require(review['base'] is None or type(review['base']) is int and 1 <= review['base'] < number)
+                require(isinstance(review['comment'], str))
+                require(review['decided_at'] is None or isinstance(review['decided_at'], str))
+            require([r['number'] for r in state['reviews'] if r['decision'] == 'pending'] == ([state['pending']] if state['pending'] else []))
             if state['pending']:
-                assert state['reviews'][state['pending'] - 1]['decision'] == 'pending'
+                require(state['reviews'][state['pending'] - 1]['decision'] == 'pending')
             if state['approved']:
-                assert state['reviews'][state['approved'] - 1]['decision'] == 'approved'
-        except (AssertionError, KeyError, TypeError, IndexError) as exc:
+                require(state['reviews'][state['approved'] - 1]['decision'] == 'approved')
+        except (KeyError, TypeError, IndexError) as exc:
             raise ValueError('문서 상태가 손상되었습니다.') from exc
         return state
 

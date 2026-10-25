@@ -1,7 +1,9 @@
 .git
 .venv
+.vscode
 __pycache__
 .pytest_cache
+.scannerwork
 .local
 work
 outputs
@@ -40,3 +42,4 @@ docs/internal
 # Public configuration templates contain no actual credentials
 !**/.env.example
 !**/.env.template
+!**/.env.sonar.example

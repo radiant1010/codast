@@ -328,3 +328,42 @@ def test_grouped_exports_file_blocks_connection(vault, tmp_path):
     assert result.status_code == 400
     assert c.get(base).json()['binding']['connection_id'] == cid
     assert not (shared / 'sample' / '.codast-documents').exists()
+
+
+@pytest.mark.parametrize('optimization', [0, 1])
+def test_document_integrity_checks_survive_python_optimization(optimization):
+    import copy
+    import app.core.document_vault as module
+
+    source = Path(module.__file__)
+    namespace = {'__file__': str(source), '__name__': 'vault_validation_fixture'}
+    exec(compile(source.read_text(encoding='utf-8'), str(source), 'exec', optimize=optimization), namespace)
+    store = namespace['DocumentVault'](None)
+    valid = {
+        'id': 'document', 'revision': 1, 'title': 'Fixture', 'content': 'text',
+        'history': [], 'updated_at': 'now', 'pending': 1, 'approved': None,
+        'reviews': [{'number': 1, 'decision': 'pending', 'reason': '', 'submitted_at': 'now',
+                     'snapshot': 'a' * 64, 'base': None, 'comment': '', 'decided_at': None}],
+    }
+    catalog = {'documents': {'document': 'fixture-digest'}}
+    state = copy.deepcopy(valid)
+    store.get_object = lambda root, digest: state
+    assert store.document(None, catalog, 'document') == valid
+    damages = [
+        (('id',), 'other'), (('revision',), 0), (('revision',), True),
+        (('title',), None), (('content',), None), (('reviews',), {}),
+        (('history',), None), (('updated_at',), None), (('pending',), 2),
+        (('approved',), 2), (('pending',), None), (('approved',), 1),
+        (('reviews', 0, 'number'), 2), (('reviews', 0, 'decision'), 'unknown'),
+        (('reviews', 0, 'reason'), None), (('reviews', 0, 'submitted_at'), None),
+        (('reviews', 0, 'snapshot'), 'bad'), (('reviews', 0, 'base'), 1),
+        (('reviews', 0, 'comment'), None), (('reviews', 0, 'decided_at'), 1),
+    ]
+    for path, value in damages:
+        state = copy.deepcopy(valid)
+        target = state
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        with pytest.raises(ValueError, match='문서 상태가 손상되었습니다'):
+            store.document(None, catalog, 'document')

@@ -1,0 +1,13 @@
+#!/bin/sh
+cd "$(git rev-parse --show-toplevel)" || exit 1
+for checker in quality_check.py scan_sonar.py .githooks/pre-push; do
+    if ! git cat-file -e "HEAD:$checker" 2>/dev/null; then
+        echo "Commit the local quality scripts and configuration before pushing." >&2
+        exit 1
+    fi
+done
+if ! git diff --quiet HEAD -- quality_check.py scan_sonar.py .githooks/pre-push; then
+    echo "Commit changes to the quality scripts before pushing." >&2
+    exit 1
+fi
+exec uv run --locked --env-file .env.sonar python quality_check.py --pre-push

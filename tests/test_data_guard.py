@@ -160,3 +160,31 @@ def test_both_native_adapters_receive_only_guarded_attachment(tmp_path,monkeypat
         response=client.post(base+'/commands',json={'text':'test','client':client_name,'material_ids':[identity]})
         assert response.status_code==200,response.text
         assert 'dummy-pass' not in received[0] and '[비밀값]' in received[0]
+
+
+@pytest.mark.parametrize('prefix,separator', [('', ': '), ('\t  ', ' = '), ('\n\n  ', ':\n'), (' ' * 4000, ': '), ('\r\n  ', ':\r\n')])
+def test_labeled_private_values_keep_masking_with_whitespace(prefix, separator):
+    text = prefix + '담당자' + separator + '홍길동'
+    options = GuardOptions(level='medium', fields=[FieldRule(field='담당자', kind='name')])
+    result = guard([Part('L1', text)], options)
+    assert result['parts'][0]['text'] == prefix + '담당자' + separator + '홍*동'
+
+
+def test_whitespace_without_a_label_separator_finishes_promptly():
+    import subprocess
+    import sys
+
+    script = (
+        'from app.core.data_guard import guard, Part, GuardOptions\n'
+        'text = " " * 16000 + "X"\n'
+        'result = guard([Part("L1", text)], GuardOptions())\n'
+        'if result["parts"][0]["text"] != text: raise RuntimeError("Unexpected masking")\n'
+    )
+    result = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=5)
+    assert result.returncode == 0, result.stderr
+
+
+def test_csv_cell_with_leading_carriage_return_keeps_private_label_masking():
+    parts, _ = extract('fixture.csv', 'description\n"\r이름: 홍길동"\n'.encode('utf-8'))
+    result = guard(parts, GuardOptions())
+    assert result['parts'][-1]['text'] == '\r이름: [이름]'

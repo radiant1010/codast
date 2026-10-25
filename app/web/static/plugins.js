@@ -94,7 +94,7 @@
   for(const [client,name] of [['codex','Codex'],['claude','Claude']]){
     const root=el('section',undefined,'plugin-pane');root.id='plugin-pane-'+client;root.setAttribute('role','tabpanel');root.setAttribute('aria-labelledby','plugin-tab-'+client);root.hidden=client!==selected;
     const tab=button(name,()=>select(client));tab.id='plugin-tab-'+client;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',root.id);tab.setAttribute('aria-selected',String(client===selected));tab.tabIndex=client===selected?0:-1;
-    tab.onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?'codex':event.key==='End'?'claude':client==='codex'?'claude':'codex';states[next].tab.focus();select(next);}};
+    tab.onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?'codex':event.key==='End'?'claude':client==='codex'?'claude':'codex';states[next].tab.focus();void select(next);}};
     tabs.append(tab);
     const search=el('input',undefined,'form-control');search.id='plugin-search-'+client;search.type='search';search.placeholder='설치된 플러그인 검색';search.setAttribute('aria-label',name+' 플러그인 검색');
     const count=el('span','0개','plugin-count'),status=el('p',undefined,'hint plugin-status');status.id='plugin-status-'+client;status.setAttribute('role','status');

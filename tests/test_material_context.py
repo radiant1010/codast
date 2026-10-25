@@ -492,3 +492,20 @@ def test_unlinked_general_condition_outside_requirement_closure_keeps_full_text(
     selected, audit = store.selected('one', [report['id']], query='What is OPS-101?')
     assert audit['materials'][0]['delivery']['mode'] == 'full'
     assert selected[0].content == store.read('one', report['id'])['content']
+
+
+
+def test_malformed_table_separators_preserve_text_without_stalling():
+    import subprocess
+    import sys
+    script = """
+from app.core.material_context import chunks
+paragraph = 'header|header\\n---|---' + ' ' * 15_990 + '!\\n'
+text = (paragraph + '\\n') * 7
+assert len(text) < 120_000
+assert max(map(len, text.splitlines())) < 16_000
+for _ in range(3):
+    result = chunks(text)
+    assert [row[4] for row in result] == [paragraph] * 7
+"""
+    subprocess.run([sys.executable, '-c', script], check=True, timeout=5)

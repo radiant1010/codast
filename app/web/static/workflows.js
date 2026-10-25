@@ -35,7 +35,7 @@
     const pathField=field('산출물 저장 위치',path),row=el('div',undefined,'field-action-row');path.replaceWith(row);row.append(path,pick);
     form.append(el('h3','이 프로젝트의 산출물 저장 위치 연결'),el('p',project+' 프로젝트에는 연결된 문서함이 없습니다. 작업 폴더와 산출물 저장 위치는 따로 관리합니다.','hint'),pathField,field('연결 방법',mode),note);
     const actions=el('div',undefined,'workflow-actions');actions.append(el('span','저장 위치 연결 후 계속'),icon('plug','산출물 저장 위치 연결',()=>form.requestSubmit()));form.append(actions);body.append(form);
-    form.onsubmit=e=>{e.preventDefault();safe(async()=>{
+    form.onsubmit=e=>{e.preventDefault();void safe(async()=>{
       const result=await api('/projects/'+encodeURIComponent(project)+'/document-vault','PUT',{path:path.value.trim(),mode:mode.value,layout:'project',expected_connection_id:null});
       binding=result.binding;await listing();
     });};
@@ -99,7 +99,7 @@
     addStep({title:'테스트 케이스 도출',client:'claude',instruction:'앞 단계의 승인된 결과와 기존 테스트를 검토하라. 정상, 오류, 경계 조건의 테스트 ID, 요구사항 ID, 절차, 기대 결과, 기존, 신규 구분을 제출하라. 실제 테스트 실행은 하지 마라.'});
     form.append(steps,icon('plus','단계 추가',()=>addStep()),el('p','실행 권한의 기본값은 읽기 전용이며, 작업 폴더 수정이 필요한 구현이나 테스트 단계에서는 수정 권한을 선택할 수 있습니다. 결과를 승인해도 다음 AI는 자동으로 실행되지 않습니다.','hint'));
     const footer=el('div',undefined,'workflow-actions'),save=icon('save','워크플로 저장',()=>form.requestSubmit());footer.append(el('span','순서를 저장하고 첫 지시 확인'),save,icon('back','워크플로 목록',()=>safe(listing)));form.append(footer);body.append(form);
-    form.onsubmit=e=>{e.preventDefault();safe(async()=>{const result=await api(endpoint(),'POST',{connection_id:binding.connection_id,request_id:creationId,title:title.value,materials:chosen,steps:drafts.map(d=>({title:d.name.value,client:d.client.value,mode:d.mode.value,model:d.model.value.trim()||null,instruction:d.instruction.value}))});current=result;render();});};
+    form.onsubmit=e=>{e.preventDefault();void safe(async()=>{const result=await api(endpoint(),'POST',{connection_id:binding.connection_id,request_id:creationId,title:title.value,materials:chosen,steps:drafts.map(d=>({title:d.name.value,client:d.client.value,mode:d.mode.value,model:d.model.value.trim()||null,instruction:d.instruction.value}))});current=result;render();});};
   }
   async function load(id){current=await api(endpoint()+'/'+id+'?connection_id='+binding.connection_id);render();}
   function render(){
@@ -129,7 +129,7 @@
     const step=s.steps[s.current];
     if(s.status==='running'){
       const attempt=step.attempts.at(-1);body.append(icon('close',s.cancellable===false?'프로세스 종료 확인 후 기록 정리':'현재 단계 실행 취소',()=>safe(async()=>{if(s.cancellable===false&&!confirm('다른 서버나 CLI 프로세스가 종료된 것을 확인했나요? 기록만 중단으로 정리합니다.'))return;await api('/projects/'+encodeURIComponent(project)+'/runs/'+attempt.run_id+(s.cancellable===false?'/reconcile':'/cancel'),'POST');await load(s.id);})),el('p','일반 대화의 실행 기록에서도 과정과 종료 상태를 확인할 수 있습니다.','hint'));
-      function poll(){if(!dialog.open)return;if(locked){timer=setTimeout(poll,1500);return;}const top=dialog.scrollTop;safe(async()=>{await load(s.id);dialog.scrollTop=top;});}
+      function poll(){if(!dialog.open)return;if(locked){timer=setTimeout(poll,1500);return;}const top=dialog.scrollTop;void safe(async()=>{await load(s.id);dialog.scrollTop=top;});}
       timer=setTimeout(poll,1500);return;
     }
     const form=el('form',undefined,'modal-form'),mode=modeSelect(step.mode),client=select(['codex','claude'],step.client),model=el('input',undefined,'form-control'),instruction=el('textarea'),comment=el('textarea');model.value=step.model||'';model.placeholder='CLI 기본 모델';instruction.value=step.instruction;instruction.rows=4;instruction.required=true;instruction.maxLength=4000;comment.rows=3;comment.maxLength=2000;const draftKey=s.id+'/'+s.current;comment.value=parallelDrafts.get(draftKey)||'';comment.oninput=()=>parallelDrafts.set(draftKey,comment.value);
@@ -143,7 +143,7 @@
     const actions=el('div',undefined,'workflow-actions'),send=icon('send',s.status==='ready'?'현재 단계 실행':'의견을 반영해 다시 실행',()=>form.requestSubmit());send.disabled=step.attempts.at(-1)?.storage_status==='failed';actions.append(send);
     if(s.status==='review'&&step.attempts.at(-1)?.storage_status!=='failed')actions.append(icon('check','현재 결과 승인',()=>safe(async()=>{current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'approve',comment:comment.value});render();})));
     form.append(actions);body.append(form);
-    form.onsubmit=e=>{e.preventDefault();safe(async()=>{current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'run',mode:mode.value,client:client.value,model:model.value.trim()||null,instruction:instruction.value,comment:comment.value});render();});};
+    form.onsubmit=e=>{e.preventDefault();void safe(async()=>{current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'run',mode:mode.value,client:client.value,model:model.value.trim()||null,instruction:instruction.value,comment:comment.value});render();});};
   }
   const parallelDrafts=new Map();
   async function contentHash(text){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return [...new Uint8Array(bytes)].map(n=>n.toString(16).padStart(2,'0')).join('');}
@@ -169,7 +169,7 @@
     const save=icon('save','병렬 작업 저장',()=>form.requestSubmit());save.disabled=!sources.length;
     if(!sources.length)form.append(el('p','작업에 사용할 승인 입력이 필요합니다. 문서함에서 검토와 승인을 마친 요구사항, 분석 결과 또는 승인된 순차 워크플로 결과를 선택할 수 있습니다.','hint'));
     form.append(save,icon('back','워크플로 목록',()=>safe(listing)));body.append(form);
-    form.onsubmit=e=>{e.preventDefault();safe(async()=>{const source=sources[Number(choice.value)];if(!source)throw Error('승인 입력을 선택하세요.');current=await api(endpoint()+'/parallel','POST',{connection_id:binding.connection_id,request_id:creationId,title:title.value,source:source.ref});render();});};
+    form.onsubmit=e=>{e.preventDefault();void safe(async()=>{const source=sources[Number(choice.value)];if(!source)throw Error('승인 입력을 선택하세요.');current=await api(endpoint()+'/parallel','POST',{connection_id:binding.connection_id,request_id:creationId,title:title.value,source:source.ref});render();});};
   }
   async function parallelAction(s,action,role,comment=''){
     await api(endpoint()+'/'+s.id+'/parallel','POST',{connection_id:binding.connection_id,expected_revision:s.revision,action,role,comment});await load(s.id);
@@ -200,6 +200,6 @@
       body.append(card);
     }
     if(s.status==='done')body.append(icon('save','승인 산출물과 이력 내려받기',()=>safe(async()=>{const blob=await request(endpoint()+'/'+s.id+'/export?connection_id='+binding.connection_id,{},'blob');const url=URL.createObjectURL(blob),link=el('a');link.href=url;link.download=s.id+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);})));
-    if(s.status==='running')timer=setTimeout(function poll(){if(!dialog.open)return;if(locked){timer=setTimeout(poll,1500);return;}const top=dialog.scrollTop;safe(async()=>{await load(s.id);dialog.scrollTop=top;});},1500);
+    if(s.status==='running')timer=setTimeout(function poll(){if(!dialog.open)return;if(locked){timer=setTimeout(poll,1500);return;}const top=dialog.scrollTop;void safe(async()=>{await load(s.id);dialog.scrollTop=top;});},1500);
   }
 })();

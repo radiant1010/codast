@@ -16,7 +16,7 @@ function el(tag,text,cls){
 function consoleText(value){
   const lines=String(value).split('\n'),hidden=new Set();
   for(let i=0;i<lines.length;i++){
-    const opening=lines[i].match(/^ {0,3}(`{3,}|~{3,})([^\r]*)\r?$/);
+    const opening=lines[i].match(/^ {0,3}(`{3,}(?!`)|~{3,}(?!~))([^\r]*)\r?$/);
     if(!opening||(opening[1][0]==='`'&&opening[2].includes('`')))continue;
     const closing=new RegExp('^ {0,3}'+opening[1][0]+'{'+opening[1].length+',}[ \t]*\r?$');
     for(let j=i+1;j<lines.length;j++)if(closing.test(lines[j])){
@@ -112,14 +112,14 @@ function streamRun(id,b,container,refresh){
     else{const line=row.kind==='assistant'?consoleOutput(row.text,'event assistant console-output'):el('pre',row.text,'event '+row.kind);line.dataset.kind=row.kind;container.append(line);}
     followOutput(follow);
   });
-  source.addEventListener('end',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)act(async()=>{await conversation(b);if(valid(b,generation))notice('실행이 종료되었습니다. 결과와 실행 과정을 확인하세요.');});});
-  source.addEventListener('detached',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)act(async()=>{await conversation(b);if(valid(b,generation))notice('서버 연결이 바뀌었습니다. 실행 종료 여부를 확인한 뒤 기록을 정리하세요.',true);});});
+  source.addEventListener('end',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)void act(async()=>{await conversation(b);if(valid(b,generation))notice('실행이 종료되었습니다. 결과와 실행 과정을 확인하세요.');});});
+  source.addEventListener('detached',()=>{source.close();if(refresh&&valid(b,generation)&&container.isConnected)void act(async()=>{await conversation(b);if(valid(b,generation))notice('서버 연결이 바뀌었습니다. 실행 종료 여부를 확인한 뒤 기록을 정리하세요.',true);});});
   source.onerror=()=>{if(valid(b,generation)&&container.isConnected&&source.readyState!==EventSource.CLOSED)notice('응답 연결을 다시 시도하고 있습니다. 마지막으로 받은 내용부터 이어집니다.',false,{persistent:true});};
 }
 $('toggle-sidebar').onclick=()=>{const collapsed=$('workspace').classList.toggle('collapsed');$('toggle-sidebar').setAttribute('aria-expanded',String(!collapsed));$('toggle-sidebar').title=collapsed?'제어판 펼치기':'제어판 접기';$('toggle-sidebar').setAttribute('aria-label',$('toggle-sidebar').title);};
 $('new-output').onclick=()=>followOutput(true);
 $('messages').onscroll=()=>{if(atBottom())$('new-output').hidden=true;};
-$('history-panel').ontoggle=()=>{if($('history-panel').open&&$('project').value)act(()=>history());};
+$('history-panel').ontoggle=()=>{if($('history-panel').open&&$('project').value)void act(()=>history());};
 async function projects(selected=''){const d=await api('/projects');projectNames=d.names||{};$('project').replaceChildren(new Option('선택하세요',''));for(const p of d.projects)$('project').add(new Option(projectLabel(p),p));$('project').value=selected;window.dispatchEvent(new Event('project-names-changed'));}
 function drawTasks(){
   $('task-list').replaceChildren();$('task-names').replaceChildren();$('archived-chats').replaceChildren();
@@ -258,7 +258,7 @@ async function loadRules(b=base()){
 }
 
 async function history(){const b=base(),e=epoch,d=await api(b+'/runs?limit=20&offset='+historyOffset);if(!valid(b,e))return;$('history').replaceChildren();for(const r of d.runs){const item=el('details');item.append(el('summary',new Date(r.started_at).toLocaleString()+', '+r.adapter+', '+statusNames[r.status]+', '+r.command.text.slice(0,60)),consoleOutput(r.output||r.error||'실행 중 / 종료 미확인'));$('history').append(item);}if(!d.runs.length)$('history').textContent='실행 기록이 없습니다.';$('history-prev').disabled=historyOffset===0;$('history-next').disabled=d.runs.length<20;}
-$('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;act(async()=>{
+$('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;void act(async()=>{
   if(window.materialGuard?.isUploading())throw Error('첨부 자료 검사 완료 후 보내세요.');
   window.validateExecutionSettings?.();
   const b=base(),generation=epoch,sentProject=$('project').value,sentTask=filter,sentText=$('text').value;window.chatState.save();busy=true;$('send').disabled=true;
@@ -277,7 +277,7 @@ $('text').oninput=actionHint;
 $('text').onkeydown=e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();$('composer').requestSubmit();}};
 actionHint();
 $('project').onchange=()=>act(loadProject);
-$('home').onclick=event=>{event.preventDefault();act(async()=>{
+$('home').onclick=event=>{event.preventDefault();void act(async()=>{
   window.chatState.pause();$('project').value='';await loadProject();window.refreshSessionView?.();
 });};
 for(const id of ['name','workspace-name']){
@@ -285,7 +285,7 @@ for(const id of ['name','workspace-name']){
   input.oninvalid=event=>{event.preventDefault();if(id==='workspace-name')$('folder-status').textContent=projectNameError;else notice(projectNameError,true);input.focus();};
   input.oninput=()=>{if(id==='workspace-name'&&$('folder-status').textContent===projectNameError)$('folder-status').textContent='';else if(id==='name'&&$('status').textContent===projectNameError)notice('');};
 }
-$('create').onsubmit=e=>{e.preventDefault();act(async()=>{const name=$('name').value;await api('/projects','POST',{name});await projects(name);await loadProject();});};
+$('create').onsubmit=e=>{e.preventDefault();void act(async()=>{const name=$('name').value;await api('/projects','POST',{name});await projects(name);await loadProject();});};
 $('reload').onclick=()=>act(()=>projectReady?switchChat(filter):loadProject());$('reload-rules').onclick=()=>act(()=>loadRules());
 $('messages-prev').onclick=()=>act(async()=>{offset=Math.max(0,offset-20);await conversation();});$('messages-next').onclick=()=>act(async()=>{offset+=20;await conversation();});
 $('history-prev').onclick=()=>act(async()=>{historyOffset=Math.max(0,historyOffset-20);await history();});$('history-next').onclick=()=>act(async()=>{historyOffset+=20;await history();});
@@ -300,7 +300,7 @@ async function trash(){
   for(const name of d.projects){const row=el('div',undefined,'action-row');row.append(el('span',projectLabel(name)),button('복원',async()=>{await api('/deleted-projects/'+encodeURIComponent(name)+'/restore','POST');await projects(name);await loadProject();await trash();notice('프로젝트와 기존 기록을 복원했습니다.',false,{success:true});},'icon-action'));$('deleted-projects').append(row);}
   if(!d.projects.length)$('deleted-projects').textContent='삭제한 프로젝트가 없습니다.';
 }
-$('trash-panel').ontoggle=()=>{if($('trash-panel').open)act(trash);};
+$('trash-panel').ontoggle=()=>{if($('trash-panel').open)void act(trash);};
 $('delete-project').onclick=()=>act(async()=>{
   const b=base(),name=$('project').value;
   if(!confirm('“'+projectLabel(name)+'” 프로젝트를 삭제할까요?\n목록에서 제거하며 파일과 대화, 실행 기록은 휴지통에서 복원할 수 있습니다.'))return;

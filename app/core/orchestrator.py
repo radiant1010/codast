@@ -227,7 +227,8 @@ class Orchestrator:
         try:
             await task
         except asyncio.CancelledError:
-            pass
+            if asyncio.current_task().cancelling():
+                raise
         if self.storage.run(name, run_id)['status'] == 'running':
             command = record['command']
             cwd = self.policy.file_path(self.projects.select(name), command['cwd'])

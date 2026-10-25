@@ -3,6 +3,9 @@
 
 # Defense in depth for git archive; do not package local runtime data.
 /.local export-ignore
+/.vscode export-ignore
+/.vscode/** export-ignore
+/.scannerwork export-ignore
 /work export-ignore
 /outputs export-ignore
 /workspaces export-ignore
@@ -42,3 +45,5 @@ connections.local.json export-ignore
 # Retain public configuration templates.
 .env.example -export-ignore
 .env.template -export-ignore
+.env.sonar.example -export-ignore
+/.githooks/* text eol=lf

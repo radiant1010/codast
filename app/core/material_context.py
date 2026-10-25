@@ -14,7 +14,7 @@ QUESTION = re.compile(r'\?|알려|찾아|어디|무엇|어떻게|얼마|언제|�
 STOP = set('자료 문서 파일 내용 설명 관련 대해 대한 어떻게 어디 무엇 알려줘 알려주세요 찾아줘 찾아주세요 받아 '
            '있어 있나요 인가요 무엇인가요 the a an is are of to in for about please what where which when how find explain'.split())
 HEADING = re.compile(r'^(#{1,6})\s+')
-SEPARATOR = re.compile(r'^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$')
+SEPARATOR = re.compile(r'^\s*+\|?\s*+:?-{3,}:?\s*+(?:\|\s*+:?-{3,}:?\s*+)+\|?\s*+$')
 CODE = (r'[A-Z가-힣][A-Z0-9가-힣]*(?:\s*[._‐‑–—-]\s*[A-Z가-힣][A-Z0-9가-힣]*)*'
         r'\s*[-_‐‑–—]\s*\d+(?:[.-]\d+)*')
 REFERENCE_CODE = re.compile(r'(?<![A-Za-z0-9_.-])' + CODE + r'(?![A-Za-z0-9_-])', re.I)

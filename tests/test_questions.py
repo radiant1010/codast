@@ -104,3 +104,16 @@ def test_ordinary_question_with_workflow_like_chat_title_has_normal_reply(tmp_pa
         response = client.post('/api/projects/one/runs/'+run+'/reply', json={'answer':'JSON', 'request_id':'normal-answer'})
         assert response.status_code == 200
         assert wait_run(client, response.json()['run_id'])['status'] == 'completed'
+
+
+@pytest.mark.parametrize('opening, newline', [(' ', '\n'), ('\t', '\r\n'), ('\n\n', '\n'), ('\n\u00a0', '\n'), ('\n\v', '\n'), ('\n\f', '\n')])
+def test_question_fence_accepts_whitespace_and_line_endings(opening, newline):
+    output = '```codast-question' + opening + newline + json.dumps({'question':'Which format?'}) + newline + '```'
+    assert parse_question(output)['question'] == 'Which format?'
+
+
+def test_incomplete_question_with_long_blank_body_finishes_promptly():
+    import subprocess
+    subprocess.run([sys.executable, '-c',
+                    r"from app.core.questions import parse_question; assert parse_question('```codast-question' + '\n' * 1_000_000 + '!') is None"],
+                   check=True, timeout=5)

@@ -50,3 +50,14 @@ test('token summary distinguishes missing counts and avoids double counting Code
  assert.equal(context.tokenCount({input_tokens:5,output_tokens:2,cache_read_input_tokens:10,cache_creation_input_tokens:20},'claude'),37);
  assert.equal(context.tokenCount({total_tokens:40,input_tokens:5,output_tokens:2},'codex'),40);
 });
+
+
+test('malformed long fences preserve fallback text without blocking the UI',()=>{
+ const context={window:{},el:()=>({})};vm.createContext(context);vm.runInContext(presentation,context);
+ for(const marker of ['`','~']){
+  context.raw=marker.repeat(100000)+'\rx';
+  vm.runInContext('node=consoleOutput(raw)',context,{timeout:1000});
+  assert.equal(context.node.textContent,context.raw);
+  assert.equal(context.node.consoleSource,context.raw);
+ }
+});

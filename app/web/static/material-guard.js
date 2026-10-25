@@ -119,7 +119,7 @@
       options=prefs;rows=result.materials;test.checked=!!prefs.test_data;level.value=prefs.level==='allow'?'allow':'strong';privacy.value=privacyValue(prefs);fields.replaceChildren();for(const item of prefs.fields||[])fieldRow(item.field,item.kind);sheetRows.replaceChildren();for(const item of prefs.excel_sheets||[])sheetRow(item);describe();render();return true;
     }catch(e){if(g===generation){options=null;rows=[];render();error.textContent=e.message;}return false;}
   }
-  form.onsubmit=e=>{e.preventDefault();if(save.disabled)return;act(async()=>{const b=url(),g=generation;
+  form.onsubmit=e=>{e.preventDefault();if(save.disabled)return;void act(async()=>{const b=url(),g=generation;
     save.disabled=true;saveStatus.classList.remove('error');saveStatus.textContent='저장 중…';
     try{
     const extra=Array.from(fields.children).map(row=>({field:row.querySelector('input').value.trim(),kind:row.querySelector('select').value}));
@@ -161,13 +161,13 @@
       }
     }finally{uploadController=null;uploading=false;upload.disabled=false;progress.hidden=true;}
   }
-  picker.onchange=()=>{const files=Array.from(picker.files);picker.value='';act(()=>uploadFiles(files));};
+  picker.onchange=()=>{const files=Array.from(picker.files);picker.value='';void act(()=>uploadFiles(files));};
   const composer=$('composer');let dragDepth=0;
   const hasFiles=event=>Array.from(event.dataTransfer?.types||[]).includes('Files');
   composer.addEventListener('dragenter',event=>{if(!hasFiles(event))return;event.preventDefault();dragDepth++;composer.classList.add('attachment-dragover');});
   composer.addEventListener('dragover',event=>{if(!hasFiles(event))return;event.preventDefault();event.dataTransfer.dropEffect=uploading?'none':'copy';});
   composer.addEventListener('dragleave',event=>{if(!hasFiles(event))return;if(--dragDepth<=0){dragDepth=0;composer.classList.remove('attachment-dragover');}});
-  composer.addEventListener('drop',event=>{if(!hasFiles(event))return;event.preventDefault();dragDepth=0;composer.classList.remove('attachment-dragover');act(()=>uploadFiles(Array.from(event.dataTransfer.files)));});
+  composer.addEventListener('drop',event=>{if(!hasFiles(event))return;event.preventDefault();dragDepth=0;composer.classList.remove('attachment-dragover');void act(()=>uploadFiles(Array.from(event.dataTransfer.files)));});
   // Dropping outside the input must not navigate away and lose the draft.
   document.addEventListener('dragover',event=>{if(hasFiles(event))event.preventDefault();});
   document.addEventListener('drop',event=>{if(hasFiles(event))event.preventDefault();});

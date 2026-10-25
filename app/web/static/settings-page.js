@@ -19,7 +19,7 @@
     context.textContent=$('project').value?'프로젝트, '+projectLabel($('project').value):'프로젝트 선택 전';heading.textContent=selected.label;heading.tabIndex=-1;
     for(const [key,page] of pages){page.node.hidden=key!==last;page.link.setAttribute('aria-current',key===last?'page':'false');}
     if(selected.node.tagName==='DETAILS')selected.node.open=true;
-    if(last==='history'&&$('project').value)act(()=>history());
+    if(last==='history'&&$('project').value)void act(()=>history());
     content.scrollTop=0;heading.focus();selected.node.dispatchEvent(new Event('settings-open'));
   }
   window.settingsPage={
