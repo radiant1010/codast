@@ -24,7 +24,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 11:
+            if version > 13:
                 raise ValueError("현재 앱보다 새로운 DB 버전입니다.")
             db.execute("PRAGMA journal_mode=WAL")
             if version == 0:
@@ -187,6 +187,40 @@ class Storage:
                     COMMIT;
                 """)
 
+            if version < 12:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE work_items (
+                        id TEXT PRIMARY KEY, project TEXT NOT NULL, title TEXT NOT NULL,
+                        goal TEXT NOT NULL, done_criteria TEXT NOT NULL, chat_id TEXT NOT NULL UNIQUE,
+                        status TEXT NOT NULL DEFAULT 'ready', phase TEXT NOT NULL DEFAULT 'inspect',
+                        revision INTEGER NOT NULL DEFAULT 1, latest_run_id TEXT,
+                        blocked_reason TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX work_items_project ON work_items(project, updated_at DESC);
+                    ALTER TABLE runs ADD COLUMN work_item_id TEXT REFERENCES work_items(id);
+                    CREATE INDEX runs_work_item ON runs(work_item_id, started_at);
+                    CREATE TABLE work_item_verifications (
+                        id TEXT PRIMARY KEY, work_item_id TEXT NOT NULL REFERENCES work_items(id),
+                        run_id TEXT NOT NULL REFERENCES runs(id), verdict TEXT NOT NULL,
+                        criteria_met INTEGER NOT NULL, note TEXT NOT NULL,
+                        evidence_sha256 TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL
+                    );
+                    CREATE INDEX verifications_work_item ON work_item_verifications(work_item_id, created_at);
+                    PRAGMA user_version=12;
+                    COMMIT;
+                """)
+
+            if version < 13:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    ALTER TABLE work_items ADD COLUMN hold TEXT NOT NULL DEFAULT '';
+                    ALTER TABLE work_items ADD COLUMN hold_reason TEXT NOT NULL DEFAULT '';
+                    ALTER TABLE work_items ADD COLUMN hold_since TEXT NOT NULL DEFAULT '';
+                    PRAGMA user_version=13;
+                    COMMIT;
+                """)
+
     def guard_pseudonym_key(self, project):
         """Local-only key. Never return it through settings, reports or prompts."""
         with self.connect() as db:
@@ -270,7 +304,7 @@ class Storage:
                 ON CONFLICT(project) DO UPDATE SET settings=excluded.settings, updated_at=excluded.updated_at""",
                 (project, json.dumps(settings, ensure_ascii=False), now()))
 
-    def start_run(self, project, command, adapter, *, exclusive=False, request_id=None, reply_to=None, initial_metadata=None, parallel_scope=None):
+    def start_run(self, project, command, adapter, *, exclusive=False, request_id=None, reply_to=None, initial_metadata=None, parallel_scope=None, work_item_id=None, work_item_revision=None):
         run_id = hashlib.sha256(json.dumps([project, request_id]).encode()).hexdigest() if request_id else uuid4().hex
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -281,8 +315,13 @@ class Storage:
                 command = command.model_copy(update={'task': chat['task']})
             else:
                 command = command.model_copy(update={'task': command.task.strip(), 'chat_id': self._chat_id(db, project, command.task.strip())})
+            work = db.execute('SELECT * FROM work_items WHERE project=? AND chat_id=?', (project, command.chat_id)).fetchone()
+            if work and work['id'] != work_item_id:
+                raise FileExistsError('목표 작업 화면에서 실행하거나 질문에 답변하세요.')
+            if work_item_id and (not work or work['id'] != work_item_id):
+                raise FileNotFoundError('목표 작업을 찾을 수 없습니다.')
             if request_id:
-                prior = db.execute('SELECT command, adapter FROM runs WHERE id=? AND project=?', (run_id, project)).fetchone()
+                prior = db.execute('SELECT command, adapter, work_item_id FROM runs WHERE id=? AND project=?', (run_id, project)).fetchone()
                 if prior:
                     previous = json.loads(prior['command'])
                     previous.setdefault('material_ids', [])
@@ -293,9 +332,13 @@ class Storage:
                         previous['chat_id'] = message['chat_id'] if message else None
                     if previous.get('chat_id') == command.chat_id and command.chat_id:
                         previous['task'] = command.task
-                    if previous != command.model_dump() or prior['adapter'] != adapter:
+                    if previous != command.model_dump() or prior['adapter'] != adapter or prior['work_item_id'] != work_item_id:
                         raise FileExistsError('같은 요청 ID에 다른 실행 내용을 사용할 수 없습니다.')
                     raise ExistingRun(run_id)
+            if work and work['revision'] != work_item_revision:
+                raise FileExistsError('작업 상태가 변경되었습니다. 최신 결과를 확인하세요.')
+            if work and work['hold']:
+                raise FileExistsError('보류 또는 취소된 목표입니다. 먼저 작업을 재개하세요.')
             if exclusive:
                 running = db.execute("SELECT metadata FROM runs WHERE project=? AND status='running'", (project,)).fetchall()
                 if parallel_scope:
@@ -333,6 +376,10 @@ class Storage:
                        (run_id, project, command.task.strip(), command.raw_text or command.text, now(), run_id, command.chat_id))
             db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
                        (run_id, 'status', f'{adapter} 실행 시작', now()))
+            if work:
+                db.execute('UPDATE runs SET work_item_id=? WHERE id=?', (work_item_id, run_id))
+                db.execute("""UPDATE work_items SET status='running', latest_run_id=?, blocked_reason='',
+                    revision=revision+1, updated_at=? WHERE id=?""", (run_id, now(), work_item_id))
         return run_id
 
     def mark_guard_dispatch(self, run_id, audit):
@@ -368,7 +415,14 @@ class Storage:
                        (uuid4().hex, project, task, f'기존 {client} 세션을 연결했습니다. 이전 대화는 네이티브 세션에 보관됩니다.', now(),self._chat_id(db,project,task)))
     def move_message(self, project, message_id, task):
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             old = db.execute("SELECT task FROM messages WHERE project=? AND id=?", (project,message_id)).fetchone()
+            linked = db.execute('''SELECT 1 FROM messages m JOIN runs r ON r.id=m.run_id
+                WHERE m.project=? AND m.id=? AND r.work_item_id IS NOT NULL''', (project, message_id)).fetchone()
+            destination = db.execute('''SELECT 1 FROM work_items w JOIN chats c ON c.id=w.chat_id
+                WHERE w.project=? AND c.task=?''', (project, task.strip())).fetchone()
+            if linked or destination:
+                raise FileExistsError('목표 작업의 실행 이력을 다른 채팅과 섞을 수 없습니다. 목표 작업 화면에서 계속하세요.')
             if db.execute("SELECT 1 FROM runs WHERE project=? AND status='running'", (project,)).fetchone():
                 raise FileExistsError("실행이 끝난 뒤 메시지를 이동하세요.")
             if old:
@@ -450,6 +504,15 @@ class Storage:
                 return
             db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
                        (run_id, 'status', status, now()))
+            record = db.execute('SELECT work_item_id,metadata FROM runs WHERE id=?', (run_id,)).fetchone()
+            if record['work_item_id']:
+                question = json.loads(record['metadata']).get('question')
+                review = status == 'completed' and bool(output and output.strip()) and not question
+                reason = '' if review else (question['question'] if question else error or '확인 가능한 결과가 없습니다.')
+                db.execute("""UPDATE work_items SET status=?, phase=CASE WHEN ? THEN 'verify' ELSE phase END,
+                    blocked_reason=?, revision=revision+1, updated_at=?
+                    WHERE id=? AND latest_run_id=? AND status='running'""",
+                    ('review' if review else 'blocked', bool(review), reason, now(), record['work_item_id'], run_id))
 
     def workflow_capture(self, project, run_id, value):
         with self.connect() as db:

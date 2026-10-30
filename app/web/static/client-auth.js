@@ -5,7 +5,7 @@
   const message=el('p',undefined,'hint');message.setAttribute('role','status');
   const list=el('div',undefined,'client-auth-list');
   const refresh=button('다시 확인',()=>check());refresh.setAttribute('aria-label','로그인 상태 다시 확인');
-  panel.append(message,list,refresh);document.querySelector('.workspace-status-body').prepend(panel);
+  panel.append(message,list,refresh);document.querySelector('#dashboard-panel-accounts .dashboard-body,.workspace-status-body').prepend(panel);
   const pending=new Set(),active=state=>['checking','waiting','verifying'].includes(state);
   let rows=[],busy=false,checkAgain=false,timer=null,error='';
   function render(){

@@ -410,6 +410,7 @@
       item.append(el('p','마지막 실행 '+(row.last_started_at?new Date(row.last_started_at).toLocaleString():'확인 불가'),'hint'));usageList.append(item);
     }
     if(!rows.length)usageList.append(el('p','프로젝트를 선택하고 실행하면 세션별 사용량이 표시됩니다.','hint'));
+    window.sessionWorkspace?.metricsChanged([...summaries.values()],snapshot.running.filter(run=>run.project===$('project').value));
   }
   window.refreshSessionView=()=>{
     runningCount.textContent='실행 중 '+snapshot.running.filter(row=>row.project===$('project').value).length;

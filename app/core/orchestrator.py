@@ -74,7 +74,7 @@ class Orchestrator:
         self.storage.save_rulebook_settings(name, settings.model_dump())
         return {'saved': True}
 
-    def prepare(self, name, command, request_id=None, reply_to=None, extra_context=None, include_history=True, parallel_scope=None, workflow_id=None):
+    def prepare(self, name, command, request_id=None, reply_to=None, extra_context=None, include_history=True, parallel_scope=None, workflow_id=None, work_item_id=None, work_item_revision=None):
         root = self.projects.select(name)
         cwd = self.policy.file_path(root, command.cwd)
         if not cwd.is_dir():
@@ -114,7 +114,8 @@ class Orchestrator:
         if parallel_scope:
             initial.update(parallel_group=parallel_scope[0], parallel_role=parallel_scope[1])
         run_id = self.storage.start_run(name, command, command.client, exclusive=True, request_id=request_id, reply_to=reply_to,
-                                        initial_metadata=initial, parallel_scope=parallel_scope)
+                                        initial_metadata=initial, parallel_scope=parallel_scope,
+                                        work_item_id=work_item_id, work_item_revision=work_item_revision)
         if command.fresh:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
         return run_id, command, context, cwd, adapter, session
@@ -179,9 +180,10 @@ class Orchestrator:
         finally:
             self.active.pop(run_id, None)
 
-    def submit(self, name, command, request_id=None, reply_to=None, extra_context=None, include_history=True, parallel_scope=None, workflow_id=None):
+    def submit(self, name, command, request_id=None, reply_to=None, extra_context=None, include_history=True, parallel_scope=None, workflow_id=None, work_item_id=None, work_item_revision=None):
         try:
-            prepared = self.prepare(name, command, request_id, reply_to=reply_to, extra_context=extra_context, include_history=include_history, parallel_scope=parallel_scope, workflow_id=workflow_id)
+            prepared = self.prepare(name, command, request_id, reply_to=reply_to, extra_context=extra_context, include_history=include_history, parallel_scope=parallel_scope, workflow_id=workflow_id,
+                                    work_item_id=work_item_id, work_item_revision=work_item_revision)
         except ExistingRun as prior:
             return prior.run_id
         run_id = prepared[0]
@@ -203,7 +205,7 @@ class Orchestrator:
         task.add_done_callback(finished)
         return run_id
 
-    def reply(self, name, run_id, answer, request_id):
+    def reply(self, name, run_id, answer, request_id, *, extra_context=None, work_item_id=None, work_item_revision=None):
         from app.models.schemas import Command
         record = self.storage.run(name, run_id)
         if record['metadata'].get('workflow_id') or record['metadata'].get('parallel_group'):
@@ -214,7 +216,8 @@ class Orchestrator:
         original = Command.model_validate(record['command'])
         text = '질문 출처 실행: '+run_id+'\n이전 질문: '+question['question']+'\n사용자 답변: '+answer+'\n이 답변을 반영하여 기존 작업을 이어가세요. 기존 권한과 요청 범위를 유지하세요.'
         command = original.model_copy(update={'text':text,'raw_text':answer,'fresh':False})
-        return self.submit(name, command, request_id, reply_to=run_id)
+        return self.submit(name, command, request_id, reply_to=run_id, extra_context=extra_context,
+                           work_item_id=work_item_id, work_item_revision=work_item_revision)
 
     async def cancel(self, name, run_id):
         record = self.storage.run(name, run_id)

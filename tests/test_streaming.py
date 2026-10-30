@@ -1,3 +1,4 @@
+from tests.schema_helpers import remove_work_item_schema
 import asyncio
 import json
 import sys
@@ -99,6 +100,7 @@ def test_v3_upgrade_preserves_runs_and_event_limit(tmp_path):
     run_id=storage.start_run('one',Command(text='old'),'mock')
     with storage.connect() as db:
         db.execute('DROP TABLE run_events')
+        remove_work_item_schema(db)
         db.execute('PRAGMA user_version=3')
     upgraded=Storage(storage.path)
     assert upgraded.run('one',run_id)['command']['text']=='old'

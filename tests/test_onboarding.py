@@ -1,3 +1,4 @@
+from tests.schema_helpers import remove_work_item_schema
 from fastapi.testclient import TestClient
 from app.main import create_app
 import pytest
@@ -43,6 +44,7 @@ def test_v4_migration_keeps_existing_data(tmp_path):
     storage.save_client_path('codex', 'fake-path')
     with storage.connect() as db:
         db.execute('DROP TABLE onboarding_state')
+        remove_work_item_schema(db)
         db.execute('PRAGMA user_version=4')
     restored = Storage(path)
     assert restored.client_path('codex') == 'fake-path'

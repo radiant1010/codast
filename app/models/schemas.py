@@ -85,6 +85,44 @@ class ChatCreate(StrictModel):
     task: str = Field(min_length=1, max_length=120, pattern=r'\S')
 
 
+class WorkItemCreate(StrictModel):
+    chat_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
+    title: str = Field(min_length=1, max_length=120, pattern=r'\S')
+    goal: str = Field(min_length=1, max_length=8000, pattern=r'\S')
+    done_criteria: str = Field(min_length=1, max_length=8000, pattern=r'\S')
+
+
+class WorkItemRun(Command):
+    expected_revision: int = Field(ge=1)
+    request_id: str = Field(min_length=1, max_length=128, pattern=r'^[a-zA-Z0-9_-]+$')
+
+
+class WorkItemControl(StrictModel):
+    expected_revision: int = Field(ge=1)
+    action: Literal['pause', 'resume', 'cancel']
+    reason: str = Field(default='', max_length=1000)
+
+    @model_validator(mode='after')
+    def require_reason(self):
+        if self.action != 'resume' and not self.reason.strip():
+            raise ValueError('보류 또는 취소 사유를 입력하세요.')
+        return self
+
+
+class WorkItemVerification(StrictModel):
+    expected_revision: int = Field(ge=1)
+    run_id: str = Field(pattern=r'^[a-f0-9]{32,64}$')
+    verdict: Literal['passed', 'failed', 'inconclusive']
+    criteria_met: bool = False
+    note: str = Field(min_length=1, max_length=4000, pattern=r'\S')
+
+    @model_validator(mode='after')
+    def confirmed_completion(self):
+        if self.verdict == 'passed' and not self.criteria_met:
+            raise ValueError('완료 조건을 모두 확인한 뒤 통과로 기록하세요.')
+        return self
+
+
 class ClientConfig(StrictModel):
     path: str = Field(default='', max_length=2048)
 

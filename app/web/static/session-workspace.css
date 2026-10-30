@@ -1,0 +1,75 @@
+/* Dashboard and chat share navigation, never the same cramped content area. */
+#workspace [hidden]{display:none!important}
+#open-dashboard{display:block;flex:none;margin:14px 0 0;text-align:left;min-height:40px;padding:8px 10px;border-color:transparent}
+#open-dashboard[aria-current=page]{background:#2b3038;color:var(--bs-body-color)}
+.session-dashboard-page{flex:1;min-width:0;min-height:0;overflow:auto;padding:28px 32px 40px;scrollbar-width:thin}
+.session-dashboard-page>header{display:flex;align-items:center;gap:12px;margin-bottom:7px}
+.session-dashboard-page h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0}
+.session-page-context{font-size:13px;color:var(--terminal-muted);margin:0 0 24px}
+.session-tabs{display:flex;align-items:center;flex-wrap:wrap;gap:18px;border-bottom:1px solid var(--terminal-border);flex:none}
+.session-tabs button{border:0;border-radius:0!important;border-bottom:2px solid transparent;background:transparent;padding:10px 4px;min-height:44px;color:var(--terminal-muted);font-size:14px;white-space:nowrap}
+.session-tabs button[aria-selected=true]{color:var(--bs-body-color);border-bottom-color:var(--bs-body-color)}
+.session-tabs button:hover{background:#252a31}
+.session-dashboard-page>[role=tabpanel]{padding:20px 0 0;background:transparent;border:0;border-radius:0;min-width:0;max-height:none;overflow:visible}
+.session-dashboard-page .compact-panel-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+.session-dashboard-page .compact-panel-head h2{font-size:14px;margin:0;font-weight:500;color:var(--terminal-muted)}
+.session-dashboard-page .section-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.session-dashboard-page .section-header-actions>button{font-size:12px;border-color:transparent;background:transparent}
+.session-dashboard-page .dashboard-body{max-height:none;overflow:visible;min-width:0}
+.session-dashboard-page .dashboard-table,.session-workspace-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;line-height:1.6}
+.session-dashboard-page :is(.dashboard-table,.session-workspace-table) :is(th,td){padding:10px 8px;border-bottom:1px solid var(--terminal-border);vertical-align:top;text-align:left;overflow-wrap:anywhere;white-space:normal}
+.session-dashboard-page :is(.dashboard-table,.session-workspace-table) :is(th,td):first-child{padding-left:0}
+.session-dashboard-page :is(.dashboard-table,.session-workspace-table) th{font-size:12px;font-weight:400;color:var(--terminal-muted);background:transparent}
+.session-workspace-table th:nth-child(1){width:32%}.session-workspace-table th:nth-child(2){width:23%}.session-workspace-table th:nth-child(3){width:11%}.session-workspace-table th:nth-child(4){width:21%}.session-workspace-table th:nth-child(5){width:13%}
+.session-count{font-size:12px;color:var(--terminal-muted);margin:0 0 12px}
+.session-workspace-table .session-title-link{display:block;width:100%;min-height:28px;padding:0;border:0;background:transparent;text-align:left;font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.session-workspace-table .session-title-link:hover{text-decoration:underline;text-underline-offset:4px}
+.session-row-meta{font-size:12px;color:var(--terminal-muted);margin:5px 0 0;white-space:normal;font-variant-numeric:tabular-nums}
+.session-ai-tags,.session-properties{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge{font-size:12px;padding:2px 7px;border:0;border-radius:4px}
+.session-dashboard-page .environment-project{max-width:60%;font-size:12px;overflow-wrap:anywhere;white-space:normal}
+.session-dashboard-page .environment-table th:nth-child(1){width:18%}.session-dashboard-page .environment-table th:nth-child(2){width:27%}.session-dashboard-page .environment-table th:nth-child(3){width:55%}
+.session-dashboard-page .account-table th:nth-child(1){width:18%}.session-dashboard-page .account-table th:nth-child(2){width:47%}.session-dashboard-page .account-table th:nth-child(3){width:35%}
+.session-dashboard-page .session-alerts{margin-top:24px;max-height:none;overflow:visible}
+.session-load-status:not(:empty){margin-top:18px;padding:12px 0;border-top:1px solid var(--terminal-border);font-size:13px;color:var(--terminal-muted)}
+.session-chat-summary{flex:none;padding:12px 24px 0;min-width:0}
+.session-back{display:inline-block;color:var(--terminal-accent);font-size:12px;margin-bottom:12px;text-decoration:none}
+.session-current-goal{font-size:13px;color:var(--terminal-muted);margin:10px 0 14px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:5em;overflow:auto}
+.session-chat-summary .session-tabs{margin:0}
+.session-detail-panel{flex:1;min-height:0;min-width:0;overflow:auto;padding:24px;scrollbar-width:thin}
+.session-detail-panel h2{font-size:19px;margin:0 0 18px}.session-detail-panel h3{font-size:15px;margin:22px 0 10px}
+.session-info-grid{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px 24px;margin:0 0 26px;font-variant-numeric:tabular-nums}
+.session-info-grid dt{font-size:13px;font-weight:400;color:var(--terminal-muted)}.session-info-grid dd{margin:0;overflow-wrap:anywhere}
+.session-metric-group,.session-goal-info,.session-goal-form{max-width:75ch;padding:24px 0;border-top:1px solid var(--terminal-border)}
+.session-goal-form label{display:block;margin:14px 0 6px;font-size:13px}.session-goal-form textarea{width:100%;min-height:85px}.session-goal-form>button{margin-top:16px}
+.session-goal-info p{white-space:pre-wrap;overflow-wrap:anywhere}.session-run-record{margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--terminal-border)}
+.session-run-record .console-output{padding:12px 0;overflow-wrap:anywhere}
+.work-items-embedded{overflow:visible;padding:0!important;min-width:0}
+.work-items-embedded>header{display:none}.work-items-embedded .work-item-title{margin:0 0 20px}.work-items-embedded .work-item-title h2{font-size:20px}
+.work-items-embedded .work-item-layout{grid-template-columns:minmax(0,1.7fr) minmax(230px,1fr)}
+#console:not([data-session-tab=chat]) :is(.conversation-pane,#new-output,#composer){display:none!important}
+#console[data-session-tab] #welcome{display:none!important}
+#workspace.workspace-fold #console>header{padding-top:15px;padding-bottom:15px}
+#workspace.workspace-fold #chat-title{font-size:22px;white-space:normal;line-height:1.4}
+#workspace.workspace-fold #console .conversation-pane{min-height:100px}
+@media(max-width:1100px){.session-dashboard-page{padding:24px}.work-items-embedded .work-item-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:900px){.session-dashboard-page{padding:22px 16px 30px}.session-chat-summary{padding:10px 14px 0}.session-detail-panel{padding:20px 14px}.session-dashboard-page h1{font-size:24px}#workspace.workspace-fold #chat-title{font-size:19px}}
+@media(max-width:620px){
+ .session-dashboard-page .compact-panel-head{align-items:flex-start;gap:8px}
+ .session-dashboard-page .section-header-actions{gap:4px}
+ .session-tabs{gap:16px}.session-tabs button{font-size:13px;padding:10px 0}
+ .session-workspace-table,.session-workspace-table tbody{display:block;width:100%}
+ .session-workspace-table thead{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden}
+ .session-workspace-table tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:15px 0;border-bottom:1px solid var(--terminal-border)}
+ .session-dashboard-page .session-workspace-table td{display:block;min-width:0;padding:0;border:0}
+ .session-workspace-table td:first-child,.session-workspace-table td:nth-child(2){grid-column:1/-1}
+ .session-workspace-table td:not(:first-child)::before{content:attr(data-label);display:block;font-size:11px;color:var(--terminal-muted);margin-bottom:4px}
+ .session-workspace-table td:nth-child(2){display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .session-workspace-table td:nth-child(2)::before{display:none}.session-workspace-table td:nth-child(2) .session-row-meta{margin:0}
+ .session-info-grid{grid-template-columns:80px minmax(0,1fr);gap:12px 14px}
+ #workspace.workspace-fold #console>header .pagination{margin-left:auto}
+ #workspace.workspace-fold #console>header{flex-wrap:wrap}
+ .session-chat-summary .session-current-goal{max-height:4.8em;margin-bottom:8px}
+ .session-dashboard-page .dashboard-table{font-size:13px}
+}
+@media(max-height:650px){.session-chat-summary .session-current-goal{display:none}.session-back{margin-bottom:6px}.session-chat-summary{padding-top:6px}.session-properties{gap:4px}}

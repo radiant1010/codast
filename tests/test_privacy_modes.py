@@ -1,3 +1,4 @@
+from tests.schema_helpers import remove_work_item_schema
 import json
 from concurrent.futures import ThreadPoolExecutor
 
@@ -94,6 +95,7 @@ def test_v9_migration_and_concurrent_key_creation(tmp_path):
     storage = Storage(path)
     with storage.connect() as db:
         db.execute('DROP TABLE guard_pseudonym_keys')
+        remove_work_item_schema(db)
         db.execute('PRAGMA user_version=9')
         db.execute('INSERT INTO guard_options VALUES (?,?)', ('one', '{"level":"medium","fields":[]}'))
     storage = Storage(path)
@@ -101,7 +103,7 @@ def test_v9_migration_and_concurrent_key_creation(tmp_path):
         keys = list(pool.map(lambda _: storage.guard_pseudonym_key('one'), range(8)))
     assert len(set(keys)) == 1 and len(keys[0]) == 32
     with storage.connect() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 11
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 13
         assert json.loads(db.execute('SELECT options FROM guard_options').fetchone()[0])['level'] == 'medium'
         assert db.execute('SELECT COUNT(*) FROM guard_pseudonym_keys').fetchone()[0] == 1
 
