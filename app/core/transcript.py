@@ -27,6 +27,7 @@ def display_message(role, text, *, full=False):
     result['text'] = payload['task'][:limit]
     if full:
         return result
-    result['delivery_details'] = json.dumps({key: payload[key] for key in ('rules', 'files', 'history')}, ensure_ascii=False, indent=2)[:8000]
-    result['details_truncated'] = len(json.dumps({key: payload[key] for key in ('rules', 'files', 'history')}, ensure_ascii=False, indent=2)) > 8000
+    details = json.dumps({key: payload[key] for key in ('rules', 'files', 'history')}, ensure_ascii=False, indent=2)
+    result['delivery_details'] = details[:8000]
+    result['details_truncated'] = len(details) > 8000
     return result

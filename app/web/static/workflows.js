@@ -5,7 +5,7 @@
   const endpoint=()=>'/projects/'+encodeURIComponent(project)+'/workflows';
   const dialog=el('dialog',undefined,'session-drawer workflow-dialog');dialog.id='workflow-dialog';
   const head=el('header'),heading=el('h2','작업 순서 설정'),body=el('div'),status=el('p',undefined,'hint');status.setAttribute('role','status');
-  function icon(kind,label,fn){const n=button('',fn);window.actionIcon(n,kind,label);return n;}
+  const icon=iconButton;
   function field(label,input){const wrap=el('div',undefined,'form-field'),lab=el('label',label);input.id=input.id||'wf-'+crypto.randomUUID();lab.htmlFor=input.id;wrap.append(lab,input);return wrap;}
   function select(values,value){const n=el('select');for(const v of values){const o=el('option',v);o.value=v;n.append(o);}n.value=value||values[0];return n;}
   function modeSelect(value){const n=select(['read-only','workspace-write'],value||'read-only');n.options[0].textContent='분석만 (읽기 전용)';n.options[1].textContent='구현, 테스트 (작업 폴더 수정 허용)';return n;}

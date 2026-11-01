@@ -8,7 +8,7 @@
   let project='',selected=new Set(),rows=[],options=null,generation=0,contextVersion=0,uploading=false;
   const page=el('section'),intro=el('p','첨부 파일에서 개인정보와 비밀 키를 찾아 선택한 보호 방식을 적용합니다. 메시지, 이전 대화, 작업 규칙과 에이전트가 직접 읽는 파일은 적용 대상이 아니며, 설정을 바꿔도 이미 보낸 정보는 회수되지 않습니다.','hint');
   const badge=el('span',undefined,'hint'),toolbar=el('div',undefined,'attachment-toolbar'),chips=el('div',undefined,'attachment-chips');chips.id='attachment-chips';
-  function icon(kind,label,fn){const b=button(label,fn);window.actionIcon(b,kind,label);return b;}
+  const icon=iconButton;
   $('text').before(chips);$('composer-toolbar').prepend(toolbar);
   const form=el('form',undefined,'modal-form'),levelLabel=el('label','비밀 키와 비밀번호'),level=el('select');level.id='guard-level';levelLabel.htmlFor=level.id;
   for(const [value,label] of Object.entries({strong:'가리기 (개인키 첨부 차단)',allow:'원본 그대로 전송'})){const opt=el('option',label);opt.value=value;level.append(opt);}

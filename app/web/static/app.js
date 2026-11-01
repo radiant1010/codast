@@ -94,6 +94,7 @@ async function request(path,options={},type='json'){
 async function api(path,method='GET',body){return request(path,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});}
 async function act(fn){try{await fn();}catch(e){notice(e.message,true);}}
 function button(label,fn,cls){const n=el('button',label,cls);n.type='button';n.onclick=()=>act(fn);if(cls==='secondary'||cls==='icon-action')window.decorateAction?.(n,label);return n;}
+function iconButton(kind,label,fn){const n=button('',fn);window.actionIcon(n,kind,label);return n;}
 function selectedPaths(){return [];}
 function showPage(){}
 let streams=[];

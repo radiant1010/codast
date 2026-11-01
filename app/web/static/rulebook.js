@@ -34,7 +34,7 @@
   function payload(){return {include_project_rules:false,folders:[...folders],books:books.map(b=>({...b}))};}
   const signature=()=>JSON.stringify(payload());
   function dirty(){status.textContent='저장하지 않은 변경사항이 있습니다.';}
-  function icon(kind,label,fn){const node=button('',fn);window.actionIcon(node,kind,label);return node;}
+  const icon=iconButton;
   function current(){return books.find(b=>b.id===selected&&!b.trashed);}
   function renderEditor(){const book=current();empty.hidden=!!book;fields.hidden=!book;remove.disabled=!book;
     if(!book)return;name.value=book.name;folder.replaceChildren(new Option('폴더 없음',''),...folders.map(f=>new Option(f,f)));folder.value=book.folder;content.value=book.content??defaults;

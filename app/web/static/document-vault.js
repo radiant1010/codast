@@ -10,7 +10,7 @@
   const endpoint=()=>'/projects/'+encodeURIComponent(project)+'/document-vault';
   const query=()=>'?connection_id='+encodeURIComponent(binding.connection_id);
   function field(label,node){const wrap=el('div',undefined,'form-field'),lab=el('label',label);lab.htmlFor=node.id;wrap.append(lab,node);return wrap;}
-  function icon(kind,label,handler){const n=button('',handler);window.actionIcon(n,kind,label);return n;}
+  const icon=iconButton;
   function report(message,error=false){status.textContent=message;status.classList.toggle('error',error);}
   async function request(path,method,body){const ticket=generation;const value=await api(path,method,body);if(ticket!==generation)throw Error('프로젝트가 변경되었습니다.');return value;}
   async function run(fn){if(busy)return;const ticket=generation;busy=true;panel.setAttribute('aria-busy','true');setDisabled(true);try{await fn();}catch(e){if(ticket===generation){if(dialog.open){editorStatus.textContent=e.message;editorStatus.classList.add('error');}else report(e.message,true);}}finally{busy=false;panel.setAttribute('aria-busy','false');setDisabled(false);}}
