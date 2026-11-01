@@ -1,4 +1,4 @@
-/* Run against an isolated server: VAULT_TEST_URL=http://127.0.0.1:8769. */
+/* Run against an isolated server: uvicorn app.main:create_app --factory --port 8769 with HARNESS_WORKSPACES set to a temporary folder. */
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
 const {chromium}=require('playwright');

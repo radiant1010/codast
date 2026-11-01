@@ -1,3 +1,4 @@
+/* Run against an isolated server: uvicorn app.main:create_app --factory --port 8776 with HARNESS_WORKSPACES set to a temporary folder. No CLI run is started. */
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');

@@ -106,3 +106,9 @@ def test_link_guard(setup, tmp_path):
     try: (root/'link.txt').symlink_to(target)
     except OSError: pytest.skip('OS requires symlink privilege')
     assert c.get('/api/projects/sample/file',params={'path':'link.txt'}).status_code == 403
+
+
+def test_import_does_not_open_runtime_storage():
+    # Tests and fixture servers import app.main; only start.py creates the runtime app.
+    import app.main
+    assert not hasattr(app.main, 'app')

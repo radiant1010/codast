@@ -1,3 +1,4 @@
+/* Run against an isolated fake-CLI server: uvicorn parallel_server:app --app-dir tests/browser --port 8773. A plain app server starts real CLI runs. */
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');

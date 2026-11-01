@@ -1,4 +1,4 @@
-/* Real API and storage, synthetic native transcripts from session_search_server.py. */
+/* Real API and storage, synthetic native transcripts: uvicorn session_search_server:app --app-dir tests/browser --port 8779. */
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {chromium}=require('playwright');

@@ -95,6 +95,3 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
         return {"status": "ok", "adapter": type(app.state.harness.agent).__name__}
 
     return app
-
-
-app = create_app()
