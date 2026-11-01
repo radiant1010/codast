@@ -24,9 +24,10 @@ const fs=require('node:fs');
   await run('외부 실행 채팅','codex');
   await page.waitForFunction(()=>[...document.querySelectorAll('.session-workspace-table tbody tr')].some(tr=>tr.textContent.startsWith('외부 실행 채팅')&&tr.children[1].textContent==='대기 중'),null,{timeout:12000});
   assert.equal((await cells('외부 실행 채팅'))[3],'Codex');
-  // Live run and per-AI context go through the app's own entry point; the next poll replaces them.
+  // Live run and per-AI context go through the app's own entry point; real polls are held back so they cannot replace them mid-check.
+  await page.evaluate(()=>{const workspace=window.sessionWorkspace,apply=workspace.metricsChanged.bind(workspace);workspace.applyVirtualMetrics=apply;workspace.metricsChanged=()=>{};});
   const inject=active=>page.evaluate(({ids,active})=>{const usage=(used,size)=>({used_tokens:used,window_tokens:size,observed_at:new Date().toISOString()});
-   window.sessionWorkspace.metricsChanged([
+   window.sessionWorkspace.applyVirtualMetrics([
     {chat_id:ids.multi,client:'codex',execution_model:'virtual-codex',context_usage:usage(16000,100000),input_tokens:50000,output_tokens:2000,runs:1,input_reports:1,output_reports:1},
     {chat_id:ids.multi,client:'claude',execution_model:'virtual-claude',context_usage:usage(16000,200000),runs:1},
     {chat_id:ids.idle,client:'codex',context_usage:usage(16000,100000),input_tokens:900000,output_tokens:1000,runs:1,input_reports:1,output_reports:1},
