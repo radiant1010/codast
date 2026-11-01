@@ -7,7 +7,7 @@ function sessionWorkspaceRows(chats,items,metrics,runs,describeWork){
     const view=item?describeWork(item):null,unknown=active.some(run=>!run.cancellable);
     const title=item&&chat.task===item.title.slice(0,75)+' / '+item.id?item.title:chat.task;
     // Usage reports can be missing for finished runs, so only saved runs decide whether a chat has started.
-    const started=chat.runs>0||active.length>0||Boolean(view?.latest),idle=started?'대기 중':'시작 전';
+    const started=chat.runs>0||values.some(row=>row.runs>0)||active.length>0||Boolean(view?.latest),idle=started?'대기 중':'시작 전';
     const fallback=!view||view.tone==='ready';
     return {chat,item,metrics:values,active,title,
       status:fallback?(unknown?'상태 미확인':active.length?'진행 중':!view&&chat.status==='paused'?'보류':!view&&chat.status==='done'?'완료':idle):view.status,

@@ -43,6 +43,28 @@ test('a finished goal run is not treated as completion',()=>{
  const [row]=sessionWorkspaceRows([{id:'a',task:'목표 대화',runs:1,status:'done'}],[goal],[],[],workItemView);
  assert.equal(row.status,'확인 필요');
 });
+test('polled run counts update idle state without token or context reports',()=>{
+ const {sessionWorkspaceRows}=require(source);
+ const chats=[{id:'a',task:'외부 실행 채팅',runs:0},{id:'b',task:'새 채팅',runs:0}];
+ const metric={task:'외부 실행 채팅',client:'codex',runs:0,input_tokens:null,output_tokens:null,input_reports:0,output_reports:0,context_usage:null};
+ let rows=sessionWorkspaceRows(chats,[],[metric],[],workItemView);
+ assert.equal(rows.find(row=>row.chat.id==='a').status,'시작 전');
+ rows=sessionWorkspaceRows(chats,[],[metric,{...metric,client:'claude',runs:1}],[],workItemView);
+ assert.equal(rows.find(row=>row.chat.id==='a').status,'대기 중');
+ assert.equal(rows.find(row=>row.chat.id==='a').reason,'다음 지시 대기');
+ assert.equal(rows.find(row=>row.chat.id==='b').status,'시작 전');
+});
+
+test('linked native sessions and another chat run do not start a new chat',()=>{
+ const {sessionWorkspaceRows}=require(source);
+ const chats=[{id:'a',task:'연결한 채팅',runs:0}];
+ const metrics=[{chat_id:'a',task:'연결한 채팅',client:'codex',session_id:'native',runs:0},
+  {chat_id:'other',task:'연결한 채팅',client:'claude',runs:1}];
+ const [row]=sessionWorkspaceRows(chats,[],metrics,[],workItemView);
+ assert.equal(row.status,'시작 전');
+ assert.equal(row.reason,'실행 기록 없음');
+});
+
 test('context shows each AI window share without summing or inventing zero',()=>{
  const {contextSummary}=require(source);
  const usage=(used,size)=>({context_usage:{used_tokens:used,window_tokens:size}});
