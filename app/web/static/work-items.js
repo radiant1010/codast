@@ -263,6 +263,7 @@ if(typeof document!=='undefined')(()=>{
   }
   window.workItems={attachToChat(id,parent){
     if(id&&embedded?.id===id&&embedded.hash===location.hash&&page.parentNode===parent)return;
+    if(!id&&!embedded&&page.parentNode===$('workspace'))return;
     embedded=id?{id,hash:location.hash}:null;page.classList.toggle('work-items-embedded',!!id);header.hidden=!!id;
     if(id)parent.replaceChildren(page);else $('workspace').append(page);signature='';currentRoute='';navigate();
   },projectChanged(){
