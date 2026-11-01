@@ -219,11 +219,13 @@ async function conversation(b=base()){
   $('messages-prev').disabled=offset===0;$('messages-next').disabled=d.messages.length<20;$('page-number').textContent=d.messages.length?(offset+1)+'–'+(offset+d.messages.length):'0개';
   const running=r.runs.filter(x=>x.status==='running');$('activity').textContent=running.length?'실행 중인 작업 '+running.length+'개':'';
   $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);window.refreshSessionView?.(r.runs);
+  window.sessionWorkspace?.conversationChanged(d.messages,chatId);
   if(follow)followOutput(true);else $('messages').scrollTop=scroll;
 }
 function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개가 표시되며, 작업을 선택하면 관련 대화와 결과를 확인할 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+', '+taskStates[g.status],async()=>{await switchChat(g.task);},'task'));}
-async function switchChat(task){
+async function switchChat(task,{navigate=true}={}){
   if(!projectReady){notice('프로젝트를 먼저 불러와야 합니다. 대화 새로고침으로 다시 시도하세요.',true);return false;}
+  const navigationHash=location.hash;let navigated=false;
   window.chatState.pause();epoch++;conversationTicket++;closeStreams();chatLoading=true;$('send').disabled=true;
   $('routing').replaceChildren();$('new-output').hidden=true;$('messages').replaceChildren(el('div','대화를 불러오는 중…','empty'));
   task=task||null;filter=task;const b=base(),e=epoch;
@@ -231,9 +233,15 @@ async function switchChat(task){
     if(!valid(b,e)||!restored)return;
     // Draft capture must stay active even while remote reads fail or remain pending.
     $('composer').inert=false;actionHint();drawTasks();
+    if(!navigate||window.chatState.identity($('project').value,task)){
+      window.sessionWorkspace?.chatSelected(task,{navigate});navigated=navigate;
+    }
     const results=await Promise.allSettled([loadRules(b),conversation(b)]);
     if(!valid(b,e))return;
-    if(results[1].status==='fulfilled')window.chatState.finish(restored);
+    if(results[1].status==='fulfilled'){
+      window.chatState.finish(restored);
+      if(navigate&&!navigated&&location.hash===navigationHash)window.sessionWorkspace?.chatSelected(filter);
+    }
     const failures=results.map((result,index)=>result.status==='rejected'?(index===0?'룰북':'대화')+' 조회 실패: '+result.reason.message:null).filter(Boolean);
     chatLoading=failures.length>0;$('send').disabled=busy||chatLoading;
     if(failures.length){if(results[1].status==='rejected')$('messages').replaceChildren(el('div','대화를 불러오지 못했습니다. 대화 새로고침으로 다시 시도하세요.','empty'));notice(failures.join('. ')+'. 대화 새로고침으로 다시 시도하세요. 작성 내용은 유지됩니다.',true);return false;}
@@ -243,12 +251,14 @@ async function switchChat(task){
 async function loadProject(){
   window.chatState.pause();window.materialGuard?.restore('',[]);projectReady=false;projectDefaults={};chatLoading=true;$('send').disabled=true;$('composer').inert=true;
   epoch++;conversationTicket++;closeStreams();filter=null;offset=0;historyOffset=0;groups=[];$('text').value='';$('task-name').value='';$('routing').replaceChildren();$('messages').replaceChildren();$('history').replaceChildren();$('rules').textContent='프로젝트 선택 대기';$('workspace-root').value='';drawTasks();window.refreshSetup?.();
+  window.workItems?.projectChanged();
+  window.sessionWorkspace?.projectChanged();
   if(!$('project').value){chatLoading=false;notice('프로젝트를 선택하세요.');return;}
   const b=base(),e=epoch;
   try{
     const [s,workspace,t]=await Promise.all([api(b+'/settings'),api(b+'/workspace'),api(b+'/tasks')]);if(!valid(b,e))return;$('workspace-root').value=workspace.path;projectDefaults=s;groups=t.tasks;window.chatState.bind($('project').value,groups);projectReady=true;
     window.documentVault?.projectReady();
-    await switchChat(window.chatState.selected($('project').value));if(valid(b))window.refreshSetup?.();
+    await switchChat(window.chatState.selected($('project').value),{navigate:false});if(valid(b)){window.refreshSetup?.();window.workItems?.projectReady();window.sessionWorkspace?.projectReady();}
   }catch(error){if(valid(b,e))notice('프로젝트 조회 실패: '+error.message+'. 대화 새로고침으로 다시 시도하거나 다른 프로젝트를 선택하세요. 저장된 초안은 유지됩니다.',true);}
 }
 async function loadRules(b=base()){

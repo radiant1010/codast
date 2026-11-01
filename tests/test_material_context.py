@@ -1,3 +1,4 @@
+from tests.schema_helpers import remove_work_item_schema
 import io
 import json
 
@@ -198,6 +199,7 @@ def test_v10_upload_is_reindexed_without_reextraction(tmp_path, monkeypatch):
     report = store.import_file('one', 'guide.md', long_document().encode())
     with store.storage.connect() as db:
         db.execute('DROP TABLE material_chunks')
+        remove_work_item_schema(db)
         db.execute('PRAGMA user_version=10')
     def forbidden(*args, **kwargs):
         raise AssertionError('Original extraction must not run')

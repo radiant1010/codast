@@ -186,7 +186,7 @@ async def chat(name: str, body: ChatRequest, request: Request):
         return {'id': message_id, 'routing': decision, 'action': 'note'}
     command = Command(**body.model_dump(exclude={'action','auto_route','request_id'}))
     command.task = decision['task']
-    return {'run_id': s.submit(name, command, body.request_id), 'routing': decision, 'action': 'run'}
+    return {'run_id': request.app.state.work_items.submit_chat(name, command, body.request_id), 'routing': decision, 'action': 'run'}
 
 
 @router.post('/projects/{name}/tasks', status_code=201)
@@ -224,6 +224,8 @@ def pending_questions(name: str, request: Request, chat_id: str = Query(pattern=
 async def reply_to_question(name: str, run_id: str, body: QuestionReply, request: Request):
     s = service(request)
     s.projects.select(name)
+    if request.app.state.work_items.for_run(name, run_id):
+        return {'run_id': request.app.state.work_items.reply(name, run_id, body.answer, body.request_id)}
     return {'run_id': request.app.state.workflows.reply(name, run_id, body.answer, body.request_id)}
 
 

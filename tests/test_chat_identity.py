@@ -1,3 +1,4 @@
+from tests.schema_helpers import remove_work_item_schema
 import json
 import sqlite3
 import sys
@@ -26,6 +27,7 @@ def test_real_v7_migration_preserves_messages_sessions_and_identity(tmp_path):
         db.execute('ALTER TABLE messages DROP COLUMN chat_id')
         db.execute('ALTER TABLE client_sessions DROP COLUMN chat_id')
         db.execute('DROP TABLE chats')
+        remove_work_item_schema(db)
         db.execute('PRAGMA user_version=7')
     migrated = Storage(path)
     chat = migrated.tasks('one')[0]

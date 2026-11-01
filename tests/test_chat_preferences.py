@@ -1,3 +1,4 @@
+from tests.schema_helpers import remove_work_item_schema
 import sqlite3
 
 from fastapi.testclient import TestClient
@@ -51,9 +52,10 @@ def test_v5_migration_preserves_existing_chat_and_native_session(tmp_path):
     storage.save_session('one', 'saved', 'codex', '.', 'read-only', 'fixture-native')
     with sqlite3.connect(path) as db:
         db.execute('DROP TABLE chat_preferences')
+        remove_work_item_schema(db)
         db.execute('PRAGMA user_version=5')
     migrated = Storage(path)
     assert migrated.tasks('one') == [{'id': chat_id, 'task': 'saved', 'count': 0, 'status': 'active', 'pinned': 0, 'archived': 0}]
     assert migrated.session('one', 'saved', 'codex', '.', 'read-only') == 'fixture-native'
     with migrated.connect() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 11
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 13

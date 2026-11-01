@@ -56,6 +56,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.document_vault = DocumentVault(projects)
     from app.core.workflows import Workflows
     app.state.workflows = Workflows(app.state.document_vault, app.state.harness)
+    from app.core.work_items import WorkItems
+    app.state.work_items = WorkItems(app.state.harness)
 
     @app.middleware("http")
     async def same_origin(request: Request, call_next):
@@ -81,6 +83,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.include_router(document_vault_router)
     from app.api.workflows import router as workflows_router
     app.include_router(workflows_router)
+    from app.api.work_items import router as work_items_router
+    app.include_router(work_items_router)
     from app.api.session_search import router as session_search_router
     app.include_router(session_search_router)
     app.mount("/static", StaticFiles(directory=BASE / "web/static"), name="static")
