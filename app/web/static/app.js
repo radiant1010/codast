@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id);
 let projectDefaults={}, chatLoading=false, projectReady=false, restoreNotified=false;
 let projectNames={};
 function projectLabel(name){return Object.hasOwn(projectNames,name)?projectNames[name]:name;}
-let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false, pollTimer;
+let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false;
 const statusNames={running:'실행 중 / 종료 미확인',completed:'완료',failed:'실패',interrupted:'중단'};
 const taskStates={active:'진행',paused:'보류',done:'완료'};
 function el(tag,text,cls){
@@ -96,7 +96,6 @@ async function act(fn){try{await fn();}catch(e){notice(e.message,true);}}
 function button(label,fn,cls){const n=el('button',label,cls);n.type='button';n.onclick=()=>act(fn);if(cls==='secondary'||cls==='icon-action')window.decorateAction?.(n,label);return n;}
 function iconButton(kind,label,fn){const n=button('',fn);window.actionIcon(n,kind,label);return n;}
 function selectedPaths(){return [];}
-function showPage(){}
 let streams=[];
 
 function closeStreams(){for(const stream of streams)stream.close();streams=[];}
@@ -220,7 +219,7 @@ async function conversation(b=base()){
   $('messages-prev').disabled=offset===0;$('messages-next').disabled=d.messages.length<20;$('page-number').textContent=d.messages.length?(offset+1)+'–'+(offset+d.messages.length):'0개';
   const running=r.runs.filter(x=>x.status==='running');$('activity').textContent=running.length?'실행 중인 작업 '+running.length+'개':'';
   $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);window.refreshSessionView?.(r.runs);
-  clearTimeout(pollTimer);if(follow)followOutput(true);else $('messages').scrollTop=scroll;
+  if(follow)followOutput(true);else $('messages').scrollTop=scroll;
 }
 function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개가 표시되며, 작업을 선택하면 관련 대화와 결과를 확인할 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+', '+taskStates[g.status],async()=>{await switchChat(g.task);},'task'));}
 async function switchChat(task){
@@ -243,7 +242,7 @@ async function switchChat(task){
 }
 async function loadProject(){
   window.chatState.pause();window.materialGuard?.restore('',[]);projectReady=false;projectDefaults={};chatLoading=true;$('send').disabled=true;$('composer').inert=true;
-  epoch++;conversationTicket++;closeStreams();clearTimeout(pollTimer);filter=null;offset=0;historyOffset=0;groups=[];$('text').value='';$('task-name').value='';$('routing').replaceChildren();$('messages').replaceChildren();$('history').replaceChildren();$('rules').textContent='프로젝트 선택 대기';$('workspace-root').value='';drawTasks();window.refreshSetup?.();
+  epoch++;conversationTicket++;closeStreams();filter=null;offset=0;historyOffset=0;groups=[];$('text').value='';$('task-name').value='';$('routing').replaceChildren();$('messages').replaceChildren();$('history').replaceChildren();$('rules').textContent='프로젝트 선택 대기';$('workspace-root').value='';drawTasks();window.refreshSetup?.();
   if(!$('project').value){chatLoading=false;notice('프로젝트를 선택하세요.');return;}
   const b=base(),e=epoch;
   try{

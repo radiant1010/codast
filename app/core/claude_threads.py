@@ -13,13 +13,19 @@ def transcript_root():
 def read_file(path, root, *, full=False):
     if path.is_symlink() or path.parent.is_symlink() or path.parent.is_junction():
         return None
-    if not full and path.stat().st_size > 16 * 1024 * 1024:
-        raise ValueError('Claude 세션이 16 MiB 조회 한도를 초과했습니다.')
+    limit = 16 * 1024 * 1024
+    oversized = not full and path.stat().st_size > limit
+    remaining = limit
     messages = []
     matched = False
     updated = None
-    with path.open(encoding='utf-8') as source:
-        for line in source:
+    with path.open('rb') as source:
+        while line := source.readline(-1 if full else remaining + 1):
+            if not full:
+                remaining -= len(line)
+                if remaining < 0:
+                    raise ValueError('Claude 세션이 16 MiB 조회 한도를 초과했습니다.')
+            line = line.decode('utf-8')
             try:
                 row = json.loads(line)
             except ValueError:
@@ -30,6 +36,8 @@ def read_file(path, root, *, full=False):
                 if Path(row['cwd']).resolve() != Path(root).resolve():
                     return None
                 matched = True
+                if oversized:
+                    raise ValueError('Claude 세션이 16 MiB 조회 한도를 초과했습니다.')
             if row.get('sessionId') and row['sessionId'] != path.stem:
                 return None
             if row.get('type') not in ('user', 'assistant'):

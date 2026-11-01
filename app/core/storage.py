@@ -483,7 +483,9 @@ class Storage:
 
     def run(self, project, run_id):
         with self.connect() as db:
-            row = db.execute("SELECT * FROM runs WHERE project=? AND id=?", (project,run_id)).fetchone()
+            row = db.execute("""SELECT r.*,m.chat_id FROM runs r
+                LEFT JOIN messages m ON m.run_id=r.id AND m.project=r.project
+                WHERE r.project=? AND r.id=?""", (project,run_id)).fetchone()
         if not row:
             raise FileNotFoundError("실행을 찾을 수 없습니다.")
         return {**dict(row), "command": json.loads(row['command']), "metadata": json.loads(row['metadata'])}

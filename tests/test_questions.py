@@ -72,6 +72,39 @@ def test_new_request_supersedes_old_question_and_failed_preparation_keeps_it(tmp
         assert client.get(base+'/questions',params={'chat_id':chat}).json()['messages'][0]['run_id']==new
 
 
+@pytest.mark.parametrize('agent', ['codex', 'claude'])
+def test_moved_question_reply_uses_current_chat_and_original_permissions(tmp_path, monkeypatch, agent):
+    calls = []
+    monkeypatch.setattr('app.core.orchestrator.executable', lambda *args: sys.executable)
+    async def execute(self, context, cwd, mode, session=None):
+        calls.append((self.client, json.loads(context), mode, session))
+        return AgentResult(adapter=self.client, output=QUESTION if len(calls) == 1 else 'continued', session_id='fixture-native')
+    monkeypatch.setattr(CliAdapter, 'execute', execute)
+    with TestClient(create_app(tmp_path/'ws')) as client:
+        client.post('/api/projects', json={'name':'one'})
+        base = '/api/projects/one'
+        run = client.post(base+'/chat', json={'text':'ask', 'task':'source', 'client':agent, 'action':'run', 'mode':'read-only'}).json()['run_id']
+        original = wait_run(client, run)['command']
+        assert client.patch(base+'/messages/'+run, json={'task':'destination'}).status_code == 200
+        target = next(chat for chat in client.get(base+'/tasks').json()['tasks'] if chat['task'] == 'destination')
+        assert client.patch(base+'/tasks', json={'task':'destination', 'title':'renamed'}).status_code == 200
+        assert client.get(base+'/questions', params={'chat_id':original['chat_id']}).json()['messages'] == []
+        assert client.get(base+'/questions', params={'chat_id':target['id']}).json()['messages'][0]['run_id'] == run
+        reply = {'answer':'JSON', 'request_id':'moved-answer'}
+        response = client.post(base+'/runs/'+run+'/reply', json=reply)
+        assert response.status_code == 200, response.text
+        follow = wait_run(client, response.json()['run_id'])
+        assert follow['status'] == 'completed'
+        assert follow['command']['chat_id'] == target['id']
+        assert follow['command']['task'] == 'renamed'
+        assert calls[1][0] == agent and calls[1][2:] == ('read-only', None)
+        assert 'JSON' in calls[1][1]['task'] and 'Which format?' in calls[1][1]['task']
+        assert client.get(base+'/runs/'+run).json()['command'] == original
+        assert client.post(base+'/runs/'+run+'/reply', json=reply).json()['run_id'] == follow['id']
+        assert client.post(base+'/runs/'+run+'/reply', json={**reply, 'request_id':'another'}).status_code == 409
+        assert client.get(base+'/questions', params={'chat_id':target['id']}).json()['messages'] == []
+
+
 @pytest.mark.parametrize('final,waiting', [(QUESTION, True), ('작업 완료. 추가 검토를 원하시나요?', False), ('예시: '+QUESTION, False), ('```codast-question\n{"question":""}\n```', False)])
 def test_codex_progress_is_preserved_but_only_final_response_is_question(final, waiting):
     events = [

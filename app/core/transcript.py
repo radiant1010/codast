@@ -1,6 +1,7 @@
 """Display known harness envelopes without altering native transcripts."""
 import json
 from app.core.questions import QUESTION_INSTRUCTION
+from app.core.toolchain import TOOL_GUIDE
 
 PREFIX = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n'
 
@@ -16,6 +17,8 @@ def display_message(role, text, *, full=False):
     content = text[len(PREFIX):]
     if content.startswith(QUESTION_INSTRUCTION):
         content = content[len(QUESTION_INSTRUCTION):]
+    if content.startswith(TOOL_GUIDE):
+        content = content[len(TOOL_GUIDE):]
     try:
         payload = json.loads(content)
     except ValueError:

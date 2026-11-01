@@ -17,7 +17,7 @@ from scan_sonar import run_scanner, source_snapshot
 def check_server():
     if not os.environ.get('SONAR_TOKEN'):
         raise RuntimeError('Set SONAR_TOKEN in the ignored .env.sonar file.')
-    for executable in ('uv', 'pysonar'):
+    for executable in ('uv', 'node', 'pysonar'):
         if not shutil.which(executable):
             raise RuntimeError(f'{executable} is not installed or not on PATH.')
     host = os.environ.get('SONAR_HOST_URL', 'http://localhost:9000').rstrip('/')
@@ -58,6 +58,10 @@ def verify(project: Path, revision=None) -> int:
                 '--cov', '--cov-config=pyproject.toml', '--cov-report=term:skip-covered',
                 '--cov-fail-under=0',
             ], cwd=tests, env=environment)
+            if result.returncode:
+                return result.returncode
+            node_tests = sorted((tests / 'tests').glob('test_*.cjs'))
+            result = subprocess.run(['node', '--test', *map(str, node_tests)], cwd=tests, env=environment)
             if result.returncode:
                 return result.returncode
             # coverage.py applies configured precision; pytest-cov's summary compares raw floats.

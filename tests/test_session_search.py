@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 from app.core import native_threads, claude_threads
 from app.core.session_search import SessionSearch
 from app.core.storage import Storage
-from app.core.transcript import PREFIX
+from app.core.transcript import PREFIX, display_message
 from app.core.questions import QUESTION_INSTRUCTION
+from app.core.toolchain import TOOL_GUIDE
 from app.models.schemas import Command
 
 
@@ -41,11 +42,12 @@ def test_local_body_search_and_message_destination(search, tmp_path):
         search.context('two', tmp_path, rows[0]['key'])
 
 
-def test_codex_full_history_is_indexed_without_internal_content(search, tmp_path, monkeypatch):
+@pytest.mark.parametrize('tool_guide', ['', TOOL_GUIDE], ids=['without-tools', 'with-tools'])
+def test_codex_full_history_is_indexed_without_internal_content(search, tmp_path, monkeypatch, tool_guide):
     identity = str(uuid4())
     calls = []
     payload = {'task': '첫번째의 고유한본문', 'rules': ['비공개룰'], 'files': [], 'history': []}
-    turns = [{'items': [{'type': 'userMessage', 'content': [{'type': 'text', 'text': PREFIX+QUESTION_INSTRUCTION+json.dumps(payload, ensure_ascii=False)}]},
+    turns = [{'items': [{'type': 'userMessage', 'content': [{'type': 'text', 'text': PREFIX+QUESTION_INSTRUCTION+tool_guide+json.dumps(payload, ensure_ascii=False)}]},
                        {'type': 'reasoning', 'text': '비공개추론'},
                        {'type': 'agentMessage', 'text': 'x'*8500+'긴메시지끝'}]}]
     turns += [{'items': [{'type': 'agentMessage', 'text': '이후 대화'}]}]*25
@@ -82,6 +84,39 @@ def test_claude_full_history_and_project_boundary(search, tmp_path):
     path.unlink()
     search.rebuild('one', tmp_path)
     assert search.search('one', tmp_path, '옛날자료')['results'] == []
+
+
+@pytest.mark.parametrize('source', ['codex', 'claude'])
+def test_existing_index_rereads_native_transcripts_after_parser_update(search, tmp_path, monkeypatch, source):
+    from app.core.session_search import digest
+
+    key = digest(['one', str(tmp_path.resolve()), source, 'fixture'])
+    search.replace('one', tmp_path, source, 'fixture', key, 'unchanged',
+                   {'messages':[{'role':'assistant', 'text':'cached answer'}]})
+    with search.connect() as db:
+        db.execute('PRAGMA user_version=1')
+    search.close()
+    reopened = SessionSearch(search.storage)
+    reads = []
+    prompt = PREFIX+QUESTION_INSTRUCTION+TOOL_GUIDE+json.dumps(
+        {'task':'복구할 사용자요청', 'rules':['비공개룰'], 'files':[], 'history':[]})
+    def read():
+        reads.append('read')
+        return {'messages':[display_message('user', prompt, full=True)]}
+    monkeypatch.setattr(reopened, source, lambda *args: [('fixture', 'unchanged', read)])
+    try:
+        assert reopened.search('one', tmp_path, 'cached')['results']
+        reopened.rebuild('one', tmp_path)
+        assert reopened.search('one', tmp_path, '사용자요청')['results'][0]['source'] == source
+        assert not reopened.search('one', tmp_path, '비공개룰')['results']
+        reopened.rebuild('one', tmp_path)
+        reopened.close()
+        reopened = SessionSearch(search.storage)
+        monkeypatch.setattr(reopened, source, lambda *args: [('fixture', 'unchanged', read)])
+        reopened.rebuild('one', tmp_path)
+        assert reads == ['read']
+    finally:
+        reopened.close()
 
 
 def test_updates_deletions_persistence_and_literal_query(search, tmp_path):

@@ -53,7 +53,7 @@ class Orchestrator:
         return self.files.read(self.policy.file_path(self.projects.select(name), relative))
 
     def write_file(self, name, relative, content):
-        self.files.write(self.policy.file_path(self.projects.select(name), relative, write=True), content)
+        self.files.write(self.policy.file_path(self.projects.select(name), relative), content)
 
     def rulebook_preferences(self, name):
         saved = self.storage.rulebook_settings(name)
@@ -213,7 +213,7 @@ class Orchestrator:
             raise FileExistsError('답변할 수 있는 질문이 아닙니다.')
         original = Command.model_validate(record['command'])
         text = '질문 출처 실행: '+run_id+'\n이전 질문: '+question['question']+'\n사용자 답변: '+answer+'\n이 답변을 반영하여 기존 작업을 이어가세요. 기존 권한과 요청 범위를 유지하세요.'
-        command = original.model_copy(update={'text':text,'raw_text':answer,'fresh':False})
+        command = original.model_copy(update={'text':text,'raw_text':answer,'fresh':False,'chat_id':record['chat_id']})
         return self.submit(name, command, request_id, reply_to=run_id)
 
     async def cancel(self, name, run_id):

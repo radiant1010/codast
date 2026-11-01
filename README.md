@@ -173,7 +173,7 @@ uv run python -m pytest -q
 
 ### SonarQube 로컬 검사
 
-로컬 SonarQube에 프로젝트 키가 `CODAST`인 프로젝트를 만든다. Docker의 SonarQube 서버는 검사하는 동안 실행되어 있어야 한다. 프로젝트 폴더에서 다음 초기 설정을 한 번 수행한다. Python 버전은 `.python-version`의 3.12를 사용한다.
+로컬 SonarQube에 프로젝트 키가 `CODAST`인 프로젝트를 만든다. Docker의 SonarQube 서버는 검사하는 동안 실행되어 있어야 한다. Python 버전은 `.python-version`의 3.12를 사용하고, JavaScript 테스트에 사용할 Node.js도 설치하여 `node` 명령이 실행되도록 한다. 프로젝트 폴더에서 다음 초기 설정을 한 번 수행한다.
 
 ```powershell
 uv sync --locked
@@ -183,7 +183,7 @@ Copy-Item .env.sonar.example .env.sonar
 
 이미 `.env.sonar`가 있으면 복사하지 않는다. 파일의 `SONAR_TOKEN`에 CODAST 분석 토큰을 넣고 `SONAR_HOST_URL`을 확인한다. 이 파일은 Git, Docker 빌드, Git archive에서 제외한다. 실제 토큰을 명령줄이나 `sonar-project.properties`에 넣지 않는다.
 
-테스트, 커버리지 측정, SonarQube 분석과 Quality Gate 확인은 다음 한 명령으로 실행한다.
+Python 테스트, `tests/test_*.cjs`의 Node 테스트, 커버리지 측정, SonarQube 분석과 Quality Gate 확인은 다음 한 명령으로 실행한다.
 
 ```powershell
 uv run --locked --env-file .env.sonar python quality_check.py

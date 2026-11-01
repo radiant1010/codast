@@ -5,7 +5,7 @@ from app.guards.filesystem import confined
 class PolicyEngine:
     """Hard rules; RULES.md cannot override these checks."""
 
-    def file_path(self, root: Path, relative: str, *, write: bool = False) -> Path:
+    def file_path(self, root: Path, relative: str) -> Path:
         path = confined(root, relative)
         parts = [p.lower() for p in path.relative_to(root.resolve()).parts]
         if any(p in {".git", ".harness", ".codast-documents"} or p == ".env" or p.startswith(".env.") for p in parts):

@@ -75,3 +75,42 @@ def test_missing_coverage_configuration_blocks_old_commits(monkeypatch, tmp_path
     monkeypatch.setattr(quality_check, 'check_server', lambda: None)
     with pytest.raises(RuntimeError, match='Commit the local quality'):
         quality_check.verify(tmp_path, 'a' * 40)
+
+
+@pytest.mark.parametrize('node_fails', [False, True], ids=['node-passes', 'node-fails'])
+def test_node_tests_gate_scanner_upload(monkeypatch, tmp_path, node_fails):
+    from contextlib import contextmanager
+
+    project, snapshot_root = tmp_path/'project', tmp_path/'snapshot'
+    test_root = snapshot_root/'tests'
+    test_root.mkdir(parents=True)
+    (snapshot_root/'pyproject.toml').write_text(
+        '[tool.coverage.run]\nsource=["app"]\n[tool.coverage.report]\nfail_under=75\n', encoding='utf-8')
+    (test_root/'test_gate.cjs').write_text(
+        "const assert=require('node:assert/strict');require('node:test')('fixture',()=>{"
+        "assert.equal(process.env.SONAR_TOKEN,undefined);"
+        f"assert.equal({str(node_fails).lower()},false);" + '});', encoding='utf-8')
+    # Only the unit-test files belong to this gate; browser tests have separate fixtures.
+    browser_root = test_root/'browser'
+    browser_root.mkdir()
+    (browser_root/'test_browser.cjs').write_text('process.exit(99);', encoding='utf-8')
+    coverage = snapshot_root/'.local/sonar/coverage.xml'
+    coverage.parent.mkdir(parents=True)
+    coverage.write_text('<coverage/>', encoding='utf-8')
+    @contextmanager
+    def snapshot(*args):
+        yield snapshot_root
+    monkeypatch.setattr(quality_check, 'source_snapshot', snapshot)
+    monkeypatch.setattr(quality_check, 'check_server', lambda: None)
+    monkeypatch.setenv('SONAR_TOKEN', 'fixture-secret')
+    run_process = subprocess.run
+    def run(command, **kwargs):
+        if command[0] == 'uv':
+            return subprocess.CompletedProcess(command, 0)
+        return run_process(command, **kwargs)
+    monkeypatch.setattr(quality_check.subprocess, 'run', run)
+    uploaded = []
+    monkeypatch.setattr(quality_check, 'run_scanner', lambda *a, **kw: uploaded.append(kw['coverage']) or 0)
+    result = quality_check.verify(project)
+    assert (result != 0) == node_fails
+    assert uploaded == ([] if node_fails else [project/'.local/sonar/coverage.xml'])

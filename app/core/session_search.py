@@ -26,7 +26,8 @@ class SessionSearch:
         self.closed = Event()
         self.states = {}
         with self.connect() as db:
-            if db.execute('PRAGMA user_version').fetchone()[0] == 0:
+            version = db.execute('PRAGMA user_version').fetchone()[0]
+            if version == 0:
                 db.executescript('DROP TABLE IF EXISTS entries; DROP TABLE IF EXISTS sessions;')
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -45,8 +46,11 @@ class SessionSearch:
                 CREATE TRIGGER IF NOT EXISTS entry_delete AFTER DELETE ON entries BEGIN
                     INSERT INTO entry_text(entry_text,rowid,body) VALUES ('delete',old.id,old.body);
                 END;
-                PRAGMA user_version=1;
             ''')
+            if version < 2:
+                # Native prompts with TOOL_GUIDE were omitted by the previous parser.
+                db.execute("UPDATE sessions SET fingerprint=NULL WHERE source IN ('codex','claude')")
+                db.execute('PRAGMA user_version=2')
 
     @contextmanager
     def connect(self):
