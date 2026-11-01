@@ -1,5 +1,41 @@
 /* Dashboard and chat share navigation, never the same cramped content area. */
-#workspace.workspace-fold{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:52px minmax(0,1fr)}
+#workspace.workspace-fold{display:grid;grid-template-columns:0px minmax(0,1fr);grid-template-rows:52px minmax(0,1fr);transition:grid-template-columns 300ms ease}
+#workspace.workspace-fold.chat-open:not(.collapsed){grid-template-columns:264px minmax(0,1fr)}
+#workspace.workspace-fold #sidebar{width:264px;min-width:0;max-width:none}
+#workspace.workspace-fold #sidebar>.brand{display:none}
+#workspace.workspace-fold #sidebar[popover]>.brand{display:flex;height:44px;min-height:44px;justify-content:flex-end}
+#sidebar[popover]>.brand #home{display:none}
+#project-switcher{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;width:100%;margin-top:16px;min-height:64px;padding:10px 12px;text-align:left;border-color:var(--terminal-border);background:var(--control-bg)}
+#project-switcher:hover,#project-switcher[aria-expanded=true]{background:var(--control-hover);border-color:var(--terminal-accent)}
+.project-switcher-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+.project-switcher-label{font-size:11px;color:var(--terminal-muted)}
+.project-switcher-text strong{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#project-switcher svg{flex:none;width:20px;height:20px;transform:rotate(90deg);color:var(--terminal-muted)}
+.project-switcher-menu{position:fixed;inset:136px auto auto 16px;margin:0;width:232px;max-height:calc(100dvh - 152px);overflow:auto;padding:8px;background:var(--bs-body-bg);color:var(--bs-body-color);border:1px solid var(--terminal-border);border-radius:6px}
+.project-switcher-menu button{display:block;width:100%;min-height:40px;text-align:left;overflow-wrap:anywhere;background:transparent;border:0;font-size:13px}
+.project-switcher-menu button:hover,.project-switcher-menu button[aria-pressed=true]{background:var(--terminal-selected)}
+.project-switcher-menu button:last-child{border-top:1px solid var(--terminal-border);margin-top:8px}
+.side-project-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+#sidebar .side-project-links :is(a,#open-dashboard){display:flex;align-items:center;justify-content:center;margin:0;padding:7px 6px;min-height:36px;border:1px solid var(--terminal-border);border-radius:var(--bs-border-radius);font-size:12px;color:var(--terminal-muted);text-decoration:none;background:transparent}
+#sidebar .side-project-links a:hover{background:var(--control-hover);color:var(--bs-body-color)}
+#sidebar .side-project-links a:focus-visible{outline:1px solid var(--terminal-accent);outline-offset:2px}
+#workspace #sidebar .new-chat{background:var(--terminal-selected);border-color:var(--terminal-accent);color:var(--terminal-accent);font-weight:600}
+#workspace #sidebar .new-chat:hover{background:var(--control-hover)}
+#sidebar .chat-navigation .side-title{min-height:32px;margin-bottom:8px}
+#sidebar .chat-navigation .side-title .section-header-actions{display:flex;gap:2px}
+#workspace #sidebar .side-title .action-icon{width:28px;min-width:28px;height:32px;min-height:32px;padding:5px;margin:0}
+#workspace.workspace-fold .chat-list-row{display:grid;grid-template-columns:minmax(0,1fr);padding:4px 0 8px;border-radius:var(--bs-border-radius)}
+#workspace.workspace-fold .chat-list-row:has(.task.active){background:var(--terminal-selected)}
+#workspace.workspace-fold #task-list .task{display:block;min-height:32px;padding:4px 76px 3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:transparent}
+#sidebar .side-session-state{justify-self:start;max-width:calc(100% - 86px);margin-left:10px;padding:0;font-size:11px;border:0;background:transparent}
+#sidebar .side-session-state::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:currentColor;margin:0 6px 2px 0}
+#sidebar .chat-row-actions{top:50%;right:6px}
+/* Keep actions in the tab order so keyboard focus can reveal them. */
+#workspace #sidebar .chat-row-actions .action-icon{visibility:visible;opacity:0;pointer-events:none}
+#workspace #sidebar .chat-list-row:is(:hover,:focus-within,:has(.task.active)) .action-icon{opacity:1;pointer-events:auto}
+@keyframes session-enter{from{opacity:0}to{opacity:1}}
+.session-dashboard-page:not([hidden]),#sidebar:not([hidden]){animation:session-enter 300ms ease}
+@media(prefers-reduced-motion:reduce){#workspace.workspace-fold{transition:none}.session-dashboard-page:not([hidden]),#sidebar:not([hidden]){animation:none}}
 #workspace>#sidebar{grid-column:1;grid-row:2}
 #workspace>:is(#console,.session-dashboard-page,.settings-page,.work-items-page){grid-column:2;grid-row:2;min-width:0;min-height:0}
 #workspace>.settings-page{height:100%}
@@ -8,6 +44,7 @@
 #app-bar nav{display:flex;align-items:center;gap:10px;flex:1;min-width:0;font-size:14px;white-space:nowrap}
 #app-bar nav a{color:var(--terminal-muted);text-decoration:none;overflow:hidden;text-overflow:ellipsis;max-width:30%}
 #app-bar nav a:first-child{flex:none;font-weight:600;color:var(--bs-body-color)}
+#app-bar nav [aria-current=page]{color:var(--bs-body-color);max-width:none;min-width:0;overflow:hidden;text-overflow:ellipsis}
 #app-bar nav a:hover{color:var(--bs-body-color);text-decoration:underline;text-underline-offset:4px}
 #app-bar .path-separator{color:var(--terminal-muted);flex:none}
 #workspace-screen{min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -27,8 +64,10 @@
 #running-menu-status:empty{display:none}
 #running-menu-status:not(:empty){margin-top:12px;font-size:13px}
 @media(max-width:760px){
+ .project-switcher-menu{top:180px;max-height:calc(100dvh - 196px)}
+ #workspace.workspace-fold.chat-open:not(.collapsed){grid-template-columns:0px minmax(0,1fr)}
  #workspace>#app-bar{gap:6px;padding-inline:6px}
- #app-bar nav>:not(#workspace-screen){display:none}
+ #app-bar nav>:not([aria-current=page]){display:none}
  #app-bar nav{font-size:13px}
  .app-bar-actions{gap:0}
  #workspace .settings-layout{grid-template-columns:minmax(0,1fr)}
@@ -41,8 +80,39 @@
 #open-dashboard[aria-current=page]{background:#2b3038;color:var(--bs-body-color)}
 .session-dashboard-page{flex:1;min-width:0;min-height:0;overflow:auto;padding:28px 32px 40px;scrollbar-width:thin}
 .session-dashboard-page>header{display:flex;align-items:center;gap:12px;margin-bottom:7px}
-.session-dashboard-page h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0}
+.session-dashboard-page h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0;min-width:0;overflow-wrap:anywhere}
+.session-dashboard-page>header>a{flex:none;white-space:nowrap}
+.session-list-actions{display:flex;align-items:center;gap:8px;flex:none}
+.session-dashboard-page>.compact-session-panel{padding:0;background:transparent;border:0;border-radius:0;overflow:visible}
 .session-page-context{font-size:13px;color:var(--terminal-muted);margin:0 0 24px}
+.session-page-context{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px}
+.session-page-context label{margin:0}.session-page-context select{width:240px;max-width:100%;font-size:14px}
+.session-page-context a{margin-left:auto;color:var(--terminal-accent);text-underline-offset:4px}
+.project-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px}
+.project-summary-grid>section{min-width:0;padding:24px 0;border:0;border-top:1px solid var(--terminal-border);background:transparent;border-radius:0;overflow:visible}
+.project-summary-grid .codex-account-summary{display:block}
+.project-summary-grid h2{font-size:16px;color:var(--bs-body-color);margin:0 0 20px}
+.summary-stats{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px 24px;margin:0 0 24px;font-size:14px}
+.summary-stats dt{font-weight:400;color:var(--terminal-muted)}.summary-stats dd{margin:0;font-variant-numeric:tabular-nums}
+.summary-goal{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--terminal-border)}
+.summary-goal a{color:var(--bs-body-color);overflow-wrap:anywhere;text-underline-offset:4px}
+.projects-context{color:var(--terminal-muted);margin:16px 0 24px;font-size:14px}
+.project-list{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:20px}
+.project-list>li{padding:24px;border:1px solid var(--terminal-border);border-radius:6px;min-width:0}
+.project-list>li>a{font-size:18px;color:var(--bs-body-color);font-weight:500;text-underline-offset:5px;overflow-wrap:anywhere}
+.project-card-path{font-size:13px;line-height:1.6;color:var(--terminal-muted);overflow-wrap:anywhere;margin:12px 0 20px}
+.project-list>li>p:not(.project-card-path){display:inline-block;margin:0 16px 0 0;font-size:13px}
+#auth-alerts{padding:0 0 12px;margin:0 0 12px;border-bottom:1px solid var(--terminal-border)}
+.project-summary-grid .client-auth-notice{padding:0 0 16px;align-items:flex-start}
+.project-summary-grid .client-auth-list{flex-basis:100%}
+@media(max-width:760px){.project-summary-grid{grid-template-columns:minmax(0,1fr);gap:12px}.session-page-context a{flex-basis:100%;margin:4px 0 0}.session-page-context select{flex:1;width:0;min-width:120px}.project-list{grid-template-columns:minmax(0,1fr)}}
+.session-dashboard-page>header{padding:0;border:0;justify-content:space-between}
+.session-filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.session-filters button{font-size:13px;padding:7px 12px;min-height:40px;background:transparent;border-color:transparent}
+.session-filters button[aria-pressed=true]{color:var(--terminal-accent);background:var(--terminal-selected);border-color:var(--terminal-border)}
+.session-pagination{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:20px;font-size:13px}
+.session-pagination>span{margin-right:auto;color:var(--terminal-muted);font-variant-numeric:tabular-nums}
+.session-pagination>button{min-height:40px;font-size:13px}
 .session-tabs{display:flex;align-items:center;flex-wrap:wrap;gap:18px;border-bottom:1px solid var(--terminal-border);flex:none}
 .session-tabs button{border:0;border-radius:0!important;border-bottom:2px solid transparent;background:transparent;padding:10px 4px;min-height:44px;color:var(--terminal-muted);font-size:14px;white-space:nowrap}
 .session-tabs button[aria-selected=true]{color:var(--bs-body-color);border-bottom-color:var(--bs-body-color)}
@@ -69,6 +139,8 @@
 /* Session tones: hold reads as needing attention, unknown stays neutral with its own text and outline. */
 :is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=paused]{color:#f3d58c;background:#3c3019}
 :is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=unknown]{color:#d5dae2;background:#24282f;box-shadow:inset 0 0 0 1px #626975}
+#sidebar .side-session-state[data-tone=paused]{color:#f3d58c}
+#sidebar .side-session-state[data-tone=unknown]{color:#d5dae2}
 :is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=phase]{color:var(--terminal-muted);background:#202328;font-weight:400}
 :is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=ai]{font-weight:400;background:#202328}
 :is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-client=codex]{color:#a3d9d3;background:#1b2b2a}
@@ -77,9 +149,17 @@
 .session-dashboard-page .environment-table th:nth-child(1){width:18%}.session-dashboard-page .environment-table th:nth-child(2){width:27%}.session-dashboard-page .environment-table th:nth-child(3){width:55%}
 .session-dashboard-page .account-table th:nth-child(1){width:18%}.session-dashboard-page .account-table th:nth-child(2){width:47%}.session-dashboard-page .account-table th:nth-child(3){width:35%}
 .session-load-status:not(:empty){margin-top:18px;padding:12px 0;border-top:1px solid var(--terminal-border);font-size:13px;color:var(--terminal-muted)}
-.session-chat-summary{flex:none;padding:12px 24px 0;min-width:0}
-.session-current-goal{font-size:13px;color:var(--terminal-muted);margin:10px 0 14px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:5em;overflow:auto}
-.session-chat-summary .session-tabs{margin:0}
+.session-chat-summary{display:flex;align-items:center;gap:12px;flex:none;height:52px;padding:0 20px;min-width:0;border-bottom:1px solid var(--terminal-border)}
+.session-chat-summary .session-properties{flex:none;flex-wrap:nowrap;max-width:45%;overflow:hidden}
+.session-current-goal{flex:1;min-width:0;padding:8px 0;font-size:13px;color:var(--terminal-muted);margin:0;border:0;background:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.session-chat-summary .session-tabs{margin:0 0 0 auto;border:0;gap:14px;flex-wrap:nowrap;height:100%}
+.session-chat-summary .session-tabs button{height:100%;font-size:13px}
+#workspace.workspace-fold #console>header{display:none}
+#workspace.workspace-fold .conversation-pane{flex-direction:column}
+#workspace.workspace-fold .conversation-pagination{justify-content:center;padding:8px 24px;min-height:44px;gap:16px}
+#workspace.workspace-fold .conversation-pagination button{width:auto;min-height:28px;padding:4px 8px;font-size:12px;background:transparent;border:0}
+.conversation-pagination #page-number,.conversation-pagination button:disabled{display:none}
+.conversation-pane .chat-outline{top:50px}
 .session-detail-panel{flex:1;min-height:0;min-width:0;overflow:auto;padding:24px;scrollbar-width:thin}
 .session-detail-panel h2{font-size:19px;margin:0 0 18px}.session-detail-panel h3{font-size:15px;margin:22px 0 10px}
 .session-info-grid{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px 24px;margin:0 0 26px;font-variant-numeric:tabular-nums}
@@ -93,11 +173,10 @@
 .work-items-embedded .work-item-layout{grid-template-columns:minmax(0,1.7fr) minmax(230px,1fr)}
 #console:not([data-session-tab=chat]) :is(.conversation-pane,#new-output,#composer){display:none!important}
 #console[data-session-tab] #welcome{display:none!important}
-#workspace.workspace-fold #console>header{padding-top:15px;padding-bottom:15px}
-#workspace.workspace-fold #chat-title{font-size:22px;white-space:normal;line-height:1.4}
 #workspace.workspace-fold #console .conversation-pane{min-height:100px}
 @media(max-width:1100px){.session-dashboard-page{padding:24px}.work-items-embedded .work-item-layout{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:900px){.session-dashboard-page{padding:22px 16px 30px}.session-chat-summary{padding:10px 14px 0}.session-detail-panel{padding:20px 14px}.session-dashboard-page h1{font-size:24px}#workspace.workspace-fold #chat-title{font-size:19px}}
+@media(max-width:900px){.session-dashboard-page{padding:22px 16px 30px}.session-chat-summary{padding:0 12px;gap:8px}.session-detail-panel{padding:20px 14px}.session-dashboard-page h1{font-size:24px}}
+@media(max-width:760px){.session-chat-summary .session-properties{max-width:20%}.session-chat-summary .session-tabs{gap:8px}.session-chat-summary .session-tabs button{font-size:12px;padding-inline:0}.session-chat-summary .work-item-badge{padding:2px 4px;font-size:11px}.session-current-goal{font-size:12px}}
 @media(max-width:620px){
  .session-dashboard-page .compact-panel-head{align-items:flex-start;gap:8px}
  .session-dashboard-page .section-header-actions{gap:4px}
@@ -112,9 +191,5 @@
  .session-workspace-table td:not(:first-child)::before{content:attr(data-label);display:block;font-size:11px;color:var(--terminal-muted);margin-bottom:4px}
  .session-workspace-table td:nth-child(2)::before{display:none}
  .session-info-grid{grid-template-columns:80px minmax(0,1fr);gap:12px 14px}
- #workspace.workspace-fold #console>header .pagination{margin-left:auto}
- #workspace.workspace-fold #console>header{flex-wrap:wrap}
- .session-chat-summary .session-current-goal{max-height:4.8em;margin-bottom:8px}
  .session-dashboard-page .dashboard-table{font-size:13px}
 }
-@media(max-height:650px){.session-chat-summary .session-current-goal{display:none}.session-chat-summary{padding-top:6px}.session-properties{gap:4px}}

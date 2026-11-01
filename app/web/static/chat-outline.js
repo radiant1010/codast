@@ -21,7 +21,7 @@
       const button=document.createElement('button');button.type='button';button.className='outline-item';
       button.setAttribute('aria-label',(index+1)+'. '+label.slice(0,120));
       const mark=document.createElement('span');mark.className='outline-mark';mark.setAttribute('aria-hidden','true');
-      const preview=document.createElement('span');preview.className='outline-preview';preview.textContent=label.slice(0,120);preview.setAttribute('aria-hidden','true');
+      const preview=document.createElement('span');preview.className='outline-preview';preview.textContent=(index+1)+'. '+label.slice(0,120);preview.setAttribute('aria-hidden','true');
       button.append(mark,preview);
       button.onclick=()=>{messages.scrollTo({top:messages.scrollTop+card.getBoundingClientRect().top-messages.getBoundingClientRect().top-8,behavior:'instant'});schedule();};
       return {card,button};

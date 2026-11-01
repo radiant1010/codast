@@ -98,5 +98,5 @@
     scope.textContent=projectLabel(project)+' 프로젝트의 CODAST, Codex, Claude 대화를 이 컴퓨터에서 검색합니다.';
     dialog.showModal();input.focus();await updateIndex();
   });open.id='open-session-search';
-  document.querySelector('.chat-navigation .new-chat').after(open);
+  window.actionIcon(open,'search','대화 검색');document.querySelector('.chat-navigation .side-title .section-header-actions').append(open);
 })();

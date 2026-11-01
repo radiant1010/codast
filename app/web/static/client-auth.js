@@ -6,27 +6,31 @@
   const list=el('div',undefined,'client-auth-list');
   const refresh=button('다시 확인',()=>check());refresh.setAttribute('aria-label','로그인 상태 다시 확인');
   panel.append(message,list,refresh);document.querySelector('#dashboard-panel-accounts .dashboard-body,.workspace-status-body').prepend(panel);
+  const alertList=el('div',undefined,'client-auth-list');alertList.id='auth-alerts';$('system-alerts').before(alertList);
   const pending=new Set(),active=state=>['checking','waiting','verifying'].includes(state);
   let rows=[],busy=false,checkAgain=false,timer=null,error='';
+  function needsLogin(client){const row=rows.find(item=>item.client===client);return window.accountAuthStates?.[client]==='login_required'||Boolean(row&&row.auth!=='ready');}
+  function noticeRows(){return rows.filter(row=>needsLogin(row.client)||pending.has(row.client)||active(row.login?.state));}
   function render(){
-    const focusId=list.contains(document.activeElement)?document.activeElement.id:null;
-    list.replaceChildren();
-    for(const row of rows){
-      const signing=pending.has(row.client)||active(row.login?.state);
-      if(row.auth==='ready'&&!signing)continue;
-      const name=row.client==='claude'?'Claude':'Codex',line=el('div',undefined,'client-auth-row');
-      const feedback=pending.has(row.client)?'로그인을 요청하고 있습니다.':row.login?.state!=='ready'?row.login?.message:'';
-      const text=feedback||
-        (row.state==='missing'?'CLI 설치 또는 경로 확인이 필요합니다.':row.state!=='installed'?'CLI 상태를 확인하지 못했습니다.':row.auth==='check_required'?'로그인이 필요합니다.':'로그인 상태를 확인하지 못했습니다.');
-      line.append(el('span',name+': '+text));
-      const login=button(signing?'로그인 진행 중':'로그인',()=>start(row.client));
-      login.id='login-'+row.client;login.disabled=signing;login.setAttribute('aria-label',name+' 로그인');
-      if(row.state==='installed'&&(row.auth==='check_required'||signing))line.append(login);
-      else line.append(button('연결 설정',()=>window.openConnections(row.client)));
-      list.append(line);
+    const focusId=[list,alertList].some(target=>target.contains(document.activeElement))?document.activeElement.id:null;
+    for(const target of [list,alertList]){
+      target.replaceChildren();
+      for(const row of noticeRows()){
+        const signing=pending.has(row.client)||active(row.login?.state),name=row.client==='claude'?'Claude':'Codex',line=el('div',undefined,'client-auth-row');
+        const feedback=pending.has(row.client)?'로그인을 요청하고 있습니다.':row.login?.state!=='ready'?row.login?.message:'';
+        const text=feedback||(window.accountAuthStates?.[row.client]==='login_required'?'로그인이 만료되었습니다.':row.state==='missing'?'CLI 설치 또는 경로 확인이 필요합니다.':row.state!=='installed'?'CLI 상태를 확인하지 못했습니다.':row.auth==='check_required'?'로그인이 필요합니다.':'로그인 상태를 확인하지 못했습니다.');
+        line.append(el('span',name+': '+text));
+        const login=button(signing?'로그인 진행 중':'로그인',()=>start(row.client));login.id=(target===list?'login-':'alert-login-')+row.client;login.disabled=signing;login.setAttribute('aria-label',name+' 로그인');
+        if(row.state==='installed'&&(row.auth==='check_required'||window.accountAuthStates?.[row.client]==='login_required'||signing))line.append(login);
+        else line.append(button('연결 설정',()=>window.openConnections(row.client)));
+        target.append(line);
+      }
+      if(target===alertList&&error)target.append(el('p',error),button('로그인 상태 다시 확인',check));
     }
-    panel.hidden=!error&&!list.children.length;
+    for(const row of document.querySelectorAll('[data-account-client]'))row.hidden=needsLogin(row.dataset.accountClient);
+    panel.hidden=!error&&!list.children.length;alertList.hidden=!alertList.children.length;
     message.hidden=!error;message.textContent=error;refresh.disabled=busy;
+    window.refreshSystemNotifications?.();
     if(focusId)document.getElementById(focusId)?.focus({preventScroll:true});
   }
   async function check(){
@@ -55,5 +59,5 @@
     if(!error)await check();
   }
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)void check();});
-  window.clientAuth={check,start};
+  window.clientAuth={check,start,needsLogin,refreshNotices:render,noticeCount:()=>noticeRows().length+(error?1:0)};
 })();

@@ -128,7 +128,7 @@ function drawTasks(){
   const choices=[...visible,...drafts];
   for(const g of choices){
     const row=el('div',undefined,'chat-list-row');row.dataset.task=g.task??'';
-    const b=button(g.label||g.task,async()=>{await switchChat(g.task);},'task'+(filter===g.task?' active':''));b.title=g.task||g.label;row.append(b);
+    const b=button(g.label||g.task,async()=>{await switchChat(g.task);},'task'+(filter===g.task?' active':''));b.title=g.task||g.label;b.setAttribute('aria-label',g.task||g.label);if(filter===g.task)b.setAttribute('aria-current','page');row.append(b);
     if(g.task){
       $('task-names').append(new Option(g.task,g.task));
       if(groups.some(item=>item.task===g.task)){
@@ -144,7 +144,7 @@ function drawTasks(){
   $('archive-label').textContent='보관된 채팅'+(archived.length?', '+archived.length:'');
   for(const g of archived){const row=el('div',undefined,'archived-chat-row'),restore=button('',()=>updateChatPreference(g.task,{archived:false}));window.actionIcon(restore,'restore',g.task+' 채팅 복원');row.append(el('span',g.task),restore);$('archived-chats').append(row);}
   if(!archived.length)$('archived-chats').append(el('p','보관된 채팅이 없습니다.','hint'));
-  $('chat-title').textContent=filter||'채팅 선택';window.refreshSetup?.();
+  $('chat-title').textContent=filter||'채팅 선택';window.sessionWorkspace?.decorateTasks();window.refreshSetup?.();
 }
 async function updateChatPreference(task,change){
   const b=base(),e=epoch;window.chatState.save();await api(b+'/tasks','PATCH',{task,chat_id:window.chatState.identity($('project').value,task),...change});if(!valid(b,e))return;
@@ -259,7 +259,7 @@ async function loadProject(){
     const [s,workspace,t]=await Promise.all([api(b+'/settings'),api(b+'/workspace'),api(b+'/tasks')]);if(!valid(b,e))return;$('workspace-root').value=workspace.path;projectDefaults=s;groups=t.tasks;window.chatState.bind($('project').value,groups);projectReady=true;
     window.documentVault?.projectReady();
     await switchChat(window.chatState.selected($('project').value),{navigate:false});if(valid(b)){window.refreshSetup?.();window.workItems?.projectReady();window.sessionWorkspace?.projectReady();}
-  }catch(error){if(valid(b,e))notice('프로젝트 조회 실패: '+error.message+'. 대화 새로고침으로 다시 시도하거나 다른 프로젝트를 선택하세요. 저장된 초안은 유지됩니다.',true);}
+  }catch(error){if(valid(b,e)){chatLoading=false;window.sessionWorkspace?.projectFailed(error);notice('프로젝트 조회 실패: '+error.message+'. 다시 불러오거나 다른 프로젝트를 선택하세요. 저장된 초안은 유지됩니다.',true);}}
 }
 async function loadRules(b=base()){
   const e=epoch,rules=await api(b+'/rules?cwd='+encodeURIComponent($('cwd').value));if(!valid(b,e))return;

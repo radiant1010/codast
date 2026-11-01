@@ -26,7 +26,7 @@
   }
   window.settingsPage={
     register(key,label,node){const link=el('a',label);link.href='#settings/'+key;nav.insertBefore(link,nav.querySelector('.workspace-menu'));node.classList.add('settings-content');node.hidden=true;content.append(node);pages.set(key,{label,node,link});},
-    open(key=last){const hash='#settings/'+key;if(location.hash===hash)render();else location.hash=hash;},
+    open(key=last){const hash='#settings/'+key;if(location.hash===hash)render();else location.hash=hash;window.sessionWorkspace?.renderPath();},
     close(){if(wasOpen){location.hash='';}},
   };
   const errors=el('section'),errorList=el('div');errors.id='request-errors';

@@ -9,7 +9,8 @@
   };
   function icon(button,kind,label){
     button.classList.add('action-icon');button.setAttribute('aria-label',label);button.title=label;
-    button.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><use href="/static/vendor/material-symbols-sharp/symbols.svg#'+symbols[kind]+'"></use></svg>';
+    const shape=kind==='search'?'<path d="M9.5 3a6.5 6.5 0 1 0 3.83 11.75L19.59 21 21 19.59l-6.25-6.26A6.5 6.5 0 0 0 9.5 3Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"/>':'<use href="/static/vendor/material-symbols-sharp/symbols.svg#'+symbols[kind]+'"></use>';
+    button.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">'+shape+'</svg>';
   }
   const dynamic={'열기':'file','경로 저장':'folder','경로 등록':'folder','복원':'restore','이 에이전트로 준비':'check','CLI 설치 및 연결 확인 열기':'plug','이동':'route'};
   window.decorateAction=(button,label)=>{if(dynamic[label])icon(button,dynamic[label],label);};
