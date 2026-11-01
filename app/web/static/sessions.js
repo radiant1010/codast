@@ -345,8 +345,8 @@
     if($('project').value!==projectName){$('project').value=projectName;await loadProject();}
     if(!projectReady||$('project').value!==projectName)throw Error('프로젝트를 불러오지 못했습니다. 프로젝트를 다시 선택해 주세요.');
     const b=base(),e=epoch,data=await api(b+'/tasks');if(!valid(b,e))return;
-    groups=data.tasks;window.chatState.bind(projectName,groups);
-    const current=groups.find(chat=>chatId?chat.id===chatId:chat.task===task);
+    const chats=data.tasks;window.chatState.bind(projectName,chats);
+    const current=chats.find(chat=>chatId?chat.id===chatId:chat.task===task);
     if(!current)throw Error('연결된 채팅을 찾을 수 없습니다. 채팅 목록을 다시 확인해 주세요.');
     await switchChat(current.task);
   }
