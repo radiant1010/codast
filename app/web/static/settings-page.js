@@ -4,18 +4,20 @@
   const header=el('header'),back=button('← 작업실',()=>window.settingsPage.close()),brand=el('strong','CODAST');
   header.append(brand,el('span','설정'),back);
   const layout=el('div',undefined,'settings-layout'),nav=el('nav'),content=el('main'),heading=el('h1');
-  nav.setAttribute('aria-label','설정 메뉴');content.append(heading);layout.append(nav,content);shell.append(header,layout);document.body.append(shell);
+  nav.setAttribute('aria-label','설정 메뉴');content.append(heading);layout.append(nav,content);shell.append(header,layout);$('workspace').append(shell);
   const context=el('p',undefined,'settings-context');nav.append(context);
   let workspaceScroll=0,last='execution',wasOpen=false,statusHome=null;
   function render(){
+    if(location.hash==='#settings'){location.replace('#settings/'+last);return;}
     const match=location.hash.match(/^#settings\/([a-z-]+)$/),selected=match&&pages.get(match[1]);
     if(!selected){
-      if(wasOpen){shell.hidden=true;$('workspace').style.removeProperty('display');
+      if(wasOpen){shell.hidden=true;
         statusHome?.parent.insertBefore($('status'),statusHome.next);$('messages').scrollTop=workspaceScroll;back.blur();($('open-settings').getClientRects().length?$('open-settings'):$('toggle-sidebar')).focus();wasOpen=false;}
       return;
     }
     if(!wasOpen){window.chatState.save();workspaceScroll=$('messages').scrollTop;statusHome={parent:$('status').parentNode,next:$('status').nextSibling};shell.append($('status'));}
-    wasOpen=true;last=match[1];$('workspace').style.display='none';shell.hidden=false;
+    wasOpen=true;last=match[1];shell.hidden=false;
+    $('console').hidden=true;if($('session-dashboard-page'))$('session-dashboard-page').hidden=true;
     context.textContent=$('project').value?'프로젝트, '+projectLabel($('project').value):'프로젝트 선택 전';heading.textContent=selected.label;heading.tabIndex=-1;
     for(const [key,page] of pages){page.node.hidden=key!==last;page.link.setAttribute('aria-current',key===last?'page':'false');}
     if(selected.node.tagName==='DETAILS')selected.node.open=true;

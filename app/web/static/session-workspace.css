@@ -1,4 +1,41 @@
 /* Dashboard and chat share navigation, never the same cramped content area. */
+#workspace.workspace-fold{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:52px minmax(0,1fr)}
+#workspace>#sidebar{grid-column:1;grid-row:2}
+#workspace>:is(#console,.session-dashboard-page,.settings-page,.work-items-page){grid-column:2;grid-row:2;min-width:0;min-height:0}
+#workspace>.settings-page{height:100%}
+#workspace>#app-bar{grid-column:1/-1;grid-row:1;display:flex;align-items:center;gap:12px;min-width:0;min-height:52px;height:52px;padding:4px 12px;border-bottom:1px solid var(--terminal-border);background:var(--bs-body-bg)}
+#workspace #app-bar #toggle-sidebar{position:static;flex:none;width:40px;min-width:40px;height:40px;min-height:40px;padding:8px;border-color:transparent;background:transparent}
+#app-bar nav{display:flex;align-items:center;gap:10px;flex:1;min-width:0;font-size:14px;white-space:nowrap}
+#app-bar nav a{color:var(--terminal-muted);text-decoration:none;overflow:hidden;text-overflow:ellipsis;max-width:30%}
+#app-bar nav a:first-child{flex:none;font-weight:600;color:var(--bs-body-color)}
+#app-bar nav a:hover{color:var(--bs-body-color);text-decoration:underline;text-underline-offset:4px}
+#app-bar .path-separator{color:var(--terminal-muted);flex:none}
+#workspace-screen{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.app-bar-actions{display:flex;align-items:center;gap:4px;flex:none}
+#app-bar .app-bar-actions>button{position:relative;flex:none;height:40px;min-height:40px;margin:0;padding:8px;border-color:transparent;background:transparent;white-space:nowrap;font-size:13px}
+#app-bar :is(#session-notifications,#open-settings){width:40px;min-width:40px}
+#app-bar svg{width:22px;height:22px;display:block}
+#app-bar button:hover,#app-bar button[aria-expanded=true]{background:var(--control-hover)}
+#notification-count{position:absolute;top:0;right:0;min-width:17px;padding:0 3px;border-radius:4px;background:var(--terminal-selected);color:var(--terminal-accent);font-size:10px;line-height:17px;font-variant-numeric:tabular-nums}
+.shell-menu{position:fixed;inset:56px 12px auto auto;margin:0;width:min(420px,calc(100vw - 24px));max-height:calc(100dvh - 68px);padding:16px;border:1px solid var(--terminal-border);border-radius:6px;background:var(--bs-body-bg);color:var(--bs-body-color);overflow:auto;overscroll-behavior:contain}
+.shell-menu h2{font-size:14px;margin:0 0 12px}
+.shell-menu .shell-menu-item{display:block;width:100%;padding:12px 8px;border:0;border-bottom:1px solid var(--terminal-border);background:transparent;text-align:left;font-size:13px;line-height:1.6;white-space:normal;overflow-wrap:anywhere}
+.shell-menu .shell-menu-item:hover{background:var(--control-hover)}
+.shell-menu-item strong{display:block;font-weight:500}
+.shell-menu-item span{display:block;color:var(--terminal-muted);font-size:12px}
+#running-sessions{max-height:none;overflow:visible}
+#running-menu-status:empty{display:none}
+#running-menu-status:not(:empty){margin-top:12px;font-size:13px}
+@media(max-width:760px){
+ #workspace>#app-bar{gap:6px;padding-inline:6px}
+ #app-bar nav>:not(#workspace-screen){display:none}
+ #app-bar nav{font-size:13px}
+ .app-bar-actions{gap:0}
+ #workspace .settings-layout{grid-template-columns:minmax(0,1fr)}
+ #workspace .settings-layout>nav{max-height:180px;border-right:0;border-bottom:1px solid var(--terminal-border)}
+ #workspace .settings-layout>main{min-height:0}
+ .workspace-fold #sidebar[popover]:popover-open{top:52px;height:calc(100dvh - 52px);max-height:calc(100dvh - 52px)}
+}
 #workspace [hidden]{display:none!important}
 #open-dashboard{display:block;flex:none;margin:14px 0 0;text-align:left;min-height:40px;padding:8px 10px;border-color:transparent}
 #open-dashboard[aria-current=page]{background:#2b3038;color:var(--bs-body-color)}
@@ -10,7 +47,7 @@
 .session-tabs button{border:0;border-radius:0!important;border-bottom:2px solid transparent;background:transparent;padding:10px 4px;min-height:44px;color:var(--terminal-muted);font-size:14px;white-space:nowrap}
 .session-tabs button[aria-selected=true]{color:var(--bs-body-color);border-bottom-color:var(--bs-body-color)}
 .session-tabs button:hover{background:#252a31}
-.session-dashboard-page>[role=tabpanel]{padding:20px 0 0;background:transparent;border:0;border-radius:0;min-width:0;max-height:none;overflow:visible}
+.session-dashboard-page>[role=tabpanel]{display:block;padding:20px 0 0;background:transparent;border:0;border-radius:0;min-width:0;max-height:none;overflow:visible}
 .session-dashboard-page .compact-panel-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
 .session-dashboard-page .compact-panel-head h2{font-size:14px;margin:0;font-weight:500;color:var(--terminal-muted)}
 .session-dashboard-page .section-header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -39,10 +76,8 @@
 .session-dashboard-page .environment-project{max-width:60%;font-size:12px;overflow-wrap:anywhere;white-space:normal}
 .session-dashboard-page .environment-table th:nth-child(1){width:18%}.session-dashboard-page .environment-table th:nth-child(2){width:27%}.session-dashboard-page .environment-table th:nth-child(3){width:55%}
 .session-dashboard-page .account-table th:nth-child(1){width:18%}.session-dashboard-page .account-table th:nth-child(2){width:47%}.session-dashboard-page .account-table th:nth-child(3){width:35%}
-.session-dashboard-page .session-alerts{margin-top:24px;max-height:none;overflow:visible}
 .session-load-status:not(:empty){margin-top:18px;padding:12px 0;border-top:1px solid var(--terminal-border);font-size:13px;color:var(--terminal-muted)}
 .session-chat-summary{flex:none;padding:12px 24px 0;min-width:0}
-.session-back{display:inline-block;color:var(--terminal-accent);font-size:12px;margin-bottom:12px;text-decoration:none}
 .session-current-goal{font-size:13px;color:var(--terminal-muted);margin:10px 0 14px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:5em;overflow:auto}
 .session-chat-summary .session-tabs{margin:0}
 .session-detail-panel{flex:1;min-height:0;min-width:0;overflow:auto;padding:24px;scrollbar-width:thin}
@@ -82,4 +117,4 @@
  .session-chat-summary .session-current-goal{max-height:4.8em;margin-bottom:8px}
  .session-dashboard-page .dashboard-table{font-size:13px}
 }
-@media(max-height:650px){.session-chat-summary .session-current-goal{display:none}.session-back{margin-bottom:6px}.session-chat-summary{padding-top:6px}.session-properties{gap:4px}}
+@media(max-height:650px){.session-chat-summary .session-current-goal{display:none}.session-chat-summary{padding-top:6px}.session-properties{gap:4px}}

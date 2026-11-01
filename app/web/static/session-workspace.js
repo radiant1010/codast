@@ -24,9 +24,8 @@ function contextPercent(metric){const used=metric.context_usage?.used_tokens,siz
 function contextSummary(metrics){return metrics.length?metrics.length===1?contextPercent(metrics[0]):metrics.map(metric=>aiName(metric.client)+' '+contextPercent(metric)).join(' / '):'—';}
 if(typeof module!=='undefined')module.exports={sessionWorkspaceRows,contextSummary};
 if(typeof document!=='undefined')(()=>{
-  const page=el('section',undefined,'session-dashboard-page');page.id='session-dashboard-page';
-  const header=el('header'),menu=button('',()=>{$('toggle-sidebar').click();}),title=el('h1','작업 대시보드');
-  window.actionIcon(menu,'menu','프로젝트와 채팅 목록 열기');menu.setAttribute('aria-controls','sidebar');header.append(menu,title);
+  const page=el('main',undefined,'session-dashboard-page');page.id='session-dashboard-page';
+  const header=el('header'),title=el('h1','작업 대시보드');header.append(title);
   const scope=el('p',undefined,'session-page-context'),tabs=el('div',undefined,'session-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','작업 대시보드 항목');
   const panels=new Map(),dashboardTabs=[['sessions','AI 세션','.compact-session-panel'],['accounts','계정 사용량','.codex-account-summary'],['environment','실행환경','.compact-environment']];
   page.append(header,scope,tabs);$('workspace').append(page);
@@ -36,14 +35,14 @@ if(typeof document!=='undefined')(()=>{
     tab.id='dashboard-tab-'+key;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','dashboard-panel-'+key);tab.dataset.dashboardTab=key;
     panel.id='dashboard-panel-'+key;panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',tab.id);tabs.append(tab);page.append(panel);panels.set(key,panel);
   }
-  const alerts=$('session-alerts');page.append(alerts);$('workspace-status')?.remove();
+  document.querySelector('.session-dashboard').remove();
   const list=panels.get('sessions').querySelector('.dashboard-body');list.removeAttribute('tabindex');
   const count=el('p',undefined,'session-count'),table=el('table',undefined,'session-workspace-table'),head=el('thead'),headRow=el('tr'),body=el('tbody');
   const columns=['세션명','현재 상태','진행 단계','AI 종류','컨텍스트'];for(const label of columns){const cell=el('th',label);cell.scope='col';headRow.append(cell);}headRow.lastChild.title='컨텍스트 창 사용률, 누적 토큰은 세션 정보에서 확인';head.append(headRow);table.append(head,body);list.replaceChildren(count,table);
   const loadStatus=el('div',undefined,'session-load-status');loadStatus.setAttribute('role','status');panels.get('sessions').append(loadStatus);
-  const chatHeader=el('section',undefined,'session-chat-summary'),back=el('a','작업 대시보드로','session-back');back.href='#dashboard';
+  const chatHeader=el('section',undefined,'session-chat-summary');
   const badges=el('div',undefined,'session-properties'),goalLine=el('p',undefined,'session-current-goal'),chatTabs=el('div',undefined,'session-tabs');chatTabs.setAttribute('role','tablist');chatTabs.setAttribute('aria-label','채팅 세션 내용');
-  chatHeader.append(back,badges,goalLine,chatTabs);$('console').querySelector('header').after(chatHeader);
+  chatHeader.append(badges,goalLine,chatTabs);$('console').querySelector('header').after(chatHeader);
   const historyPanel=el('section',undefined,'session-detail-panel');historyPanel.id='session-work-panel';
   const infoPanel=el('section',undefined,'session-detail-panel');infoPanel.id='session-info-panel';
   const conversationPane=$('messages').closest('.conversation-pane');conversationPane.id='session-conversation-panel';
@@ -64,7 +63,7 @@ if(typeof document!=='undefined')(()=>{
   function rebuild(){
     rows=sessionWorkspaceRows(groups,items,metrics,running,workItemView);
     if(loadedProject!==$('project').value)for(const row of rows){row.phase='미확인';if(!row.active.length){row.status=goalsError?'상태 미확인':'확인 중';row.tone='unknown';row.reason=goalsError?'목표 조회 실패':'목표 상태 확인 중';}}
-    renderList();renderChatSummary();
+    renderList();renderChatSummary();renderPath();
   }
   function renderList(){
     count.textContent=$('project').value?rows.length+'개 세션':'프로젝트를 선택하세요.';body.replaceChildren();
@@ -117,12 +116,24 @@ if(typeof document!=='undefined')(()=>{
     form.onsubmit=event=>{event.preventDefault();void act(async()=>{const b=base(),project=$('project').value;form.inert=true;status.textContent='연결 중…';try{await api(b+'/work-items','POST',{chat_id:row.chat.id,title:row.title,goal:fields.goal.value,done_criteria:fields.done_criteria.value});goalDrafts.delete(key);if(project!==$('project').value)return;await refreshGoals();notice('목표를 연결했습니다.',false,{success:true});}catch(error){status.textContent=error.message;}finally{form.inert=false;}});};
   }
   function renderSelectedContent(){const route=chatRoute();if(!route)return;const row=currentRow();if(route[2]==='history')renderHistory(row);else if(route[2]==='info')renderInfo(row);}
+  function renderPath(){
+    const project=$('workspace-project'),screen=$('workspace-screen'),route=chatRoute();
+    project.textContent=projectLabel($('project').value);project.title=project.textContent;project.hidden=!project.textContent;
+    project.previousElementSibling.hidden=project.hidden;
+    screen.textContent=route?(currentRow()?.title||groups.find(chat=>chat.id===route[1])?.task||'채팅'):
+      location.hash.startsWith('#settings')?'설정':location.hash.startsWith('#work-items')?'목표 작업':
+      ({'#projects':'프로젝트','#dashboard/accounts':'계정 사용량','#dashboard/environment':'실행환경'})[location.hash]||'작업 대시보드';
+    screen.title=screen.textContent;
+  }
   function navigate(){
-    const hash=location.hash,route=chatRoute(),isDashboard=/^#dashboard(?:\/(accounts|environment))?$/.test(hash),selected=hash.split('/')[1]||'sessions';
+    // shortcut: #projects uses the existing dashboard until CODAST-UI-04 adds the project root.
+    const hash=location.hash,route=chatRoute(),isDashboard=hash==='#projects'||/^#dashboard(?:\/(accounts|environment))?$/.test(hash),selected=hash.split('/')[1]||'sessions';
     if(!hash){location.replace('#dashboard');return;}
+    renderPath();
     page.hidden=!isDashboard;navigation.setAttribute('aria-current',isDashboard?'page':'false');
-    if(hash.startsWith('#work-items')){window.workItems.attachToChat(null);$('console').hidden=true;return;}
-    $('console').hidden=isDashboard;
+    if(hash.startsWith('#work-items')){window.workItems.attachToChat(null);$('work-items-page').setAttribute('role','main');$('console').hidden=true;return;}
+    $('work-items-page').removeAttribute('role');
+    $('console').hidden=isDashboard||!$('settings-page').hidden;
     for(const [key,panel] of panels){panel.hidden=selected!==key;tabs.querySelector('[data-dashboard-tab='+key+']').setAttribute('aria-selected',String(selected===key));}
     if(!route){window.workItems.attachToChat(null);return;}
     const tab=route[2]||'chat';$('console').dataset.sessionTab=tab;
@@ -141,7 +152,7 @@ if(typeof document!=='undefined')(()=>{
     projectReady(){rebuild();navigate();void refreshGoals();},
   };
   window.addEventListener('hashchange',()=>{window.chatState.save();navigate();});
-  window.addEventListener('project-names-changed',()=>{scope.textContent=$('project').value?projectLabel($('project').value)+' 프로젝트':'프로젝트를 선택해 작업을 시작하세요.';});
+  window.addEventListener('project-names-changed',()=>{scope.textContent=$('project').value?projectLabel($('project').value)+' 프로젝트':'프로젝트를 선택해 작업을 시작하세요.';renderPath();});
   $('sidebar').addEventListener('click',event=>{if(event.target.closest('#open-dashboard')&&$('sidebar').matches(':popover-open'))$('sidebar').hidePopover();});
   if(!location.hash)location.replace('#dashboard');navigate();
 })();

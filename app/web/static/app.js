@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let projectDefaults={}, chatLoading=false, projectReady=false, restoreNotified=false;
+let projectDefaults={}, chatLoading=false, projectReady=false;
 let projectNames={};
 function projectLabel(name){return Object.hasOwn(projectNames,name)?projectNames[name]:name;}
 let epoch=0, conversationTicket=0, filter=null, offset=0, historyOffset=0, groups=[], busy=false;
@@ -217,7 +217,7 @@ async function conversation(b=base()){
   for(const pending of q.messages||[])if(!d.messages.some(m=>m.run_id===pending.run_id))$('messages').append(messageCard(pending,b));
   if(!d.messages.length)$('messages').append(el('div',filter?'아직 대화가 없습니다. 아래 입력창에서 첫 요청을 보낼 수 있습니다.':'왼쪽에서 채팅을 선택하거나 새 채팅을 만드세요.','empty'));
   $('messages-prev').disabled=offset===0;$('messages-next').disabled=d.messages.length<20;$('page-number').textContent=d.messages.length?(offset+1)+'–'+(offset+d.messages.length):'0개';
-  const running=r.runs.filter(x=>x.status==='running');$('activity').textContent=running.length?'실행 중인 작업 '+running.length+'개':'';
+  const running=r.runs.filter(x=>x.status==='running');
   $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);window.refreshSessionView?.(r.runs);
   window.sessionWorkspace?.conversationChanged(d.messages,chatId);
   if(follow)followOutput(true);else $('messages').scrollTop=scroll;
@@ -245,7 +245,7 @@ async function switchChat(task,{navigate=true}={}){
     const failures=results.map((result,index)=>result.status==='rejected'?(index===0?'룰북':'대화')+' 조회 실패: '+result.reason.message:null).filter(Boolean);
     chatLoading=failures.length>0;$('send').disabled=busy||chatLoading;
     if(failures.length){if(results[1].status==='rejected')$('messages').replaceChildren(el('div','대화를 불러오지 못했습니다. 대화 새로고침으로 다시 시도하세요.','empty'));notice(failures.join('. ')+'. 대화 새로고침으로 다시 시도하세요. 작성 내용은 유지됩니다.',true);return false;}
-    notice(restoreNotified?'':'프로젝트와 채팅의 작성 상태를 복원했습니다.',false,{success:true});restoreNotified=true;return true;
+    notice('');return true;
   }catch(error){if(valid(b,e)){notice('채팅 복원 실패: '+error.message+'. 대화 새로고침으로 다시 시도하세요.',true);return false;}}
 }
 async function loadProject(){
