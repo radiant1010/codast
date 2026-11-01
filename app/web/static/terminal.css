@@ -63,7 +63,7 @@ summary,label,.hint,.project-location,#connection,#status,.meta{color:var(--term
 #sidebar .chat-list-row:hover .action-icon,#sidebar .chat-list-row:focus-within .action-icon,#sidebar .chat-row-actions .is-pinned{visibility:visible}
 #sidebar .chat-row-actions .is-pinned{color:var(--terminal-accent)}
 .archived-chat-row{display:flex;align-items:center;gap:8px;font-size:13px}
-.archived-chat-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.archived-chat-row>span{flex:1;overflow-wrap:anywhere}
 #chat-archive{margin:8px 0;border-bottom:0}
 #chat-archive summary{font-size:13px}
 @media(hover:none){#sidebar .chat-row-actions .action-icon{visibility:visible}#workspace .chat-list-row>.task{padding-right:70px}}
@@ -104,7 +104,6 @@ summary,label,.hint,.project-location,#connection,#status,.meta{color:var(--term
 .meta{font-size:12px;gap:10px}
 .user{padding:5px 0;color:#eeeeee}
 .user::before{content:"> ";color:var(--terminal-accent)}
-.answer{border-left:1px solid #49614e;padding-left:10px}
 .event.assistant{color:#d4d4d4}
 .event.tool,.event.file{color:#d6bc82}
 .empty{padding:28px 0;color:var(--terminal-muted)}
@@ -145,9 +144,7 @@ summary,label,.hint,.project-location,#connection,#status,.meta{color:var(--term
 .session-drawer,.account-limit,#editor-dialog,#workspace-dialog{background:#202328;border-color:#515151;color:#d4d4d4}
 .session-drawer::backdrop{background:#000a}
 .session-drawer h2,.account-limit h3{color:#dedede}
-.client-path-row .action-icon,.field-action-row .action-icon{background:#202020;border-color:#515151;color:#c4d5c8}
 .agent-segment>button{background:#202328;border-color:#454545;color:#c5c5c5}
-.agent-segment>button[aria-pressed="true"]{background:#26354a;border-color:#88615d;color:#f0b5af}
 #welcome h2{font-size:28px;font-weight:600;letter-spacing:-.03em}
 #welcome p{font-size:15px}
 #startup-loading{background:#101010ed;backdrop-filter:none}
@@ -197,7 +194,7 @@ select:focus-visible{outline-color:var(--terminal-accent)}
 .rulebook-toolbar,.rulebook-folder-actions{display:flex;gap:8px}
 .rulebook-folder-actions{justify-content:flex-end}
 .rulebook-row{display:flex;align-items:center;gap:8px;min-width:0}
-.rulebook-row .rulebook-select{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;border:0;background:transparent}
+.rulebook-row .rulebook-select{flex:1;text-align:left;border:0;background:transparent}
 .rulebook-row .rulebook-select[aria-pressed=true]{background:var(--terminal-selected);color:var(--terminal-accent)}
 .rulebook-editor{min-width:0}
 .rulebook-editor label:first-child{margin-top:0}
@@ -229,7 +226,7 @@ select:focus-visible{outline-color:var(--terminal-accent)}
 .rulebook-import-row .hint{margin:0}
 
 #rulebook-trash{margin-top:16px;border-top:1px solid var(--terminal-border);padding-top:8px}
-.rulebook-trash-row{display:flex;align-items:center;gap:8px}.rulebook-trash-row>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.rulebook-trash-row{display:flex;align-items:center;gap:8px}.rulebook-trash-row>span{flex:1;overflow-wrap:anywhere}
 
 /* Long chat lists scroll within the sidebar. */
 #sidebar .side-content{min-height:0;overflow:hidden;padding-bottom:0}
