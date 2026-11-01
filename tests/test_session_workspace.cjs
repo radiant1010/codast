@@ -11,7 +11,7 @@ test('the workspace exposes a session list built from existing chat identities',
  const metrics=[{task:'두 AI 대화',client:'codex',execution_model:'model-a'},{task:'두 AI 대화',client:'claude',execution_model:'model-b'}];
  const rows=sessionWorkspaceRows(chats,[],metrics,[],workItemView);
  assert.deepEqual(rows.map(r=>r.chat.id).sort(),['a','b']);
- assert.equal(rows.find(r=>r.chat.id==='a').status,'실행 없음');
+ assert.equal(rows.find(r=>r.chat.id==='a').status,'시작 전');
  assert.equal(rows.find(r=>r.chat.id==='b').metrics.length,2);
 });
 test('live run state and goal state are never inferred from successful CLI exit',()=>{
@@ -26,4 +26,31 @@ test('live run state and goal state are never inferred from successful CLI exit'
  rows=sessionWorkspaceRows(chats,[goal],[],[{...runs[0],cancellable:false}],workItemView);
  assert.equal(rows.find(r=>r.chat.id==='a').status,'상태 미확인');
  assert.equal(rows.find(r=>r.chat.id==='a').mode,'확인 필요');
+});
+test('saved runs, not usage reports, separate a new chat from an idle one',()=>{
+ const {sessionWorkspaceRows}=require(source);
+ const chats=[{id:'new',task:'새 채팅',runs:0},{id:'idle',task:'실행한 채팅',runs:2},{id:'live',task:'실행 중 채팅',runs:1},{id:'held',task:'보류 채팅',runs:1,status:'paused'},{id:'done',task:'완료 채팅',runs:1,status:'done'},{id:'goal',task:'목표 채팅',runs:1}];
+ const goal={id:'g',chat_id:'goal',title:'목표',status:'ready',phase:'inspect'};
+ const rows=sessionWorkspaceRows(chats,[goal],[],[{id:'r',cancellable:true,command:{chat_id:'live',client:'codex'}}],workItemView);
+ const row=id=>rows.find(r=>r.chat.id===id);
+ assert.deepEqual(['new','idle','live','held','done','goal'].map(id=>[row(id).status,row(id).tone]),[['시작 전','neutral'],['대기 중','neutral'],['진행 중','running'],['보류','paused'],['완료','done'],['대기 중','neutral']]);
+ assert.equal(row('idle').phase,'—');assert.equal(row('new').phase,'—');
+ assert.notEqual(row('goal').phase,'—');
+});
+test('a finished goal run is not treated as completion',()=>{
+ const {sessionWorkspaceRows}=require(source);
+ const goal={id:'g',chat_id:'a',title:'목표',status:'review',phase:'verify',latest_run_id:'r',runs:[{id:'r',status:'completed',adapter:'codex',output:'끝'}]};
+ const [row]=sessionWorkspaceRows([{id:'a',task:'목표 대화',runs:1,status:'done'}],[goal],[],[],workItemView);
+ assert.equal(row.status,'확인 필요');
+});
+test('context shows each AI window share without summing or inventing zero',()=>{
+ const {contextSummary}=require(source);
+ const usage=(used,size)=>({context_usage:{used_tokens:used,window_tokens:size}});
+ assert.equal(contextSummary([]),'—');
+ assert.equal(contextSummary([{client:'codex',input_tokens:900000,output_tokens:1000}]),'—');
+ assert.equal(contextSummary([{client:'codex',...usage(16000,100000)}]),'16%');
+ assert.equal(contextSummary([{client:'codex',...usage(5000,null)}]),'—');
+ assert.equal(contextSummary([{client:'codex',...usage(100,200000)}]),'<1%');
+ assert.equal(contextSummary([{client:'codex',...usage(16000,100000)},{client:'claude',...usage(16000,200000)}]),'Codex 16% / Claude 8%');
+ assert.equal(contextSummary([{client:'codex',...usage(16000,100000)},{client:'claude'}]),'Codex 16% / Claude —');
 });

@@ -17,9 +17,9 @@ def test_empty_chat_persists_without_synthetic_messages(tmp_path):
         assert c.get('/api/projects/one/messages').json()['messages'] == []
         assert c.get('/api/projects/one/runs').json()['runs'] == []
     with TestClient(create_app(root)) as c:
-        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'id':chat_id,'task':'empty','count':0,'status':'active','pinned':0,'archived':0}]
+        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'id':chat_id,'task':'empty','count':0,'runs':0,'status':'active','pinned':0,'archived':0}]
         assert c.patch('/api/projects/one/tasks', json={'task':'empty','title':'renamed','status':'paused'}).status_code == 200
-        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'id':chat_id,'task':'renamed','count':0,'status':'paused','pinned':0,'archived':0}]
+        assert c.get('/api/projects/one/tasks').json()['tasks'] == [{'id':chat_id,'task':'renamed','count':0,'runs':0,'status':'paused','pinned':0,'archived':0}]
 
 
 def test_rename_preserves_native_links_and_duplicate_is_rejected(tmp_path):

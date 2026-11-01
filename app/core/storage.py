@@ -455,7 +455,7 @@ class Storage:
         with self.connect() as db:
             return [dict(row) for row in db.execute("""WITH names AS (
                 SELECT task FROM messages WHERE project=? UNION SELECT task FROM task_states WHERE project=? UNION SELECT task FROM chats WHERE project=?)
-                SELECT c.id, n.task, COUNT(m.id) AS count, COALESCE(s.status,'active') AS status,
+                SELECT c.id, n.task, COUNT(m.id) AS count, COUNT(m.run_id) AS runs, COALESCE(s.status,'active') AS status,
                     COALESCE(p.pinned,0) AS pinned, COALESCE(p.archived,0) AS archived
                 FROM names n LEFT JOIN chats c ON c.project=? AND c.task=n.task LEFT JOIN messages m ON m.project=? AND m.task=n.task
                 LEFT JOIN task_states s ON s.project=? AND s.task=n.task

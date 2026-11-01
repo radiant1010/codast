@@ -6,16 +6,23 @@ function sessionWorkspaceRows(chats,items,metrics,runs,describeWork){
     const active=runs.filter(run=>run.command?.chat_id?run.command.chat_id===chat.id:run.command?.task===chat.task);
     const view=item?describeWork(item):null,unknown=active.some(run=>!run.cancellable);
     const title=item&&chat.task===item.title.slice(0,75)+' / '+item.id?item.title:chat.task;
+    // Usage reports can be missing for finished runs, so only saved runs decide whether a chat has started.
+    const started=chat.runs>0||active.length>0||Boolean(view?.latest),idle=started?'대기 중':'시작 전';
+    const fallback=!view||view.tone==='ready';
     return {chat,item,metrics:values,active,title,
-      status:view?.status||(unknown?'상태 미확인':active.length?'진행 중':chat.status==='paused'?'보류':chat.status==='done'?'완료':'실행 없음'),
-      tone:view?.tone||(unknown?'unknown':active.length?'running':chat.status==='paused'?'paused':chat.status==='done'?'done':'neutral'),
-      reason:view?.reason||(unknown?'종료 여부 확인 필요':active.length?'AI 실행 중':'다음 지시 대기'),
-      phase:view?.phase||'미지정',mode:view?.executionMode||(unknown?'확인 필요':active.length>1?'병렬 '+active.length:active.length?'단일':'—'),
+      status:fallback?(unknown?'상태 미확인':active.length?'진행 중':!view&&chat.status==='paused'?'보류':!view&&chat.status==='done'?'완료':idle):view.status,
+      tone:fallback?(unknown?'unknown':active.length?'running':!view&&chat.status==='paused'?'paused':!view&&chat.status==='done'?'done':'neutral'):view.tone,
+      reason:fallback?(unknown?'종료 여부 확인 필요':active.length?'AI 실행 중':started?'다음 지시 대기':'실행 기록 없음'):view.reason,
+      phase:view?.phase||'—',mode:view?.executionMode||(unknown?'확인 필요':active.length>1?'병렬 '+active.length:active.length?'단일':'—'),
       clients:[...new Set([...active.map(run=>run.command?.client||run.adapter),...values.map(row=>row.client),item?.client].filter(Boolean))],
     };
   }).sort((a,b)=>Number(Boolean(b.active.length))-Number(Boolean(a.active.length))||Number(Boolean(b.chat.pinned))-Number(Boolean(a.chat.pinned)));
 }
-if(typeof module!=='undefined')module.exports={sessionWorkspaceRows};
+const aiName=client=>({codex:'Codex',claude:'Claude',mock:'테스트 AI'})[client]||client;
+/* Context window share per AI; unknown stays '—' and AIs are never summed. */
+function contextPercent(metric){const used=metric.context_usage?.used_tokens,size=metric.context_usage?.window_tokens;if(!Number.isSafeInteger(used)||used<0||!Number.isSafeInteger(size)||size<=0)return '—';const value=Math.round(used/size*100);return used>0&&value===0?'<1%':value+'%';}
+function contextSummary(metrics){return metrics.length?metrics.length===1?contextPercent(metrics[0]):metrics.map(metric=>aiName(metric.client)+' '+contextPercent(metric)).join(' / '):'—';}
+if(typeof module!=='undefined')module.exports={sessionWorkspaceRows,contextSummary};
 if(typeof document!=='undefined')(()=>{
   const page=el('section',undefined,'session-dashboard-page');page.id='session-dashboard-page';
   const header=el('header'),menu=button('',()=>{$('toggle-sidebar').click();}),title=el('h1','작업 대시보드');
@@ -32,7 +39,7 @@ if(typeof document!=='undefined')(()=>{
   const alerts=$('session-alerts');page.append(alerts);$('workspace-status')?.remove();
   const list=panels.get('sessions').querySelector('.dashboard-body');list.removeAttribute('tabindex');
   const count=el('p',undefined,'session-count'),table=el('table',undefined,'session-workspace-table'),head=el('thead'),headRow=el('tr'),body=el('tbody');
-  const columns=['세션','현재 상태','단계','AI','방식'];for(const label of columns){const cell=el('th',label);cell.scope='col';headRow.append(cell);}head.append(headRow);table.append(head,body);list.replaceChildren(count,table);
+  const columns=['세션명','현재 상태','진행 단계','AI 종류','컨텍스트'];for(const label of columns){const cell=el('th',label);cell.scope='col';headRow.append(cell);}headRow.lastChild.title='컨텍스트 창 사용률, 누적 토큰은 세션 정보에서 확인';head.append(headRow);table.append(head,body);list.replaceChildren(count,table);
   const loadStatus=el('div',undefined,'session-load-status');loadStatus.setAttribute('role','status');panels.get('sessions').append(loadStatus);
   const chatHeader=el('section',undefined,'session-chat-summary'),back=el('a','작업 대시보드로','session-back');back.href='#dashboard';
   const badges=el('div',undefined,'session-properties'),goalLine=el('p',undefined,'session-current-goal'),chatTabs=el('div',undefined,'session-tabs');chatTabs.setAttribute('role','tablist');chatTabs.setAttribute('aria-label','채팅 세션 내용');
@@ -50,7 +57,6 @@ if(typeof document!=='undefined')(()=>{
   let metrics=[],running=[],items=[],rows=[],ticket=0,loadedProject='',observedProject=null,loading=false,goalsError='',infoSignature='',historySignature='',messageRows=[],messageChat=null,routeTicket=0;
   const goalDrafts=new Map();
   const chatRoute=()=>location.hash.match(/^#chat\/([a-f0-9]{32})(?:\/(history|info))?$/);
-  const aiName=client=>({codex:'Codex',claude:'Claude',mock:'테스트 AI'})[client]||client;
   function badge(text,tone='neutral'){const node=el('span',text,'work-item-badge');node.dataset.tone=tone;return node;}
   function contextText(metric){const used=metric.context_usage?.used_tokens,size=metric.context_usage?.window_tokens;return Number.isSafeInteger(used)&&used>=0?(Number.isSafeInteger(size)&&size>0?(used/size*100).toFixed(1)+'%':used.toLocaleString()+' 토큰'):'측정값 없음';}
   function tokenText(metric){const known=Number.isFinite(metric.input_tokens)&&Number.isFinite(metric.output_tokens);return known?(metric.input_tokens+metric.output_tokens).toLocaleString()+(metric.input_reports===metric.runs&&metric.output_reports===metric.runs?'':' (일부)'):'미수신';}
@@ -63,20 +69,19 @@ if(typeof document!=='undefined')(()=>{
   function renderList(){
     count.textContent=$('project').value?rows.length+'개 세션':'프로젝트를 선택하세요.';body.replaceChildren();
     for(const row of rows){
-      const tr=el('tr'),name=el('td'),open=button(row.title,()=>switchChat(row.chat.task),'session-title-link');open.setAttribute('aria-label',row.title+' 채팅 열기');name.append(open);
-      const summary=row.metrics.length===1?'컨텍스트 '+contextText(row.metrics[0])+' / '+tokenText(row.metrics[0])+' 토큰':row.metrics.length>1?'AI별 측정값은 세션 정보에서 확인':'아직 측정된 사용량 없음';name.append(el('p',summary,'session-row-meta'));
-      const state=el('td');state.append(badge(row.status,row.tone),el('p',row.reason,'session-row-meta'));
-      const phase=el('td',row.phase),ai=el('td'),names=el('div',undefined,'session-ai-tags');for(const client of row.clients)names.append(badge(aiName(client)));ai.append(names);
+      const tr=el('tr'),name=el('td'),open=button(row.title,()=>switchChat(row.chat.task),'session-title-link');open.title=row.title;open.setAttribute('aria-label',row.title+' 채팅 열기');name.append(open);
+      const state=el('td');state.append(badge(row.status,row.tone));
+      const phase=el('td');phase.append(row.phase==='—'?el('span','—'):badge(row.phase,'phase'));
+      const ai=el('td'),names=el('div',undefined,'session-ai-tags');for(const client of row.clients){const tag=badge(aiName(client),'ai');tag.dataset.client=client;names.append(tag);}ai.append(names);
       if(!row.clients.length)ai.append(el('span','미지정'));
-      if(row.metrics.length===1)ai.append(el('p',row.metrics[0].execution_model||'모델 정보 없음','session-row-meta'));
-      const mode=el('td');mode.append(row.mode==='—'?el('span','—'):badge(row.mode));tr.append(name,state,phase,ai,mode);[...tr.children].forEach((cell,index)=>cell.dataset.label=columns[index]);body.append(tr);
+      const context=el('td',contextSummary(row.metrics),'session-context');context.title=context.textContent;tr.append(name,state,phase,ai,context);[...tr.children].forEach((cell,index)=>cell.dataset.label=columns[index]);body.append(tr);
     }
     if(!rows.length){const row=el('tr'),cell=el('td',$('project').value?'아직 채팅이 없습니다. 새 채팅을 만들어 시작하세요.':'프로젝트를 선택하면 채팅과 작업 상태를 확인할 수 있습니다.');cell.colSpan=5;row.append(cell);body.append(row);}
   }
   function renderChatSummary(){
     const row=currentRow();badges.replaceChildren();goalLine.textContent='';
     if(!row)return;
-    $('chat-title').textContent=row.title;badges.append(badge(row.status,row.tone),badge(row.phase));for(const client of row.clients)badges.append(badge(aiName(client)));if(row.mode!=='—')badges.append(badge(row.mode));
+    $('chat-title').textContent=row.title;badges.append(badge(row.status,row.tone));if(row.phase!=='—')badges.append(badge(row.phase,'phase'));for(const client of row.clients){const tag=badge(aiName(client),'ai');tag.dataset.client=client;badges.append(tag);}if(row.mode!=='—')badges.append(badge(row.mode));
     goalLine.textContent=loadedProject!==$('project').value?(goalsError?'목표 상태를 불러오지 못했습니다. 작업 기록에서 다시 시도하세요.':'목표 상태를 확인하고 있습니다.'):
       (row.item?'현재 목표: '+row.item.goal:'일반 대화, 세션 정보에서 목표와 완료 조건을 연결할 수 있습니다.')+(goalsError?' (마지막 확인 정보)':'');
   }
@@ -99,7 +104,7 @@ if(typeof document!=='undefined')(()=>{
   }
   function renderInfo(row){
     const signature=JSON.stringify([row,loadedProject,goalsError]);if(infoSignature===signature)return;infoSignature=signature;infoPanel.replaceChildren();if(!row)return;
-    const details=el('dl',undefined,'session-info-grid');details.append(el('dt','채팅 이름'),el('dd',row.title),el('dt','현재 상태'),el('dd',row.status),el('dt','실행 방식'),el('dd',row.mode));infoPanel.append(details);
+    const details=el('dl',undefined,'session-info-grid');details.append(el('dt','채팅 이름'),el('dd',row.title),el('dt','현재 상태'),el('dd',row.status),el('dt','상태 설명'),el('dd',row.reason||'—'),el('dt','진행 단계'),el('dd',row.phase),el('dt','실행 방식'),el('dd',row.mode));infoPanel.append(details);
     if(!row.metrics.length)infoPanel.append(el('p','CLI가 보고한 모델과 컨텍스트 정보가 아직 없습니다.','hint'));
     for(const metric of row.metrics){const group=el('section',undefined,'session-metric-group'),values=el('dl',undefined,'session-info-grid');group.append(el('h2',aiName(metric.client)));for(const [label,value] of [['실행 모델',metric.execution_model||'정보 없음'],['컨텍스트',contextText(metric)],['누적 토큰',tokenText(metric)],['측정 시각',metric.context_usage?.observed_at?new Date(metric.context_usage.observed_at).toLocaleString():'기록 없음']])values.append(el('dt',label),el('dd',value));group.append(values);infoPanel.append(group);}
     if(row.item){const target=el('section',undefined,'session-goal-info');target.append(el('h2','현재 목표'),el('p',row.item.goal),el('h3','완료 조건'),el('p',row.item.done_criteria),button('작업 기록과 결과 확인',()=>{location.hash='#chat/'+row.chat.id+'/history';}));infoPanel.append(target);return;}

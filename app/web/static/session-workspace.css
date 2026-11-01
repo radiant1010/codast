@@ -20,13 +20,22 @@
 .session-dashboard-page :is(.dashboard-table,.session-workspace-table) :is(th,td){padding:10px 8px;border-bottom:1px solid var(--terminal-border);vertical-align:top;text-align:left;overflow-wrap:anywhere;white-space:normal}
 .session-dashboard-page :is(.dashboard-table,.session-workspace-table) :is(th,td):first-child{padding-left:0}
 .session-dashboard-page :is(.dashboard-table,.session-workspace-table) th{font-size:12px;font-weight:400;color:var(--terminal-muted);background:transparent}
-.session-workspace-table th:nth-child(1){width:32%}.session-workspace-table th:nth-child(2){width:23%}.session-workspace-table th:nth-child(3){width:11%}.session-workspace-table th:nth-child(4){width:21%}.session-workspace-table th:nth-child(5){width:13%}
+.session-workspace-table th:nth-child(1){width:36%}.session-workspace-table th:nth-child(2){width:15%}.session-workspace-table th:nth-child(3){width:14%}.session-workspace-table th:nth-child(4){width:15%}.session-workspace-table th:nth-child(5){width:20%}
+.session-dashboard-page .session-workspace-table :is(th,td){vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
 .session-count{font-size:12px;color:var(--terminal-muted);margin:0 0 12px}
-.session-workspace-table .session-title-link{display:block;width:100%;min-height:28px;padding:0;border:0;background:transparent;text-align:left;font-weight:500;white-space:normal;overflow-wrap:anywhere}
+.session-workspace-table .session-title-link{display:block;width:100%;min-height:28px;padding:0;border:0;background:transparent;text-align:left;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-workspace-table .session-ai-tags{flex-wrap:nowrap;overflow:hidden}
+.session-context{font-variant-numeric:tabular-nums}
 .session-workspace-table .session-title-link:hover{text-decoration:underline;text-underline-offset:4px}
-.session-row-meta{font-size:12px;color:var(--terminal-muted);margin:5px 0 0;white-space:normal;font-variant-numeric:tabular-nums}
 .session-ai-tags,.session-properties{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
-:is(.session-dashboard-page,.session-chat-summary) .work-item-badge{font-size:12px;padding:2px 7px;border:0;border-radius:4px}
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge{font-size:12px;padding:2px 7px;border:0;border-radius:4px;white-space:nowrap}
+/* Session tones: hold reads as needing attention, unknown stays neutral with its own text and outline. */
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=paused]{color:#f3d58c;background:#3c3019}
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=unknown]{color:#d5dae2;background:#24282f;box-shadow:inset 0 0 0 1px #626975}
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=phase]{color:var(--terminal-muted);background:#202328;font-weight:400}
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-tone=ai]{font-weight:400;background:#202328}
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-client=codex]{color:#a3d9d3;background:#1b2b2a}
+:is(.session-dashboard-page,.session-chat-summary) .work-item-badge[data-client=claude]{color:#efc6a8;background:#2f2520}
 .session-dashboard-page .environment-project{max-width:60%;font-size:12px;overflow-wrap:anywhere;white-space:normal}
 .session-dashboard-page .environment-table th:nth-child(1){width:18%}.session-dashboard-page .environment-table th:nth-child(2){width:27%}.session-dashboard-page .environment-table th:nth-child(3){width:55%}
 .session-dashboard-page .account-table th:nth-child(1){width:18%}.session-dashboard-page .account-table th:nth-child(2){width:47%}.session-dashboard-page .account-table th:nth-child(3){width:35%}
@@ -61,11 +70,12 @@
  .session-workspace-table,.session-workspace-table tbody{display:block;width:100%}
  .session-workspace-table thead{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden}
  .session-workspace-table tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:15px 0;border-bottom:1px solid var(--terminal-border)}
- .session-dashboard-page .session-workspace-table td{display:block;min-width:0;padding:0;border:0}
+ .session-dashboard-page .session-workspace-table td{display:block;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere}
+ .session-workspace-table .session-title-link{white-space:normal;overflow-wrap:anywhere}
+ .session-workspace-table .session-ai-tags{flex-wrap:wrap}
  .session-workspace-table td:first-child,.session-workspace-table td:nth-child(2){grid-column:1/-1}
  .session-workspace-table td:not(:first-child)::before{content:attr(data-label);display:block;font-size:11px;color:var(--terminal-muted);margin-bottom:4px}
- .session-workspace-table td:nth-child(2){display:flex;align-items:center;gap:8px;flex-wrap:wrap}
- .session-workspace-table td:nth-child(2)::before{display:none}.session-workspace-table td:nth-child(2) .session-row-meta{margin:0}
+ .session-workspace-table td:nth-child(2)::before{display:none}
  .session-info-grid{grid-template-columns:80px minmax(0,1fr);gap:12px 14px}
  #workspace.workspace-fold #console>header .pagination{margin-left:auto}
  #workspace.workspace-fold #console>header{flex-wrap:wrap}
