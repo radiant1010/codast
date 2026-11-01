@@ -66,7 +66,7 @@ const {chromium}=require('playwright');
   assert.equal(await page.getByRole('button',{name:'보관된 첨부 자료',exact:true}).count(),0);
   await page.reload();await page.locator('#startup-loading').waitFor({state:'hidden'});
   assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[id(1)]);
-  failChat=true;await page.fill('#text','자료 요약');await page.locator('#send').click();await page.getByText('전송 실패 테스트',{exact:true}).waitFor();
+  failChat=true;await page.fill('#text','자료 요약');await page.locator('#send').click();await page.getByRole('status').filter({hasText:'전송 실패 테스트'}).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[id(1)]);
   await page.waitForFunction(()=>!document.getElementById('send').disabled);
   await page.fill('#text','자료 요약');await Promise.all([page.waitForRequest(r=>r.url().endsWith('/chat')),page.locator('#send').click()]);
@@ -113,7 +113,7 @@ const {chromium}=require('playwright');
   assert.equal(await page.getByRole('button',{name:'자료 삭제',exact:true}).count(),0);
   await page.keyboard.press('Escape');
   // Failure and blocked uploads never attach a raw fallback.
-  fail=true;await drop();await page.getByText('지원하지 않는 파일입니다.',{exact:true}).waitFor();
+  fail=true;await drop();await page.getByRole('status').filter({hasText:'지원하지 않는 파일입니다.'}).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[id(1)]);
   block=true;await drop();await page.getByText(/개인키가 포함된 자료를 차단/).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[id(1)]);
@@ -129,7 +129,7 @@ const {chromium}=require('playwright');
   assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[id(1)]);
   // A late upload must not attach to the newly selected chat; sending waits for scanning.
   hold=true;await drop();await page.fill('#text','대기 중 요청');await page.locator('#send').click();
-  await page.getByText('첨부 자료 검사 완료 후 보내세요.',{exact:true}).waitFor();
+  await page.getByRole('status').filter({hasText:'첨부 자료 검사 완료 후 보내세요.'}).waitFor();
   await page.locator('#task-list button.task',{hasText:/^B$/}).click();assert.equal(typeof release,'function');release();
   await page.waitForFunction(()=>!window.materialGuard.isUploading());assert.deepEqual(await page.evaluate(()=>window.materialGuard.selected()),[]);
   await page.locator('#task-list button.task',{hasText:/^A$/}).click();
