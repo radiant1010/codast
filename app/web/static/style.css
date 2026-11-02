@@ -416,9 +416,7 @@ select:focus-visible{outline-color:var(--terminal-accent)}
 
 .settings-page{height:100dvh;display:flex;flex-direction:column;background:#17191c}
 .settings-page[hidden]{display:none}
-.settings-page>header{flex:none;min-height:60px;padding:12px 24px;border-bottom:1px solid #565656}
-.settings-page>header strong{font-size:20px;color:var(--terminal-accent)}
-.settings-page>header button{margin-left:auto}
+.settings-layout>nav>.settings-back{margin-bottom:16px}
 .settings-layout{display:grid;grid-template-columns:220px minmax(0,1fr);flex:1;min-height:0}
 .settings-layout>nav{padding:24px 16px;border-right:1px solid #454545;overflow:auto}
 .settings-context{font-size:13px;color:var(--terminal-muted);overflow-wrap:anywhere;margin-bottom:20px}
@@ -439,7 +437,7 @@ select:focus-visible{outline-color:var(--terminal-accent)}
 .settings-content label{margin-top:20px;margin-bottom:8px}
 .settings-content .client-card{margin-bottom:24px}
 .settings-page>#status{flex:none;border-top:1px solid #454545;padding:8px 24px}
-@media(max-width:700px){.settings-layout{grid-template-columns:150px minmax(0,1fr)}.settings-layout>nav{padding:16px 8px}.settings-layout>main{padding:20px 14px}.settings-page>header{padding:12px 14px}.settings-content .control-row{flex-wrap:wrap}}
+@media(max-width:700px){.settings-layout{grid-template-columns:150px minmax(0,1fr)}.settings-layout>nav{padding:16px 8px}.settings-layout>main{padding:20px 14px}.settings-content .control-row{flex-wrap:wrap}}
 
 .settings-content .usage-panel,.settings-content .running-panel{background:#111;border:1px solid #454545;border-radius:0;padding:20px}
 
