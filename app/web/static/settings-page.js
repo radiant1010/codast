@@ -1,11 +1,10 @@
 /* Settings navigation preserves the live workspace and its running streams. */
 (()=>{
   const pages=new Map(),shell=el('section',undefined,'settings-page');shell.id='settings-page';shell.hidden=true;
-  const header=el('header'),back=button('← 작업실',()=>window.settingsPage.close()),brand=el('strong','CODAST');
-  header.append(brand,el('span','설정'),back);
+  const back=button('← 작업실',()=>window.settingsPage.close(),'settings-back');
   const layout=el('div',undefined,'settings-layout'),nav=el('nav'),content=el('main'),heading=el('h1');
-  nav.setAttribute('aria-label','설정 메뉴');content.append(heading);layout.append(nav,content);shell.append(header,layout);$('workspace').append(shell);
-  const context=el('p',undefined,'settings-context');nav.append(context);
+  nav.setAttribute('aria-label','설정 메뉴');content.append(heading);layout.append(nav,content);shell.append(layout);$('workspace').append(shell);
+  const context=el('p',undefined,'settings-context');nav.append(back,context);
   let workspaceScroll=0,last='execution',wasOpen=false,statusHome=null;
   function render(){
     if(location.hash==='#settings'){location.replace('#settings/'+last);return;}
