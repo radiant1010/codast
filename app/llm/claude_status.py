@@ -74,6 +74,10 @@ def query_status(path):
             raise UsageError('credentials_unavailable') from None
         oauth = credentials.get('claudeAiOauth') if isinstance(credentials, dict) else None
         token = oauth.get('accessToken') if isinstance(oauth, dict) else None
+        expires = oauth.get('expiresAt') if isinstance(oauth, dict) else None
+        if type(expires) in (int, float) and expires <= time.time() * 1000:
+            # Claude Code refreshes the stored token on its next run; sending it now only earns a misleading 401.
+            raise UsageError('token_expired')
     if not isinstance(token, str) or not token.strip():
         raise UsageError('credentials_unavailable')
     # shortcut: Claude's usage endpoint is internal; update this adapter if its response changes.
@@ -104,6 +108,7 @@ class ClaudeStatus:
         self.query, self.ttl = query, ttl
         self.lock = threading.Lock()
         self.cached, self.key, self.expires = None, None, 0
+        self.limited = 0
 
     def read(self, configured=''):
         with self.lock:
@@ -121,6 +126,10 @@ class ClaudeStatus:
                 result['state'] = 'not_installed'
             except (OSError, ValueError, TypeError, http.client.HTTPException, subprocess.SubprocessError):
                 result['state'] = 'error'
+            # Running Claude Code sessions share this endpoint's rate bucket, so repeated 429s back off.
+            self.limited = self.limited + 1 if result['state'] == 'rate_limited' else 0
+            if self.limited:
+                wait = max(wait, min(600, self.ttl * 2 ** (self.limited - 1)))
             result['checked_at'] = datetime.now(timezone.utc).isoformat()
             self.cached, self.key, self.expires = result, configured, time.monotonic() + wait
             return result

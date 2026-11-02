@@ -149,3 +149,35 @@ def test_network_failures_do_not_expose_secrets(monkeypatch):
     result = ClaudeStatus(fail).read()
     assert result['state'] == 'error' and result['limits'] == []
     assert 'private-token' not in json.dumps(result)
+
+
+def test_expired_access_token_is_not_sent_or_reported_as_logout(usage_transport, tmp_path, monkeypatch):
+    module, _, calls, _ = usage_transport
+    monkeypatch.setattr(module.time, 'time', lambda: 1767225600)
+    (tmp_path / '.credentials.json').write_text(json.dumps({'claudeAiOauth': {
+        'accessToken': 'test-only-token', 'expiresAt': 1767225600 * 1000 - 1}}), encoding='utf-8')
+    with pytest.raises(module.UsageError) as exc:
+        module.query_status('claude.exe')
+    assert exc.value.state == 'token_expired' and calls == []
+    (tmp_path / '.credentials.json').write_text(json.dumps({'claudeAiOauth': {
+        'accessToken': 'test-only-token', 'expiresAt': 1767225600 * 1000 + 60000}}), encoding='utf-8')
+    assert module.query_status('claude.exe')[0]['usedPercent'] == 0 and len(calls) == 1
+
+
+def test_repeated_rate_limits_back_off_and_reset_after_success(monkeypatch):
+    from app.llm.claude_status import ClaudeStatus, UsageError
+    monkeypatch.setattr('app.llm.claude_status.executable', lambda client, path: path)
+    clock, outcomes, calls = [0], ['limited', 'limited', 'limited', 'ok', 'limited'], []
+    monkeypatch.setattr('app.llm.claude_status.time.monotonic', lambda: clock[0])
+    def query(path):
+        calls.append(clock[0])
+        if outcomes.pop(0) == 'limited':
+            raise UsageError('rate_limited', 0)
+        return [{'bucket': 'claude', 'usedPercent': 1}]
+    status = ClaudeStatus(query)
+    for now in range(0, 2000, 10):
+        clock[0] = now
+        status.read()
+        if not outcomes:
+            break
+    assert calls == [0, 60, 180, 420, 480]

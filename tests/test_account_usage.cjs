@@ -58,3 +58,11 @@ test('rate limits and missing percentages are not shown as zero',async()=>{
   assert.match(ui.rows.textContent,/Claude 조회 제한/);
   assert.doesNotMatch(ui.rows.textContent,/0%/);
 });
+test('an expired Claude access token keeps prior numbers and is not reported as a logout',async()=>{
+  const replies={codex:account('codex',25),claude:account('claude',42)};
+  const ui=screen(replies);await tick();
+  replies.claude={state:'token_expired',limits:[]};await ui.refresh();
+  assert.match(ui.rows.textContent,/Claude 5시간 42%.*마지막 조회/);
+  assert.match(ui.rows.textContent,/Claude 실행 시 인증 갱신/);
+  assert.doesNotMatch(ui.rows.textContent,/로그인/);
+});
