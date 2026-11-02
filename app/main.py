@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import logging
 import os
+import re
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +23,21 @@ from app.core.environment import EnvironmentStatus
 from app.core.onboarding import Onboarding
 
 BASE = Path(__file__).resolve().parent
+POLLING_PATH = re.compile(r'/api/(session-overview|notifications|clients(/(codex|claude)/status)?'
+                          r'|projects/[^/]+/(environment|work-items(/[^/]+)?|workflows/[^/]+))')
+
+
+class QuietPolling(logging.Filter):
+    """Hide successful screen-refresh polls so failures stay visible in the access log."""
+
+    def filter(self, record):
+        if not (isinstance(record.args, tuple) and len(record.args) == 5):
+            return True
+        _, method, path, _, status = record.args
+        return not (method == 'GET' and status in (200, 304) and POLLING_PATH.fullmatch(str(path).split('?')[0]))
+
+
+QUIET_POLLING = QuietPolling()
 
 
 def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | None = None) -> FastAPI:
@@ -33,6 +50,7 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
         app.state.session_search.close()
 
     app = FastAPI(title="AI Coding Harness", lifespan=lifespan)
+    logging.getLogger('uvicorn.access').addFilter(QUIET_POLLING)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
     projects = ProjectManager(workspace_root or Path(os.getenv("HARNESS_WORKSPACES", str(BASE.parent / "workspaces"))))
     # Hidden metadata is excluded from workspace selection and file access.
