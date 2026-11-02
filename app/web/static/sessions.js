@@ -311,6 +311,12 @@
   const options=$('composer').querySelector('.composer-options');options.hidden=true;
   const entry=el('div',undefined,'command-entry'),toolbar=el('div',undefined,'composer-toolbar');toolbar.id='composer-toolbar';
   $('text').before(entry);toolbar.append(picker,$('send'));entry.append($('text'),toolbar);
+  // One permission control: beside the input in chats, moved into the settings form while that page is open.
+  const mode=$('mode'),modeLabel=$('settings-panel').querySelector('label[for="mode"]'),modeHome=()=>toolbar.insertBefore(mode,$('send'));
+  mode.setAttribute('aria-label','실행 권한');mode.title='다음 요청부터 적용됩니다. 파일 읽기만 허용은 파일을 읽고 답변이나 계획만 작성하며, Claude는 계획 모드로 실행합니다. 코드 수정 허용은 작업 폴더의 파일을 수정할 수 있습니다.';
+  modeHome();mode.addEventListener('change',()=>notice('실행 권한: '+mode.selectedOptions[0].textContent+'. 다음 요청부터 적용됩니다.'));
+  $('settings-panel').addEventListener('settings-open',()=>modeLabel.after(mode));
+  window.addEventListener('hashchange',()=>{if(!location.hash.startsWith('#settings'))modeHome();});
   $('text').placeholder='선택한 에이전트에게 메시지를 보내세요. Ctrl+Enter로 전송';$('text').rows=2;$('text').setAttribute('aria-label','요청 내용');
   // Grow with the draft, including restored text and wrapping after width changes.
   const input=$('text');let resizeFrame=0,lastInputWidth=0;

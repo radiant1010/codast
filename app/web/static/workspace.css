@@ -111,7 +111,8 @@ html,body{height:100%;overflow:hidden}
  .workspace-fold #reasoning-effort{grid-column:1/3;grid-row:2;width:100%;max-width:100%}
  .workspace-fold .workflow-launch{grid-column:3;grid-row:1}
  .workspace-fold #send{grid-column:4;grid-row:1/3;margin:0;align-self:end}
- .workspace-fold .ultracode-toggle{grid-column:1/4}
+ .workspace-fold .ultracode-toggle,.workspace-fold #mode{grid-column:1/4}
+ .workspace-fold #mode{width:100%;max-width:100%}
  .workspace-fold .execution-menu{left:-42px;max-width:calc(100vw - 40px)}
 }
 @media(max-height:700px){
