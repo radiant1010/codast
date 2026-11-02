@@ -8,7 +8,7 @@ function fixture(){
  vm.createContext(context);
  const source=fs.readFileSync('app/web/static/app.js','utf8');
  vm.runInContext(source.slice(source.indexOf('let noticeTimer;'),source.indexOf('const projectNameError=')),context);
- return {...context,timers};
+ return {...context,timers,context};
 }
 test('completion notices disappear after four seconds without occupying inline space',()=>{
  const f=fixture();f.notice('복원 완료',false,{success:true});
@@ -38,4 +38,12 @@ test('a new toast resets its timer and an explicit clear cancels it',()=>{
  const f=fixture();f.notice('첫 번째');f.notice('두 번째');
  assert.equal(f.timers.size,1);assert.equal(f.$('status-toast').textContent,'두 번째');
  f.notice('');assert.equal(f.timers.size,0);assert.equal(f.$('status-toast').textContent,'');
+});
+test('a toast is raised above a modal dialog or open menu but left alone otherwise',()=>{
+ const f=fixture(),toast=f.$('status-toast'),calls=[];let covered=false,open=true;
+ Object.assign(toast,{showPopover(){calls.push('show');open=true;},hidePopover(){calls.push('hide');open=false;},matches:()=>open});
+ f.context.document={querySelector:selector=>covered&&/dialog:modal/.test(selector)?{}:null};
+ f.notice('저장했습니다.',false,{success:true});assert.deepEqual(calls,[]);
+ covered=true;f.notice('이름을 확인하세요.',true);assert.deepEqual(calls,['hide','show']);
+ f.notice('',false);assert.deepEqual(calls,['hide','show']);
 });

@@ -35,8 +35,10 @@ html,body{height:100%;overflow:hidden}
 .workspace-fold #page-number{font-size:12px;white-space:nowrap}
 .workspace-fold #status{flex:none;min-height:0;max-height:72px;overflow:auto;padding:4px 24px;font-size:13px;line-height:1.6;word-break:keep-all;overflow-wrap:anywhere;margin:0}
 .workspace-fold #status:empty{display:none}
-#status-toast{position:fixed;inset:16px 16px auto auto;z-index:1200;width:max-content;max-width:min(480px,calc(100vw - 32px));padding:12px 16px;border:1px solid var(--terminal-border);border-radius:6px;background:var(--bs-body-bg);color:var(--bs-body-color);font-size:14px;line-height:1.6;word-break:keep-all;overflow-wrap:anywhere;pointer-events:none}
-#status-toast:empty{padding:0;border:0}
+#status-toast{position:fixed;inset:16px 16px auto auto;z-index:1200;width:max-content;max-width:min(480px,calc(100vw - 32px));padding:12px 16px;border:1px solid var(--terminal-border);border-radius:6px;background:var(--bs-body-bg);color:var(--bs-body-color);font-size:14px;line-height:1.6;word-break:keep-all;overflow-wrap:anywhere;pointer-events:none;margin:0;box-shadow:0 6px 20px rgb(0 0 0 / .5)}
+#status-toast:empty{padding:0;border:0;box-shadow:none}
+#status-toast:not(:empty):is(.is-success,.is-error)::before{content:'완료';margin-right:8px;font-weight:700}
+#status-toast:not(:empty).is-error::before{content:'오류'}
 #status-toast.is-success{background:var(--bs-success-bg-subtle);border-color:var(--bs-success-border-subtle);color:var(--bs-success-text-emphasis)}
 #status-toast.is-error{background:var(--bs-danger-bg-subtle);border-color:var(--bs-danger-border-subtle);color:var(--bs-danger-text-emphasis)}
 .settings-page>#status:empty{display:none}
