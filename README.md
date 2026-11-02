@@ -8,13 +8,15 @@ CODAST는 Codex와 Claude Code에 맡긴 작업의 지시, 자료, 결과와 실
 
 ## 설치와 실행
 
-저장소를 내려받은 뒤 프로젝트 폴더에서 `start` 명령을 실행하면 CODAST에 필요한 패키지를 준비하고 서버를 시작한다. 현재 설치와 실행을 검증한 운영체제는 Windows이며, Linux와 macOS용 실행기와 Homebrew 설치 방법도 제공하지만 해당 환경에서의 실제 동작은 아직 검증하지 않았다.
+저장소를 내려받은 뒤 프로젝트 폴더에서 아래 실행 명령 전체를 입력하면 CODAST에 필요한 패키지를 준비하고 서버를 시작한다. 현재 설치와 실행을 검증한 운영체제는 Windows이며, Linux와 macOS용 실행기와 Homebrew 설치 방법도 제공하지만 해당 환경에서의 실제 동작은 아직 검증하지 않았다.
 
 Windows에서는 다음 명령으로 실행한다.
 
 ```powershell
 .\codast.cmd start
 ```
+
+PowerShell에서 `start`만 입력하면 CODAST 대신 PowerShell의 `Start-Process`가 실행되어 `FilePath` 입력을 요구한다. 이때는 `Ctrl+C`로 취소하고 위 명령 전체를 다시 입력한다.
 
 Linux와 macOS에서는 셸 실행기를 사용한다.
 
@@ -33,7 +35,7 @@ sh ./codast.sh start
 
 이 방식은 [Homebrew의 uv 패키지](https://formulae.brew.sh/formula/uv)를 이용한다. CODAST 실행기는 PATH에 있는 uv를 재사용하며 Homebrew 자체를 설치하거나 변경하지 않는다. CODAST용 Homebrew 패키지는 별도로 배포하지 않는다.
 
-실행 명령은 개발 도구 준비를 위한 `init`, 서버를 시작하는 `start`, Python 테스트를 실행하는 `test`로 나뉘며, 인수를 생략하면 `start`가 적용된다.
+실행기에 전달하는 인수는 개발 도구 준비를 위한 `init`, 서버를 시작하는 `start`, Python 테스트를 실행하는 `test`로 나뉘며, 인수를 생략하면 `start`가 적용된다.
 
 | 작업 | Windows | Linux, macOS |
 | --- | --- | --- |
