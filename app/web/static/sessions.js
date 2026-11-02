@@ -257,10 +257,10 @@
       accountBody.replaceChildren();accountRows.replaceChildren();
       const duration=minutes=>minutes===10080?'주간':minutes===300?'5시간':minutes?minutes+'분':'기간 미제공';
       const labels={not_installed:'CLI 미설치',login_required:'로그인 필요',permission_required:'로그인 권한 확인 필요',
-        credentials_unavailable:'인증정보 확인 필요',unsupported:'구독 계정 조회 미지원',rate_limited:'조회 제한, 잠시 후 재시도',error:'조회 실패'};
+        credentials_unavailable:'인증정보 확인 필요',unsupported:'구독 계정 조회 미지원',rate_limited:'조회 제한, 잠시 후 재시도',token_expired:'Claude 실행 시 인증 갱신',error:'조회 실패'};
       for(const data of results){
         const client=data.client,label=client==='claude'?'Claude':'Codex',stateLabel=client==='claude'&&data.state==='login_required'?'로그인 필요 (로그인 만료)':labels[data.state];
-        const previous=['error','rate_limited'].includes(data.state)?accountSnapshots[client]:null;
+        const previous=['error','rate_limited','token_expired'].includes(data.state)?accountSnapshots[client]:null;
         if(['available','partial'].includes(data.state))accountSnapshots[client]=data;
         else if(!previous)delete accountSnapshots[client];
         const observed=previous||data,rows=observed.limits.filter(row=>row.bucket===client);
