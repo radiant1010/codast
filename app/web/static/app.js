@@ -39,6 +39,10 @@ function notice(text,error=false,{persistent=false,success=false}={}){
   toast.classList.toggle('is-success',success&&!error);toast.classList.toggle('is-error',error);
   // Inline status already announces errors; avoid reading the same message twice.
   toast.setAttribute('aria-hidden',String(error));toast.textContent=persistent?'':text;
+  // Dialogs and menus sit in the top layer above any z-index; re-open the toast popover so it lands above them.
+  if(toast.textContent&&toast.showPopover&&document.querySelector('dialog:modal,[popover]:popover-open:not(#status-toast)')){
+    if(toast.matches(':popover-open'))toast.hidePopover();toast.showPopover();
+  }
   if(toast.textContent)noticeTimer=setTimeout(()=>{toast.textContent='';},4000);
 }
 const projectNameError='프로젝트 이름 형식 오류: 한글, 영문 또는 숫자로 시작하는 1~64자 이름이 필요합니다. 하이픈(-)과 밑줄(_)도 사용할 수 있습니다. 예: 아호이';
@@ -283,6 +287,8 @@ $('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;void a
 $('preview-route').onclick=()=>act(async()=>{const b=base(),text=$('text').value,route=await api(b+'/route','POST',{text});if(valid(b)&&text===$('text').value)routeView(route);});
 function actionHint(){window.resizeComposer?.();}
 for(const id of ['action','client','mode'])$(id).onchange=actionHint;
+// Keep the toast's live region open in the top layer; notice() re-raises it above later dialogs.
+$('status-toast').showPopover();
 $('text').oninput=actionHint;
 $('text').onkeydown=e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();$('composer').requestSubmit();}};
 actionHint();
