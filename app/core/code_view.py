@@ -126,11 +126,15 @@ class CodeView:
                 if monotonic() >= deadline:
                     return {'pending': True}
                 continue
-            candidates = []
+            matches = []
             for relative in index.files:
                 normalized = os.path.normcase(relative).replace('\\', '/')
                 if normalized != suffix and not normalized.endswith('/' + suffix):
                     continue
+                parts = relative.split('/')
+                matches.append((any(part.startswith('.') for part in parts[:-1]), len(parts), relative))
+            candidates = []
+            for _, _, relative in sorted(matches):
                 try:
                     path = self.harness.policy.file_path(root, relative)
                     if path.is_file():

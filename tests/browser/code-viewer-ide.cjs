@@ -68,6 +68,11 @@ const FAIL='IDE 실행에 실패했습니다(종료 코드 3). 앱에서 코드�
   await generic.click();await dialog.waitFor();
   const vscodeOption=dialog.getByRole('button',{name:/^VS Code(?! 경로 지정)/}),ideaOption=dialog.getByRole('button',{name:/^IntelliJ IDEA(?! 경로 지정)/});
   await until(async()=>/Microsoft VS Code\\Code\.exe/.test(await dialog.innerText()),'detected VS Code path is shown');
+  const spills=()=>dialog.locator('button').evaluateAll(buttons=>buttons.filter(button=>{
+   const box=button.getBoundingClientRect();
+   return button.scrollHeight>button.clientHeight+1||[...button.querySelectorAll('*')].some(child=>{const inner=child.getBoundingClientRect();return inner.bottom>box.bottom+1||inner.right>box.right+1;});
+  }).map(button=>button.textContent.trim().slice(0,40)));
+  assert.deepEqual(await spills(),[],'a long wrapped IDE path stays inside its option button');
   assert.equal(await ideaOption.isDisabled(),true,'a missing IDE cannot be chosen');
   assert.ok(await dialog.getByRole('button',{name:'IntelliJ IDEA 경로 지정',exact:true}).isVisible());
   await page.keyboard.press('Escape');
@@ -100,6 +105,7 @@ const FAIL='IDE 실행에 실패했습니다(종료 코드 3). 앱에서 코드�
   await dialog.getByRole('button',{name:'IntelliJ IDEA 경로 지정',exact:true}).click();
   await until(async()=>!(await ideaOption.isDisabled()),'IntelliJ becomes selectable after its path is set');
   assert.equal(await dialog.isVisible(),true,'the dialog stays open after setting a path');
+  assert.deepEqual(await spills(),[],'both long IDE paths stay inside their option buttons');
   assert.ok(calls.some(call=>call.method==='POST'&&call.path==='/api/ides/intellij/executable-picker'));
   assert.deepEqual(calls.find(call=>call.method==='PUT'&&call.path==='/api/ides/intellij').body,{path:IDEA});
   await ideaOption.click();
