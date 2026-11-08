@@ -38,6 +38,7 @@
 .ide-dialog [role=status],#ide-settings [role=status]{font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .ide-option{display:flex;align-items:center;gap:12px;padding:16px 0;border-top:1px solid var(--terminal-border)}
 .ide-option>button:first-child{flex:1;min-width:0;padding:12px;text-align:left;white-space:normal}
+:is(dialog,#settings-panel,#create).ide-dialog .ide-option>button:first-child{height:auto;min-height:var(--control-height)}
 .ide-option>button:last-child{flex:none}
 .ide-option>button:hover:not(:disabled){background:var(--terminal-selected);color:var(--terminal-accent)}
 .ide-path{display:block;margin:8px 0 0;font-size:12px;font-family:var(--bs-font-monospace);line-height:1.6;white-space:normal;overflow-wrap:anywhere}

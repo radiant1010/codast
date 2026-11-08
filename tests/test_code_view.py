@@ -186,6 +186,27 @@ def test_resolve_caps_candidates_at_50(project):
     assert body['truncated'] is True
 
 
+def test_resolve_candidates_put_project_files_before_hidden_folders_and_deep_copies(project):
+    # Real projects keep tool caches in dot folders (.local, .cache); sorting by path alone
+    # filled all 50 slots with them and cut the project's own file from the list.
+    client, external, _ = project
+    for number in range(60):
+        write(external / f'.cache/pkg{number:02}/__init__.py', '')
+    write(external / 'tools/vendor/lib/site/__init__.py', '')
+    write(external / 'app/llm/__init__.py', '')
+    write(external / 'app/__init__.py', '')
+    write(external / 'zeta/__init__.py', '')
+    body = resolve(client, '__init__.py').json()
+    assert body['candidates'][:4] == [
+        'app/__init__.py',
+        'zeta/__init__.py',
+        'app/llm/__init__.py',
+        'tools/vendor/lib/site/__init__.py',
+    ]
+    assert body['candidates'][4:] == [f'.cache/pkg{number:02}/__init__.py' for number in range(46)]
+    assert body['truncated'] is True
+
+
 @pytest.mark.parametrize('ref', ['missing.py', 'xampleService.java', 'index.js', 'config', 'secret.py'])
 def test_resolve_misses_unknown_names_partial_segments_ignored_and_protected_folders(project, ref):
     client, _, _ = project
