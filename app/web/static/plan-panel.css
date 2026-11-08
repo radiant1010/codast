@@ -1,0 +1,23 @@
+#plan-panel{flex:none;display:flex;flex-direction:column;min-width:0;max-height:30vh;margin:0 24px;border-top:1px solid var(--terminal-border);background:var(--bs-body-bg);font-size:13px;line-height:1.6;overflow:hidden}
+#plan-panel[hidden],#plan-panel [hidden],#console:not([data-session-tab=chat])>#plan-panel{display:none!important}
+#plan-panel .plan-header{display:flex;align-items:center;gap:12px;flex:none;min-width:0;padding:6px 0}
+#plan-panel .plan-heading{display:flex;align-items:baseline;gap:12px;flex:1;min-width:0;flex-wrap:wrap}
+#plan-panel h2{font-size:13px;font-weight:600;margin:0}
+#plan-panel .plan-count{color:var(--terminal-muted);font-variant-numeric:tabular-nums}
+#plan-panel button{flex:none;min-height:36px;font-size:13px;padding:4px 8px}
+#plan-panel .plan-summary{display:none;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#plan-panel .plan-body{min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:0 0 8px}
+#plan-panel ol{list-style:none;padding:0;margin:0}
+#plan-panel li{display:flex;align-items:baseline;gap:8px;padding:3px 0;overflow-wrap:anywhere}
+#plan-panel .plan-mark{flex:none;width:1em;text-align:center}
+#plan-panel .plan-in_progress{color:var(--terminal-accent)}
+#plan-panel .plan-completed{color:var(--terminal-muted)}
+#plan-panel .plan-body>button{margin-top:6px}
+#plan-panel .plan-notice{flex:none;margin:0;padding:6px 0;color:var(--terminal-muted);overflow-wrap:anywhere}
+@media(width < 760px){
+  #plan-panel{max-height:40vh;margin-inline:14px}
+  #plan-panel.is-collapsed .plan-heading{display:none}
+  #plan-panel.is-collapsed .plan-summary{display:block}
+  #plan-panel button{min-height:44px}
+}
+@media(prefers-reduced-motion:reduce){#plan-panel button{transition:none}}

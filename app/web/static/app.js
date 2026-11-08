@@ -111,6 +111,7 @@ function streamRun(id,b,container,refresh){
   source.addEventListener('run_event',event=>{
     if(!valid(b,generation)||!container.isConnected){source.close();return;}
     const row=JSON.parse(event.data);if(row.seq<=last)return;last=row.seq;
+    if(row.kind==='plan'){window.planPanel?.planEvent();return;}
     const follow=atBottom(),previous=container.lastElementChild;
     if(row.kind==='assistant'&&previous?.dataset.kind==='assistant')setConsoleOutput(previous,previous.consoleSource+row.text);
     else{const line=row.kind==='assistant'?consoleOutput(row.text,'event assistant console-output'):el('pre',row.text,'event '+row.kind);line.dataset.kind=row.kind;container.append(line);}
@@ -224,6 +225,7 @@ async function conversation(b=base()){
   const running=r.runs.filter(x=>x.status==='running');
   $('connection').textContent=running.length?'클라이언트 실행 중':'로컬 작업 기록';drawOverview(r.runs);window.refreshSessionView?.(r.runs);
   window.sessionWorkspace?.conversationChanged(d.messages,chatId);
+  window.planPanel?.chatChanged(chatId);
   if(follow)followOutput(true);else $('messages').scrollTop=scroll;
 }
 function drawOverview(runs){$('overview').replaceChildren();const stats=el('div',undefined,'stats');for(const [label,count] of [['작업',groups.filter(g=>g.task).length],['보류',groups.filter(g=>g.status==='paused').length],['최근 실패',runs.filter(r=>r.status==='failed').length]]){const s=el('div',label,'stat');s.append(el('strong',String(count)));stats.append(s);}$('overview').append(stats,el('p','최근 실행 20개가 표시되며, 작업을 선택하면 관련 대화와 결과를 확인할 수 있습니다.','hint'));for(const g of groups.filter(g=>g.task))$('overview').append(button(g.task+', '+taskStates[g.status],async()=>{await switchChat(g.task);},'task'));}

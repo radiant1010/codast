@@ -7,12 +7,72 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 
 from app.models.schemas import AgentResult
 from app.core.questions import QUESTION_INSTRUCTION
 from app.llm.claude_options import claude_options, claude_version
+
+
+CLAUDE_TOOLS_CACHE = {}
+CLAUDE_TOOLS_TIMEOUT = 10
+CLAUDE_TOOLS_LOCK = threading.Lock()
+
+
+def claude_builtin_tools(path) -> list[str] | None:
+    with CLAUDE_TOOLS_LOCK:
+        try:
+            key = (path, claude_version(path))
+            if key in CLAUDE_TOOLS_CACHE:
+                return CLAUDE_TOOLS_CACHE[key]
+            with tempfile.TemporaryDirectory() as cwd:
+                flags = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+                process = subprocess.Popen(
+                    [path, '-p', '--output-format', 'stream-json', '--verbose', '--no-session-persistence'],
+                    cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, **flags)
+                timed_out = threading.Event()
+
+                def expire():
+                    timed_out.set()
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+
+                timer = threading.Timer(CLAUDE_TOOLS_TIMEOUT, expire)
+                timer.start()
+                tools = None
+                try:
+                    process.stdin.write(b'ok')
+                    process.stdin.close()
+                    for line in process.stdout:
+                        if timed_out.is_set():
+                            break
+                        try:
+                            event = json.loads(line)
+                        except (ValueError, UnicodeDecodeError):
+                            continue
+                        if isinstance(event, dict) and event.get('type') == 'system' and event.get('subtype') == 'init':
+                            names = event.get('tools')
+                            if isinstance(names, list) and all(isinstance(name, str) for name in names) and 'Read' in names:
+                                tools = [name for name in names if not name.startswith('mcp__')]
+                            break
+                finally:
+                    timer.cancel()
+                    timer.join()
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=10)
+                    process.stdin.close()
+                    process.stdout.close()
+                if tools is not None and not timed_out.is_set():
+                    CLAUDE_TOOLS_CACHE[key] = tools
+                    return tools
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+    return None
 
 
 def discovery_candidates(client):
@@ -192,6 +252,7 @@ class CliAdapter:
         self.on_metrics = None
         self.metrics = {}
         self.seen_text = {}
+        self.task_calls = {}
         self.model = None
         self.reasoning_effort = None
         self.ultracode = None
@@ -234,9 +295,22 @@ class CliAdapter:
                 raise ValueError('Ultracode를 켜려면 Extra high를 지원하는 모델을 선택하세요.')
         from app.core.toolchain import Toolchain, TOOL_GUIDE, client_arguments
         servers = Toolchain().configuration(cwd)
-        prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + QUESTION_INSTRUCTION + (TOOL_GUIDE if servers else '') + context
+        guide = ''
+        argv = self.arguments(mode, session, client_arguments(self.client, servers))
+        if self.client == 'claude':
+            tools = await asyncio.to_thread(claude_builtin_tools, self.path)
+            if tools:
+                argv += ['--tools', ','.join(tools + ['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'])]
+            elif self.on_event:
+                self.on_event('warning', '작업 계획 표시를 켜지 못했습니다. Claude 도구 목록을 확인하지 못했습니다.')
+            # Measured 2026-11-08: Claude ignored a softer sentence or one placed after the question format
+            # (0 of 13 runs); this wording right after the opening line was followed in 5 of 5 multi-step runs.
+            guide = ('이 요청이 두 단계 이상이면 작업을 시작하기 전에 반드시 TaskCreate 도구로 단계를 모두 등록하고, 각 단계를 시작할 때 '
+                     'TaskUpdate로 status를 in_progress로, 마칠 때 completed로 바꾸세요. 이 작업 목록은 사용자 화면에 진행 상황으로 '
+                     '표시됩니다. 한 번에 끝나는 요청에는 만들지 마세요.\n')
+        prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + guide + QUESTION_INSTRUCTION + (TOOL_GUIDE if servers else '') + context
         options = {'on_line': self.stream_line} if self.on_event else {}
-        code, stdout, stderr = await self.runner.run(self.arguments(mode, session, client_arguments(self.client, servers)), cwd, prompt, **options)
+        code, stdout, stderr = await self.runner.run(argv, cwd, prompt, **options)
         if code:
             detail = f'종료 코드: {code}\n\n표준 출력:\n{stdout}\n\n표준 오류:\n{stderr}'
             if self.client == 'codex' and 'thread-store conflict:' in stderr + stdout and 'already has an active writer' in stderr + stdout:
@@ -311,6 +385,65 @@ class CliAdapter:
                         self.on_event('output', str(block.get('content', '')))
             elif kind == 'system':
                 self.on_event('status', 'Claude, '+event.get('subtype', 'system'))
+            plan = self.plan_event(event)
+            if plan is not None:
+                self.on_event('plan', json.dumps(plan, ensure_ascii=False))
+
+    def plan_event(self, event):
+        session = event.get('session_id')
+        message = event.get('message')
+        if not isinstance(session, str) or not session or not isinstance(message, dict):
+            return None
+        blocks = message.get('content')
+        if not isinstance(blocks, list):
+            return None
+        if event['type'] == 'assistant' and not event.get('parent_tool_use_id'):
+            for block in blocks:
+                if (isinstance(block, dict) and block.get('type') == 'tool_use'
+                        and block.get('name') in ('TaskCreate', 'TaskUpdate', 'TaskList')
+                        and isinstance(block.get('id'), str) and isinstance(block.get('input'), dict)):
+                    self.task_calls[(session, block['id'])] = block
+        if event['type'] != 'user':
+            return None
+        results = [block for block in blocks if isinstance(block, dict) and block.get('type') == 'tool_result']
+        calls = [self.task_calls.pop((session, block['tool_use_id']), None)
+                 if isinstance(block.get('tool_use_id'), str) else None for block in results]
+        data = event.get('tool_use_result')
+        if (len(results) != 1 or not calls[0] or results[0].get('is_error') or event.get('parent_tool_use_id')
+                or not isinstance(data, dict) or data.get('success') is False):
+            return None
+        call = calls[0]
+        fields = {name: call['input'][name] for name in ('subject', 'activeForm') if name in call['input']}
+        if any(not isinstance(value, str) and not (name == 'activeForm' and value is None)
+               for name, value in fields.items()):
+            return None
+        fields = {name: value[:200] if isinstance(value, str) else None for name, value in fields.items()}
+        if call['name'] == 'TaskCreate':
+            task = data.get('task')
+            if not isinstance(task, dict) or 'subject' not in fields:
+                return None
+            plan = {'op': 'create', 'session': session, 'id': task.get('id'),
+                    'activeForm': None, **fields, 'status': 'pending'}
+        elif call['name'] == 'TaskUpdate':
+            plan = {'op': 'update', 'session': session, 'id': data.get('taskId'), **fields}
+            change = data.get('statusChange')
+            if isinstance(change, dict) and 'to' in change:
+                plan['status'] = change['to']
+        else:
+            tasks = data.get('tasks')
+            if not isinstance(tasks, list) or any(not isinstance(task, dict) or not isinstance(task.get('subject'), str) for task in tasks):
+                return None
+            plan = {'op': 'snapshot', 'session': session, 'tasks': [
+                {'id': task.get('id'), 'subject': task['subject'][:200], 'status': task.get('status')} for task in tasks]}
+        tasks = plan['tasks'] if plan['op'] == 'snapshot' else [plan]
+        for task in tasks:
+            identity = task.get('id')
+            if not isinstance(identity, str) or not identity.isascii() or not identity.isdecimal():
+                return None
+            statuses = ('pending', 'in_progress', 'completed', 'deleted') if plan['op'] == 'update' else ('pending', 'in_progress', 'completed')
+            if 'status' in task and task['status'] not in statuses:
+                return None
+        return plan
 
     def parse(self, stdout):
         if self.client == 'claude':

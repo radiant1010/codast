@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 import asyncio
 import json
 from app.core.commands import parse_command
+from app.core.plan_view import build_plan
 from app.models.schemas import WorkspaceRegister, RulebookSettings
 from app.models.schemas import ChatRequest, ChatCreate, Command, TaskUpdate, ClientConfig, RouteRequest
 from app.llm.cli import probe, executable
@@ -269,6 +270,13 @@ def pending_questions(name: str, request: Request, chat_id: str = Query(pattern=
     s = service(request)
     s.projects.select(name)
     return {'messages': s.storage.pending_questions(name, chat_id)}
+
+
+@router.get('/projects/{name}/plan')
+def plan(name: str, request: Request, chat_id: str = Query(pattern=r'^[a-f0-9]{32}$')):
+    s = service(request)
+    s.projects.select(name)
+    return build_plan(*s.storage.chat_plan_history(name, chat_id))
 
 
 @router.post('/projects/{name}/runs/{run_id}/reply')

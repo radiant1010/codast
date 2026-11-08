@@ -271,13 +271,18 @@ class Storage:
     def append_event(self, run_id, kind, text):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            count = db.execute('SELECT COUNT(*) FROM run_events WHERE run_id=?', (run_id,)).fetchone()[0]
-            if count > 4096:
-                return
-            if count == 4096:
-                kind, text = 'warning', '진행 로그 한도에 도달했습니다. 최종 결과는 별도로 저장됩니다.'
+            if kind == 'plan':
+                count = db.execute("SELECT COUNT(*) FROM run_events WHERE run_id=? AND kind='plan'", (run_id,)).fetchone()[0]
+                if count >= 1000:
+                    return
+            else:
+                count = db.execute("SELECT COUNT(*) FROM run_events WHERE run_id=? AND kind!='plan'", (run_id,)).fetchone()[0]
+                if count > 4096:
+                    return
+                if count == 4096:
+                    kind, text = 'warning', '진행 로그 한도에 도달했습니다. 최종 결과는 별도로 저장됩니다.'
             db.execute('INSERT INTO run_events(run_id,kind,text,created_at) VALUES (?,?,?,?)',
-                       (run_id, kind, str(text)[:8192], now()))
+                       (run_id, kind, str(text) if kind == 'plan' else str(text)[:8192], now()))
 
     def events(self, project, run_id, after=0, limit=200):
         self.run(project, run_id)
@@ -480,6 +485,20 @@ class Storage:
                 WHERE {where} ORDER BY m.created_at DESC,m.id DESC LIMIT ? OFFSET ?""",
                 (*args, limit, offset)).fetchall()
         return [dict(row) for row in rows]
+
+    def chat_plan_history(self, project, chat_id):
+        self.resolve_chat(project, chat_id=chat_id)
+        with self.connect() as db:
+            db.execute('BEGIN')
+            runs = [dict(row) for row in db.execute('''SELECT r.id,r.adapter,r.status
+                FROM messages m JOIN runs r ON r.id=m.run_id AND r.project=m.project
+                WHERE m.project=? AND m.chat_id=? ORDER BY m.created_at,m.rowid''', (project, chat_id))]
+            events = [dict(row) for row in db.execute('''SELECT e.run_id,e.text
+                FROM messages m JOIN runs r ON r.id=m.run_id AND r.project=m.project
+                JOIN run_events e ON e.run_id=r.id
+                WHERE m.project=? AND m.chat_id=? AND e.kind='plan'
+                ORDER BY m.created_at,m.rowid,e.seq''', (project, chat_id))]
+        return runs, events
 
     def pending_questions(self, project, chat_id):
         self.resolve_chat(project, chat_id=chat_id)
