@@ -1,6 +1,10 @@
 # Keep the POSIX launcher usable after a Windows checkout.
 /codast.sh text eol=lf
 
+# Vendored files are byte-exact upstream copies; index.html pins some with integrity hashes,
+# so a CRLF checkout would make the browser refuse them.
+/app/web/static/vendor/** -text
+
 # Defense in depth for git archive; do not package local runtime data.
 /.local export-ignore
 /.vscode export-ignore
