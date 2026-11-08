@@ -37,11 +37,13 @@ const markdown=[
     '/api/projects/sample/runs':{runs:[]},'/api/projects/sample/questions':{messages:[]},
     '/api/projects/sample/rules':{rules:[]},'/api/projects/sample/materials':{materials:[]},
     '/api/projects/sample/guard':{level:'strong',privacy_mode:'replace',fields:[]},
+    '/api/projects/sample/work-items':{items:[]},'/api/clients/claude/status':{state:'available',models:[],limits:[]},
    };
    return route.fulfill({json:replies[path]||{}});
   });
   await page.goto('http://harness.test/');await page.locator('#startup-loading').waitFor({state:'hidden'});
-  await page.locator('#task-list .task').first().click();await page.waitForFunction(()=>!chatLoading&&!!filter);
+  await page.evaluate(id=>{location.hash='#chat/'+id;},'a'.repeat(32));
+  await page.locator('.answer>.console-output').first().waitFor();await page.waitForFunction(()=>!chatLoading&&!!filter);
   const answer=page.locator('.answer>.console-output');
   assert.equal(await answer.locator('h1').count(),1,'Markdown headings must render as headings');
   assert.equal(await answer.locator('h2').count(),2);
@@ -54,7 +56,6 @@ const markdown=[
   const link=answer.getByRole('link',{name:'설명 문서'});
   assert.equal(await link.getAttribute('target'),'_blank');assert.match(await link.getAttribute('rel'),/noreferrer/);
   fs.mkdirSync('docs/internal/screenshots',{recursive:true});
-  await page.locator('#workspace-status > summary').click();
   for(const width of [1440,1200,640,480]){
    await page.setViewportSize({width,height:900});
    await page.locator('#messages').evaluate(node=>node.scrollTop=0);

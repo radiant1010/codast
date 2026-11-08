@@ -257,6 +257,7 @@ async function loadProject(){
   epoch++;conversationTicket++;closeStreams();filter=null;offset=0;historyOffset=0;groups=[];$('text').value='';$('task-name').value='';$('routing').replaceChildren();$('messages').replaceChildren();$('history').replaceChildren();$('rules').textContent='프로젝트 선택 대기';$('workspace-root').value='';drawTasks();window.refreshSetup?.();
   window.workItems?.projectChanged();
   window.sessionWorkspace?.projectChanged();
+  window.codeViewer?.projectChanged();
   if(!$('project').value){chatLoading=false;notice('프로젝트를 선택하세요.');return;}
   const b=base(),e=epoch;
   try{
