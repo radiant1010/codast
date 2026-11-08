@@ -208,3 +208,17 @@ class UserQuestion(StrictModel):
 class QuestionReply(StrictModel):
     answer: str = Field(min_length=1, max_length=4000, pattern=r'\S')
     request_id: str = Field(min_length=1, max_length=128, pattern=r'^[a-zA-Z0-9_-]+$')
+
+
+class IdeConfig(StrictModel):
+    path: str = Field(max_length=4096)
+
+
+class ProjectIde(StrictModel):
+    ide: str
+
+
+class IdeOpen(StrictModel):
+    path: str = Field(min_length=1, max_length=4096)
+    line: int | None = Field(default=None, ge=1, strict=True)
+    column: int | None = Field(default=None, ge=1, strict=True)

@@ -155,6 +155,57 @@ def configure_client(client: str, body: ClientConfig, request: Request):
     return {'client': client, 'path': path}
 
 
+from app.core import ide as ide_tools
+from app.models.schemas import IdeConfig, ProjectIde, IdeOpen
+
+
+@router.get('/ides')
+def ides(request: Request):
+    return {'ides': [ide_tools.status(service(request).storage, ide) for ide in ide_tools.LABELS]}
+
+
+@router.put('/ides/{ide}')
+def configure_ide(ide: str, body: IdeConfig, request: Request):
+    ide_tools.label(ide)
+    path = ide_tools.executable(ide, body.path) if body.path else ''
+    service(request).storage.save_client_path(ide, path)
+    return {'ide': ide, 'path': path}
+
+
+@router.post('/ides/{ide}/executable-picker')
+async def pick_ide_executable(ide: str, request: Request):
+    title = f'{ide_tools.label(ide)} 실행 파일을 선택하세요'
+    path = await request.app.state.folder_picker.pick(executable=True, title=title)
+    return {'path': ide_tools.executable(ide, path) if path else None}
+
+
+@router.get('/projects/{name}/ide')
+def project_ide(name: str, request: Request):
+    s = service(request)
+    s.projects.select(name)
+    return {'ide': s.storage.project_ide(name)}
+
+
+@router.put('/projects/{name}/ide')
+def configure_project_ide(name: str, body: ProjectIde, request: Request):
+    s = service(request)
+    s.projects.select(name)
+    ide_tools.label(body.ide)
+    s.storage.save_project_ide(name, body.ide)
+    return {'ide': body.ide}
+
+
+@router.post('/projects/{name}/ide/open')
+def open_in_ide(name: str, body: IdeOpen, request: Request):
+    s = service(request)
+    root = s.projects.select(name)
+    ide = s.storage.project_ide(name)
+    if ide is None:
+        raise ValueError('IDE를 먼저 선택하세요.')
+    path = s.policy.file_path(root, body.path)
+    return ide_tools.open_file(s.storage, ide, root, path, body.line, body.column)
+
+
 @router.post('/projects/{name}/route')
 def route(name: str, body: RouteRequest, request: Request):
     s = service(request)
@@ -475,6 +526,26 @@ def read(name: str, path: str, request: Request):
 def write(name: str, body: FileWrite, request: Request):
     service(request).write_file(name, body.path, body.content)
     return {"path": body.path, "saved": True}
+
+
+@router.get('/projects/{name}/code/tree')
+def code_tree(name: str, request: Request, path: str = ''):
+    return request.app.state.code_view.tree(name, path)
+
+
+@router.get('/projects/{name}/code/resolve')
+def code_resolve(name: str, ref: str, request: Request):
+    return request.app.state.code_view.resolve(name, ref)
+
+
+@router.get('/projects/{name}/code/file')
+def code_file(name: str, path: str, request: Request):
+    return request.app.state.code_view.read(name, path)
+
+
+@router.post('/projects/{name}/code/refresh')
+def code_refresh(name: str, request: Request):
+    return request.app.state.code_view.refresh(name)
 
 
 @router.post("/projects/{name}/commands", response_model=AgentResult)

@@ -13,8 +13,11 @@
         RETURN_DOM_FRAGMENT:true,ALLOW_DATA_ATTR:false,ALLOW_ARIA_ATTR:false,
         ALLOWED_TAGS:['p','br','strong','em','del','ul','ol','li','blockquote','hr','table','thead','tbody','tr','th','td','h1','h2','h3','h4','h5','h6','pre','code','a','input'],
         ALLOWED_ATTR:['href','title','class','start','style','type','checked','disabled'],
+        ALLOWED_URI_REGEXP:/^(?:(?:https?|mailto|file):|[a-z]:[\\/]|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$)|[^:\s]+:\d+(?::\d+|-\d+)?$)/i,
       });
+      window.codeReferences?.decorate(fragment);
       for(const link of fragment.querySelectorAll('a[href]')){
+        if(!/^(?:(?:https?|mailto):|\/\/)/i.test(link.getAttribute('href'))){link.removeAttribute('href');continue;}
         let url;try{url=new URL(link.getAttribute('href'),location.href);}catch{}
         if(!url||!['http:','https:','mailto:'].includes(url.protocol)){link.removeAttribute('href');continue;}
         link.target='_blank';link.rel='noopener noreferrer';

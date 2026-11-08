@@ -76,6 +76,8 @@ def create_app(workspace_root: Path | None = None, agent=None, db_path: Path | N
     app.state.workflows = Workflows(app.state.document_vault, app.state.harness)
     from app.core.work_items import WorkItems
     app.state.work_items = WorkItems(app.state.harness)
+    from app.core.code_view import CodeView
+    app.state.code_view = CodeView(app.state.harness)
 
     @app.middleware("http")
     async def same_origin(request: Request, call_next):

@@ -221,6 +221,8 @@ class Storage:
                     COMMIT;
                 """)
 
+            db.execute('CREATE TABLE IF NOT EXISTS project_ide (project TEXT PRIMARY KEY, ide TEXT NOT NULL)')
+
     def guard_pseudonym_key(self, project):
         """Local-only key. Never return it through settings, reports or prompts."""
         with self.connect() as db:
@@ -544,6 +546,10 @@ class Storage:
                               (project, limit, offset)).fetchall()
         return [{**dict(row), "command": json.loads(row["command"])} for row in rows]
 
+    def latest_run_finished_at(self, project):
+        with self.connect() as db:
+            return db.execute('SELECT MAX(finished_at) FROM runs WHERE project=?', (project,)).fetchone()[0]
+
     def run(self, project, run_id):
         with self.connect() as db:
             row = db.execute("""SELECT r.*,m.chat_id FROM runs r
@@ -623,6 +629,15 @@ class Storage:
         with self.connect() as db:
             row = db.execute("SELECT path FROM client_config WHERE client=?", (client,)).fetchone()
         return row[0] if row else ''
+
+    def project_ide(self, project):
+        with self.connect() as db:
+            row = db.execute('SELECT ide FROM project_ide WHERE project=?', (project,)).fetchone()
+        return row[0] if row else None
+
+    def save_project_ide(self, project, ide):
+        with self.connect() as db:
+            db.execute('INSERT INTO project_ide VALUES (?,?) ON CONFLICT(project) DO UPDATE SET ide=excluded.ide', (project, ide))
 
     def save_client_path(self, client, path):
         with self.connect() as db:
