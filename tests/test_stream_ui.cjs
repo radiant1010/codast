@@ -61,3 +61,20 @@ test('malformed long fences preserve fallback text without blocking the UI',()=>
   assert.equal(context.node.consoleSource,context.raw);
  }
 });
+
+test('runtime snapshots and connection errors stay scoped to the live run card',()=>{
+ const handlers={},updates=[],connections=[];let stopped=0,closed=0;
+ const context={epoch:1,streams:[],valid:(_b,e)=>e===context.epoch,notice:()=>{},
+ EventSource:class{static CLOSED=2;readyState=1;constructor(){context.source=this;}addEventListener(name,fn){handlers[name]=fn;}close(){closed++;}},
+ act:fn=>fn(),conversation:async()=>{}};
+ vm.createContext(context);vm.runInContext(fn,context);
+ const container={isConnected:true,runtime:{update:v=>updates.push(v),connection:v=>connections.push(v),stop:()=>stopped++}};
+ context.streamRun('one','/projects/one',container,true);
+ handlers.runtime({data:JSON.stringify({run_id:'one',last_progress_at:'2026-01-01T00:00:00Z'})});
+ assert.equal(updates.length,1);
+ context.source.onerror();assert.deepEqual(connections,['disconnected']);
+ context.epoch++;
+ handlers.runtime({data:JSON.stringify({run_id:'one'})});
+ context.source.onerror();assert.equal(updates.length,1);assert.equal(connections.length,1);
+ assert.equal(closed,1);assert.equal(stopped,1);
+});

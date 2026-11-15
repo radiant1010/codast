@@ -1,0 +1,51 @@
+name: Tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.13.8"
+          python-version: "3.12"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+      - run: uv sync --locked --group dev
+      - name: Python tests and coverage
+        run: uv run --locked python -m pytest --cov=app --cov-report=term-missing
+      - name: JavaScript tests
+        if: ${{ !cancelled() }}
+        run: node --test tests/test_*.cjs
+
+  browser:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+      - run: npm install --no-save --ignore-scripts --package-lock=false playwright@1.65.1
+      - name: Execution settings and live reconnection
+        run: node tests/browser/execution-timeout.cjs
+      - name: Existing streaming plan panel
+        if: ${{ !cancelled() }}
+        run: node tests/browser/plan-panel.cjs
+

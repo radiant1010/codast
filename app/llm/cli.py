@@ -227,7 +227,7 @@ class ProcessRunner:
                     raise ValueError('클라이언트 출력이 4 MiB 한도를 초과했습니다.')
                 if reader_errors:
                     raise reader_errors[0]
-                if time.monotonic() - started > timeout:
+                if timeout is not None and time.monotonic() - started > timeout:
                     raise TimeoutError(f'클라이언트 실행 제한 시간({timeout}초)을 초과했습니다.')
                 cancel.wait(.1)
         finally:
@@ -250,6 +250,8 @@ class CliAdapter:
         self.runner = runner or ProcessRunner()
         self.on_event = None
         self.on_metrics = None
+        self.on_progress = None
+        self.timeout_seconds = 600
         self.metrics = {}
         self.seen_text = {}
         self.task_calls = {}
@@ -309,7 +311,9 @@ class CliAdapter:
                      'TaskUpdate로 status를 in_progress로, 마칠 때 completed로 바꾸세요. 이 작업 목록은 사용자 화면에 진행 상황으로 '
                      '표시됩니다. 한 번에 끝나는 요청에는 만들지 마세요.\n')
         prompt = '프로젝트 규칙과 선택 자료를 참고하여 현재 요청을 처리하세요. history는 이전 대화 기록입니다.\n' + guide + QUESTION_INSTRUCTION + (TOOL_GUIDE if servers else '') + context
-        options = {'on_line': self.stream_line} if self.on_event else {}
+        options = {'timeout': self.timeout_seconds}
+        if self.on_event:
+            options['on_line'] = self.stream_line
         code, stdout, stderr = await self.runner.run(argv, cwd, prompt, **options)
         if code:
             detail = f'종료 코드: {code}\n\n표준 출력:\n{stdout}\n\n표준 오류:\n{stderr}'
@@ -338,6 +342,11 @@ class CliAdapter:
         if not isinstance(event, dict) or not isinstance(event.get('type'), str):
             return
         kind = event.get('type', '')
+        if kind in ('heartbeat', 'ping', 'keep_alive', 'keepalive') or (
+                kind == 'system' and event.get('subtype') in ('heartbeat', 'ping', 'keep_alive', 'keepalive')):
+            return
+        if self.on_progress and self.is_progress_event(event):
+            self.on_progress()
         if self.on_metrics:
             if self.client == 'claude':
                 update_claude_metrics(self.metrics, event)
@@ -388,6 +397,19 @@ class CliAdapter:
             plan = self.plan_event(event)
             if plan is not None:
                 self.on_event('plan', json.dumps(plan, ensure_ascii=False))
+
+    def is_progress_event(self, event):
+        kind = event['type']
+        if self.client == 'codex':
+            return kind in ('thread.started', 'turn.started', 'turn.completed', 'turn.failed') or (
+                kind in ('item.started', 'item.updated', 'item.completed') and isinstance(event.get('item'), dict))
+        if kind == 'stream_event':
+            nested = event.get('event')
+            return isinstance(nested, dict) and nested.get('type') in (
+                'message_start', 'message_delta', 'message_stop',
+                'content_block_start', 'content_block_delta', 'content_block_stop')
+        return kind in ('assistant', 'user', 'result') or (
+            kind == 'system' and event.get('subtype') in ('init', 'compact_boundary'))
 
     def plan_event(self, event):
         session = event.get('session_id')

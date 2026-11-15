@@ -61,6 +61,7 @@ class FileWrite(StrictModel):
 
 
 class ProjectSettings(ExecutionSettings):
+    timeout_seconds: int | None = Field(default=600, ge=1, strict=True)
     cwd: str = Field(default=".", max_length=1024)
     context_paths: list[str] = Field(default_factory=list, max_length=10)
     mode: Literal['read-only', 'workspace-write'] = 'read-only'

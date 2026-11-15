@@ -55,7 +55,9 @@
   async function finish(){
     await inspect();if(state.status!=='completed')return;
     await projects(project.value);await loadProject();$('client').value=client.value;await window.loadModelChoices();
-    await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:client.value,mode:$('mode').value,model:null});
+    const settings=await api(base()+'/settings');
+    const saved=await api(base()+'/settings','PUT',{cwd:$('cwd').value,context_paths:selectedPaths(),client:client.value,mode:$('mode').value,model:null,timeout_seconds:settings.timeout_seconds});
+    window.runRuntime?.loadSettings(saved);
     actionHint();dialog.close();notice('연결 설정이 완료되어 모델과 채팅을 선택하고 요청을 보낼 수 있습니다.',false,{success:true});
   }
   async function open(selectedClient=null){
