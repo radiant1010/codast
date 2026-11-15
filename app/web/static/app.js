@@ -286,6 +286,7 @@ async function loadRules(b=base()){
 async function history(){const b=base(),e=epoch,d=await api(b+'/runs?limit=20&offset='+historyOffset);if(!valid(b,e))return;$('history').replaceChildren();for(const r of d.runs){const item=el('details');item.append(el('summary',new Date(r.started_at).toLocaleString()+', '+r.adapter+', '+statusNames[r.status]+', '+r.command.text.slice(0,60)),consoleOutput(r.output||r.error||'실행 중 / 종료 미확인'));$('history').append(item);}if(!d.runs.length)$('history').textContent='실행 기록이 없습니다.';$('history-prev').disabled=historyOffset===0;$('history-next').disabled=d.runs.length<20;}
 $('composer').onsubmit=e=>{e.preventDefault();if(busy||chatLoading)return;void act(async()=>{
   if(window.materialGuard?.isUploading())throw Error('첨부 자료 검사 완료 후 보내세요.');
+  if(window.materialGuard?.isUnresolved())throw Error('첨부 방식을 확인하지 못했습니다. 보관된 첨부 관리를 다시 열어 확인하거나 첨부를 제거하세요.');
   window.validateExecutionSettings?.();
   const b=base(),generation=epoch,sentProject=$('project').value,sentTask=filter,sentText=$('text').value;window.chatState.save();busy=true;$('send').disabled=true;
   const payload={text:$('text').value,task:$('task-name').value,chat_id:window.chatState.identity(sentProject,$('task-name').value),auto_route:$('auto-route').checked,action:'run',client:$('client').value,mode:$('mode').value,fresh:$('fresh').checked,model:window.selectedExecutionModel?.()||null,...window.selectedReasoningSettings?.(true),cwd:$('cwd').value,context_paths:selectedPaths(),material_ids:window.materialGuard?.selected()||[]};

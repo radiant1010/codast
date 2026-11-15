@@ -121,10 +121,12 @@ class Workflows:
                 raise ValueError('문서함당 워크플로는 100개까지 지원합니다.')
             if len({m['id'] for m in materials}) != len(materials):
                 raise ValueError('같은 자료를 중복 등록할 수 없습니다.')
-            self.harness.materials.selected(name, [m['id'] for m in materials])
+            _, audit = self.harness.materials.selected(name, [m['id'] for m in materials])
+            snapshots = [dict(item, mode=report.get('mode', 'text'), label=report['label'])
+                         for item, report in zip(materials, audit['materials'] if audit else [])]
             state = {'id': identity, 'title': title, 'revision': 0, 'status': 'ready', 'current': 0,
                      'creation': {'title': title, 'steps': steps, 'materials': materials},
-                     'materials': materials, 'steps': [dict(s, attempts=[], approved=None) for s in steps]}
+                     'materials': snapshots, 'steps': [dict(s, attempts=[], approved=None) for s in steps]}
             self.save(root, catalog, state)
             return state
 

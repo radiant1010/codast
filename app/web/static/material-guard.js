@@ -1,4 +1,4 @@
-/* Only selected extracted attachments pass this guard. Raw files never enter drafts. */
+/* Original attachments and protected text have separate delivery semantics. */
 (()=>{
   const levels={strong:'강력',medium:'중간',low:'낮음',allow:'보호하지 않음 (키도 그대로 전송)'},
     kinds={secret:'비밀 키와 비밀번호',private_key:'인증용 개인 키',identity:'주민번호 등 식별정보',name:'이름',phone:'전화번호',email:'이메일',user_id:'사용자 ID'},
@@ -6,7 +6,7 @@
     privacyModes={replace:'완전 변경',partial:'일부 마스킹 (qwe***)',raw:'원본 그대로'};
   const privacyValue=prefs=>prefs.privacy_mode||(prefs.level==='medium'?'partial':['low','allow'].includes(prefs.level)?'raw':'replace');
   let project='',selected=new Set(),rows=[],options=null,generation=0,contextVersion=0,uploading=false;
-  const page=el('section'),intro=el('p','첨부 파일에서 개인정보와 비밀 키를 찾아 선택한 보호 방식을 적용합니다. 메시지, 이전 대화, 작업 규칙과 에이전트가 직접 읽는 파일은 적용 대상이 아니며, 설정을 바꿔도 이미 보낸 정보는 회수되지 않습니다.','hint');
+  const page=el('section'),intro=el('p','텍스트 변환으로 첨부한 파일에 개인정보와 비밀 키 보호 설정을 적용합니다. 원본 파일, 메시지, 이전 대화, 작업 규칙과 에이전트가 직접 읽는 파일은 적용 대상이 아니며, 설정을 바꿔도 이미 보낸 정보는 회수되지 않습니다.','hint');
   const badge=el('span',undefined,'hint'),toolbar=el('div',undefined,'attachment-toolbar'),chips=el('div',undefined,'attachment-chips');chips.id='attachment-chips';
   const icon=iconButton;
   $('text').before(chips);$('composer-toolbar').prepend(toolbar);
@@ -59,6 +59,7 @@
   const dialog=el('dialog',undefined,'session-drawer'),header=el('div',undefined,'account-dialog-header');dialog.id='attachment-dialog';dialog.setAttribute('aria-label','첨부 자료');
   header.append(el('h2','첨부 자료'),icon('close','첨부 자료 닫기',()=>dialog.close()));
   dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF를 파일당 최대 8 MiB까지 첨부할 수 있습니다. 긴 자료에 대한 구체적인 질문에는 관련 부분과 주변 내용을 발췌하고, 전체 요약, 분석, 구현 요청에는 전체 내용을 전달합니다. 변경된 보호 설정을 적용하려면 파일을 다시 첨부해야 합니다.','hint'),list);document.body.append(dialog);
+  toolbar.append(icon('file','보관된 첨부 관리',async()=>{await refresh();dialog.showModal();}));
   const historyDialog=el('dialog',undefined,'session-drawer'),historyHeader=el('div',undefined,'account-dialog-header'),historyTitle=el('h2'),historyInfo=el('p',undefined,'hint'),historyReport=el('div'),historyContent=el('pre');
   historyDialog.id='sent-attachment-dialog';historyDialog.setAttribute('aria-label','보낸 첨부 내용');let historyTicket=0;
   historyHeader.append(historyTitle,icon('close','보낸 첨부 닫기',()=>historyDialog.close()));
@@ -69,6 +70,10 @@
     historyTitle.textContent=report.label;historyContent.textContent='첨부 내용을 불러오는 중…';
     historyInfo.textContent=(report.delivery?.mode==='excerpt'?'이 요청에 선택된 발췌 내용입니다. 표시한 위치는 보관된 가공본의 문자 위치입니다. ':'이 요청에 첨부한 가공본 전체입니다. ')+(audit.state==='dispatch_attempted'?'에이전트 전달을 시도한 자료입니다.':'실행 준비 시 연결한 자료이며 전달 여부는 확인되지 않았습니다.');
     historyReport.replaceChildren(reportCard(report));if(!historyDialog.open)historyDialog.showModal();
+    if(report.mode==='original'){
+      historyInfo.textContent=window.attachmentFiles.notice+' '+(audit.state==='dispatch_attempted'?'원본 경로 전달을 시도했습니다. 실제 읽은 범위는 실행 결과를 확인하세요.':'실행 준비에 연결한 원본이며 전달 여부는 확인되지 않았습니다.');
+      historyContent.textContent='';historyReport.append(button('원본 내려받기',()=>window.attachmentFiles.download(b,report.id)));return;
+    }
     try{const result=await api(b+'/materials/'+encodeURIComponent(report.id));
       if(ticket===historyTicket&&owner===contextVersion&&historyDialog.open){
         const chars=Array.from(result.content||'');
@@ -89,6 +94,9 @@
   level.onchange=describe;privacy.onchange=describe;
   function policyLabel(prefs){return prefs.privacy_mode?'개인정보: '+privacyModes[prefs.privacy_mode]+', 키: '+(prefs.level==='allow'?'원본':'가림'):levels[prefs.level];}
   function reportCard(report){
+    if(report.mode==='original'){
+      const detail=el('details');detail.append(el('summary',report.label+', 원본 파일'),el('p',window.attachmentFiles.notice,'hint'),el('p',report.bytes.toLocaleString()+' bytes'+(report.test_data?', 테스트용 자료':'')+' / 원본 경로 전달, 실제 읽은 범위는 실행 결과 확인','hint'));return detail;
+    }
     const detail=el('details');detail.append(el('summary',report.label+', '+policyLabel(report)+', '+(report.status==='blocked'?'차단':report.stale?'다시 첨부해 주세요':'검사 완료')));
     detail.append(el('p',report.rule_version+(report.test_data?', 테스트용 자료':''),'hint'));
     if(report.delivery){const d=report.delivery;detail.append(el('p',(d.mode==='excerpt'?'관련 부분 발췌':'전체 전달')+': '+d.source_chars.toLocaleString()+'자 중 '+d.sent_chars.toLocaleString()+'자 전달'+(d.mode==='excerpt'?' (안내 포함, '+Math.round(100*(1-d.sent_chars/d.source_chars))+'% 감소)':'')+'. 문자 수이며 실제 토큰 수와 다릅니다.','hint'));}
@@ -99,16 +107,20 @@
   }
   function render(){
     badge.textContent=options?.level==='allow'&&!options.privacy_mode?'보호 꺼짐: 키도 그대로 보냅니다':options?'파일 보호: '+policyLabel(options):'파일 보호 설정을 확인해 주세요';badge.classList.toggle('error',options?.level==='allow'||options?.privacy_mode==='raw');badge.hidden=!selected.size&&options?.level!=='allow'&&options?.privacy_mode!=='raw';
+    if(Array.from(selected).some(id=>rows.find(r=>r.id===id)?.mode==='original')){badge.textContent=window.attachmentFiles.notice;badge.hidden=false;badge.classList.add('error');}
+    if(Array.from(selected).some(id=>!rows.find(r=>r.id===id))){badge.textContent='첨부 방식을 확인 중입니다. 확인되기 전에는 보낼 수 없습니다.';badge.hidden=false;}
     chips.replaceChildren();
     for(const id of selected){const row=rows.find(r=>r.id===id),chip=el('div',undefined,'attachment-chip');
-      const title=row?.label||'첨부 자료',state=row?.stale?', 다시 첨부해 주세요':row?.status==='blocked'?', 차단':'';
+      const title=(row?.label||'첨부 자료')+' ('+window.attachmentFiles.label(row)+')',state=row?.stale?', 다시 첨부해 주세요':row?.status==='blocked'?', 차단':'';
       const show=button(title+state,()=>{dialog.showModal();const detail=document.getElementById('material-'+id);if(detail){detail.open=true;detail.scrollIntoView({block:'nearest'});}});
       show.className='attachment-title';chip.append(show,icon('close',title+' 첨부 제거',()=>{selected.delete(id);render();window.chatState.save();}));chips.append(chip);
     }
-    list.replaceChildren();for(const row of rows.filter(row=>selected.has(row.id))){
+    list.replaceChildren();for(const row of rows){
       const card=el('article',undefined,'message');
       const detail=reportCard(row),preview=el('pre');detail.id='material-'+row.id;
-      card.append(detail,icon('file','보관된 내용 보기',async()=>{const b=url(),g=generation;const result=await api(b+'/materials/'+row.id);if(g===generation)preview.textContent=result.content||'차단되어 전달할 내용이 없습니다.';}),preview);list.append(card);
+      card.append(detail,icon('file',row.mode==='original'?'원본 내려받기':'보관된 내용 보기',async()=>{const b=url(),g=generation;if(row.mode==='original')return window.attachmentFiles.download(b,row.id);const result=await api(b+'/materials/'+row.id);if(g===generation)preview.textContent=result.content||'차단되어 전달할 내용이 없습니다.';}),preview);
+      if(!selected.has(row.id)&&row.status==='ready'&&!row.stale)card.append(button('다시 첨부',()=>{if(selected.size>=10)throw Error('자료는 최대 10개 첨부할 수 있습니다.');selected.add(row.id);render();window.chatState.save();}));
+      card.append(icon('trash',row.label+' 보관 파일 삭제',async()=>{if(!window.confirm('보관 파일을 삭제하면 이전 대화와 워크플로에서도 다시 읽을 수 없습니다. 삭제할까요?'))return;const b=url(),owner=contextVersion;await api(b+'/materials/'+row.id,'DELETE');if(owner!==contextVersion)return;selected.delete(row.id);window.chatState.save();await refresh();}));list.append(card);
     }
   }
 
@@ -141,13 +153,14 @@
     if(files.length+selected.size>10)throw Error('자료는 최대 10개 첨부할 수 있습니다.');
     uploading=true;upload.disabled=true;error.textContent='';progress.hidden=false;let completed=0;
     try{
-      for(const [index,file] of files.entries()){
+      const choices=await window.attachmentFiles.choose(files);if(owner!==contextVersion)return;
+      for(const [index,{file,mode}] of choices.entries()){
         if(owner!==contextVersion)break;
         uploadController=new AbortController();const controller=uploadController;cancelUpload.disabled=false;
         progressText.textContent=(index+1)+' / '+files.length+' 파일 전달 및 검사 중…';
         try{
           if(file.size>8*1024*1024)throw Error('파일은 8 MiB 이하만 지원합니다.');
-          const prepared=await request(b+'/material-preparations?filename='+encodeURIComponent(file.name)+'&test_data='+test.checked,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file,signal:controller.signal});
+          const prepared=await request(b+'/material-preparations?filename='+encodeURIComponent(file.name)+'&test_data='+test.checked+'&mode='+mode,{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:file,signal:controller.signal});
           if(controller.signal.aborted||owner!==contextVersion){await api(b+'/material-preparations/'+prepared.token,'DELETE');break;}
           cancelUpload.disabled=true;progressText.textContent=(index+1)+' / '+files.length+' 검사 완료, 저장 중…';
           const result=await api(b+'/material-preparations/'+prepared.token+'/commit','POST');
@@ -172,8 +185,9 @@
   document.addEventListener('dragover',event=>{if(hasFiles(event))event.preventDefault();});
   document.addEventListener('drop',event=>{if(hasFiles(event))event.preventDefault();});
   window.materialGuard={historyAttachments(audit,b){const attachments=el('div',undefined,'attachment-chips sent-attachments');attachments.setAttribute('aria-label','이 메시지의 첨부');
-      for(const report of audit.materials||[]){const chip=el('div',undefined,'attachment-chip'),open=icon('file',report.label+' 내용 보기',()=>openHistory(report,audit,b));chip.append(open,button(report.label,()=>openHistory(report,audit,b),'attachment-title'));attachments.append(chip);}return attachments;},
-    consumed(ids){for(const id of ids)selected.delete(id);render();},selected:()=>Array.from(selected),isUploading:()=>uploading,restore(name,ids){uploadController?.abort();contextVersion++;dialog.close();historyDialog.close();historyTicket++;error.textContent='';saveStatus.textContent='';project=name;selected=new Set(ids);options=null;rows=[];render();if(name)void refresh();else generation++;},
-    auditCard(audit){const card=el('details');card.append(el('summary','첨부 파일 보호 내역'+((audit.materials||[]).some(r=>r.level==='allow')?', 비밀 키 원본 전송':'')+', '+(audit.state==='dispatch_attempted'?'전달 시도':'실행 준비')));for(const report of audit.materials||[])card.append(reportCard(report));return card;}};
+      for(const report of audit.materials||[]){const chip=el('div',undefined,'attachment-chip'),open=icon('file',report.label+' 내용 보기',()=>openHistory(report,audit,b));chip.append(open,button(report.label+' ('+window.attachmentFiles.label(report)+')',()=>openHistory(report,audit,b),'attachment-title'));attachments.append(chip);}return attachments;},
+    consumed(ids){for(const id of ids)selected.delete(id);render();},selected:()=>Array.from(selected),isUploading:()=>uploading,restore(name,ids){uploadController?.abort();window.attachmentFiles.cancelChoice();contextVersion++;dialog.close();historyDialog.close();historyTicket++;error.textContent='';saveStatus.textContent='';project=name;selected=new Set(ids);options=null;rows=[];render();if(name)void refresh();else generation++;},
+    isUnresolved:()=>Array.from(selected).some(id=>!rows.find(r=>r.id===id)),
+    auditCard(audit){const card=el('details');card.append(el('summary','첨부 파일 전송 내역'+((audit.materials||[]).some(r=>r.mode==='original'||r.level==='allow')?', 원본 정보 포함':'')+', '+(audit.state==='dispatch_attempted'?'전달 시도':'실행 준비')));for(const report of audit.materials||[])card.append(reportCard(report));return card;}};
   describe();
 })();

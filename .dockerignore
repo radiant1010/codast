@@ -16,6 +16,8 @@ exports
 .harness
 .codast-documents
 **/.codast-documents
+**/.codast-attachments
+.codast-attachments
 **/.env
 **/.env.*
 **/auth.json

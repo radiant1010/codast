@@ -1,7 +1,7 @@
 /* A: prepare the sequence, review each result, explicitly dispatch the next step. */
 (()=>{
   const roles=['요구사항','화면','테스트 케이스','기타 파일'];
-  let project='',binding=null,current=null,locked=false,timer=null,creationId=null;
+  let project='',binding=null,current=null,locked=false,timer=null,creationId=null,uploadController=null,uploadGeneration=0;
   const endpoint=()=>'/projects/'+encodeURIComponent(project)+'/workflows';
   const dialog=el('dialog',undefined,'session-drawer workflow-dialog');dialog.id='workflow-dialog';
   const head=el('header'),heading=el('h2','작업 순서 설정'),body=el('div'),status=el('p',undefined,'hint');status.setAttribute('role','status');
@@ -11,7 +11,8 @@
   function modeSelect(value){const n=select(['read-only','workspace-write'],value||'read-only');n.options[0].textContent='분석만 (읽기 전용)';n.options[1].textContent='구현, 테스트 (작업 폴더 수정 허용)';return n;}
   const resultDialog=el('dialog',undefined,'session-drawer workflow-dialog');resultDialog.id='workflow-result-dialog';const resultBody=el('div'),resultStatus=el('p',undefined,'hint');resultStatus.setAttribute('role','status');const resultHead=el('header');resultHead.append(el('h2','작업 결과 상세'),icon('close','결과 상세 닫기',()=>resultDialog.close()));resultDialog.append(resultHead,resultStatus,resultBody);document.body.append(resultDialog);
   const close=icon('close','워크플로 닫기',()=>dialog.close());head.append(heading,close);dialog.append(head,status,body);document.body.append(dialog);
-  dialog.addEventListener('close',()=>clearTimeout(timer));
+  dialog.addEventListener('close',()=>{clearTimeout(timer);uploadController?.abort();uploadGeneration++;window.attachmentFiles.cancelChoice();});
+  $('project').addEventListener('change',()=>{if(dialog.open)dialog.close();});
   async function safe(fn){if(locked)return;locked=true;const controls=[...body.querySelectorAll('button,input,select,textarea')].map(n=>[n,n.disabled]);controls.forEach(([n])=>n.disabled=true);try{status.textContent='처리 중…';await fn();status.textContent='';}catch(e){status.textContent=e.message;if(resultDialog.open)resultStatus.textContent=e.message;}finally{locked=false;controls.forEach(([n,d])=>{if(n.isConnected)n.disabled=d;});}}
   const launch=icon('route','워크플로 설정 및 진행',()=>safe(async()=>{
     if(!$('project').value)throw Error('먼저 프로젝트를 선택하세요.');
@@ -78,13 +79,27 @@
   async function setup(){
     creationId=crypto.randomUUID().replaceAll('-','');body.replaceChildren();
     const form=el('form',undefined,'modal-form'),title=el('input',undefined,'form-control'),materials=el('div'),steps=el('div');title.required=true;title.maxLength=120;title.id='wf-title';
-    form.append(field('작업 이름',title),el('h3','입력 자료'),el('p','문서에 포함된 텍스트를 보호 설정에 따라 자동 검사하고 첨부합니다. TXT, MD, CSV, XLSX, DOCX, PPTX, PDF를 지원합니다. 스캔 이미지의 OCR은 지원하지 않습니다.','hint'),materials,el('h3','작업 순서'));
+    form.append(field('작업 이름',title),el('h3','입력 자료'),el('p','파일마다 원본 또는 텍스트 변환을 선택합니다. '+window.attachmentFiles.notice+' TXT, MD, CSV, XLSX, DOCX, PPTX, PDF를 8 MiB까지 지원합니다. PPT 자동 렌더링은 제공하지 않습니다.','hint'),materials,el('h3','작업 순서'));
     const chosen=[];
     for(const role of roles){const row=el('div',undefined,'workflow-material-row'),files=el('div'),input=el('input',undefined,'form-control');input.type='file';input.multiple=true;input.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';input.hidden=true;input.setAttribute('aria-label',role+' 파일');
-      input.onchange=()=>safe(async()=>{for(const file of input.files){if(chosen.length>=10)throw Error('입력 자료는 총 10개까지 등록할 수 있습니다.');
-        const data=await request('/projects/'+encodeURIComponent(project)+'/materials?filename='+encodeURIComponent(file.name),{method:'POST',body:file});
+      input.onchange=()=>safe(async()=>{const owner=uploadGeneration,base='/projects/'+encodeURIComponent(project),filesToUpload=Array.from(input.files);input.value='';
+       if(chosen.length+filesToUpload.length>10)throw Error('입력 자료는 총 10개까지 등록할 수 있습니다.');
+       const choices=await window.attachmentFiles.choose(filesToUpload);
+       for(const {file,mode} of choices){if(owner!==uploadGeneration)return;
+        if(file.size>8*1024*1024)throw Error('파일은 8 MiB 이하만 지원합니다.');
+        const controller=new AbortController();uploadController=controller;
+        const cancel=button('첨부 처리 취소',()=>controller.abort());files.append(cancel);
+        let data,prepared;
+        try{
+          prepared=await request(base+'/material-preparations?filename='+encodeURIComponent(file.name)+'&mode='+mode,{method:'POST',body:file,signal:controller.signal});
+          if(controller.signal.aborted||owner!==uploadGeneration){await api(base+'/material-preparations/'+prepared.token,'DELETE');return;}
+          cancel.disabled=true;
+          data=await api(base+'/material-preparations/'+prepared.token+'/commit','POST');
+        }catch(e){if(prepared)await api(base+'/material-preparations/'+prepared.token,'DELETE');throw Error(controller.signal.aborted?'첨부 처리를 취소했습니다. 이미 완료한 파일은 보관됩니다.':e.message);}
+        finally{cancel.remove();uploadController=null;}
+        if(owner!==uploadGeneration)return;
         const entry={id:data.id,role};if(data.status!=='ready')throw Error('차단된 자료입니다. 파일 보호 설정과 내용을 확인하세요.');chosen.push(entry);
-        const item=el('div',undefined,'workflow-actions');item.append(el('span',data.label),icon('file','전달 내용 확인',()=>safe(async()=>{const preview=await api('/projects/'+encodeURIComponent(project)+'/materials/'+data.id);const pre=el('pre',preview.content,'console-output');item.append(pre);})),icon('close','워크플로 입력에서 제외',()=>{chosen.splice(chosen.indexOf(entry),1);item.remove();}));files.append(item);
+        const item=el('div',undefined,'workflow-actions');item.append(el('span',data.label+' ('+window.attachmentFiles.label(data)+')'),icon('file',data.mode==='original'?'원본 내려받기':'전달 내용 확인',()=>safe(async()=>{if(data.mode==='original')return window.attachmentFiles.download(base,data.id);const preview=await api(base+'/materials/'+data.id);const pre=el('pre',preview.content,'console-output');item.append(pre);})),icon('close','워크플로 입력에서 제외',()=>{chosen.splice(chosen.indexOf(entry),1);item.remove();}));files.append(item);
       }input.value='';});
       row.append(el('strong',role),files,icon('paperclip',role+' 업로드',()=>input.click()),input);materials.append(row);
     }
@@ -139,7 +154,8 @@
       const question=step.attempts.at(-1)?.metadata?.question;
       if(question){const choices=el('div',undefined,'workflow-actions');form.append(el('p',question.question));for(const choice of question.choices||[])choices.append(button(choice,()=>{comment.value=choice;parallelDrafts.set(draftKey,choice);comment.focus();}));form.append(choices,el('p','선택한 답변을 수정하거나 직접 입력한 뒤 작업을 다시 실행할 수 있습니다.','hint'));}
     }
-    const preview=el('details'),pre=el('pre');preview.append(el('summary','다음 실행에 포함할 자료'),pre);pre.textContent=s.materials.map(m=>m.role+': '+m.id).concat(s.steps.slice(0,s.current).map(p=>p.title+' ,  승인 v'+p.approved)).join('\n')||'작업 지시만 전달합니다.';form.append(preview);
+    const preview=el('details'),pre=el('pre');preview.append(el('summary','다음 실행에 포함할 자료'),pre);pre.textContent=s.materials.map(m=>m.role+': '+(m.label||m.id)+' ('+window.attachmentFiles.label(m)+')').concat(s.steps.slice(0,s.current).map(p=>p.title+' ,  승인 v'+p.approved)).join('\n')||'작업 지시만 전달합니다.';form.append(preview);
+    if(s.materials.some(m=>m.mode==='original'))form.append(el('p',window.attachmentFiles.notice,'hint'));
     const actions=el('div',undefined,'workflow-actions'),send=icon('send',s.status==='ready'?'현재 단계 실행':'의견을 반영해 다시 실행',()=>form.requestSubmit());send.disabled=step.attempts.at(-1)?.storage_status==='failed';actions.append(send);
     if(s.status==='review'&&step.attempts.at(-1)?.storage_status!=='failed')actions.append(icon('check','현재 결과 승인',()=>safe(async()=>{current=await api(endpoint()+'/'+s.id,'POST',{connection_id:binding.connection_id,expected_revision:s.revision,action:'approve',comment:comment.value});render();})));
     form.append(actions);body.append(form);

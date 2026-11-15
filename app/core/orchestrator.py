@@ -152,6 +152,10 @@ class Orchestrator:
                 self.storage.update_run_metadata(run_id, metadata)
 
         try:
+            # Recheck persisted originals after preparation; never recreate deleted files.
+            original_paths = self.materials.original_paths(name, command.material_ids)
+            if command.client != 'mock':
+                adapter.original_paths = original_paths
             audit = scope.get('guard')
             if audit:
                 audit['state'] = 'dispatch_attempted'
