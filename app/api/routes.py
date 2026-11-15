@@ -5,6 +5,7 @@ import asyncio
 import json
 from app.core.commands import parse_command
 from app.core.plan_view import build_plan
+from app.core.storage import now
 from app.models.schemas import WorkspaceRegister, RulebookSettings
 from app.models.schemas import ChatRequest, ChatCreate, Command, TaskUpdate, ClientConfig, RouteRequest
 from app.llm.cli import probe, executable
@@ -312,7 +313,14 @@ async def run_events(name: str, run_id: str, request: Request, after: int = Quer
         nonlocal cursor
         while not await request.is_disconnected():
             # Read terminal status before events so completion cannot race the final drain.
-            status = s.storage.run(name, run_id)['status']
+            record = s.storage.run(name, run_id)
+            status = record['status']
+            runtime = {'run_id': run_id, 'status': status, 'started_at': record['started_at'],
+                       'finished_at': record['finished_at'], 'server_time': now(),
+                       'timeout_seconds': record['metadata'].get('timeout_seconds', 600),
+                       'last_progress_at': record['metadata'].get('last_progress_at'),
+                       'termination_reason': record['metadata'].get('termination_reason')}
+            yield f"event: runtime\ndata: {json.dumps(runtime)}\n\n"
             rows = s.storage.events(name, run_id, cursor)
             for row in rows:
                 cursor = row['seq']

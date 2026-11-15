@@ -3,13 +3,14 @@ import asyncio
 import json
 import hashlib
 import time
+import threading
 from pathlib import Path
 from app.models.schemas import ContextPart, ProjectSettings, RulebookSettings
 from app.llm.base import AgentAdapter
 from app.core.context_builder import ContextBuilder
 from app.core.rule_loader import RuleLoader
 from app.core.routing import TaskRouter
-from app.core.storage import ExistingRun
+from app.core.storage import ExistingRun, now
 from app.llm.cli import CliAdapter, CliExecutionError, executable
 
 
@@ -87,8 +88,10 @@ class Orchestrator:
                                                   query='' if workflow_id else command.text,
                                                   budget=self.context.max_chars - len(base.model_dump_json()))
         selected.extend(materials)
+        timeout_seconds = self.settings(name).timeout_seconds
         adapter = self.agent if command.client == 'mock' else CliAdapter(command.client, executable(command.client, self.storage.client_path(command.client)))
         if command.client != 'mock':
+            adapter.timeout_seconds = timeout_seconds
             adapter.model = command.model
             adapter.reasoning_effort = command.reasoning_effort
             adapter.ultracode = command.ultracode
@@ -108,7 +111,9 @@ class Orchestrator:
         context.history = list(reversed(history))
         while context.history and len(context.model_dump_json()) > self.context.max_chars:
             context.history.pop(0)
-        initial = {'guard': audit} if audit else {}
+        initial = {'timeout_seconds': timeout_seconds, 'last_progress_at': None}
+        if audit:
+            initial['guard'] = audit
         if workflow_id:
             initial['workflow_id'] = workflow_id
         if parallel_scope:
@@ -130,13 +135,21 @@ class Orchestrator:
                     'rules': [{'path': rule.path, 'sha256': hashlib.sha256(rule.content.encode('utf-8')).hexdigest()}
                               for rule in context.rules]}
         scope = self.storage.run(name, run_id)['metadata']
-        metadata.update({k: scope[k] for k in ('parallel_group', 'parallel_role', 'workflow_id') if k in scope})
+        metadata.update({k: scope[k] for k in ('parallel_group', 'parallel_role', 'workflow_id',
+                                             'timeout_seconds', 'last_progress_at') if k in scope})
         if session:
             metadata['session_id'] = session
+        metadata_lock = threading.Lock()
 
         def record_metrics(metrics):
-            metadata.update(metrics)
-            self.storage.update_run_metadata(run_id, metadata)
+            with metadata_lock:
+                metadata.update(metrics)
+                self.storage.update_run_metadata(run_id, metadata)
+
+        def record_progress():
+            with metadata_lock:
+                metadata['last_progress_at'] = now()
+                self.storage.update_run_metadata(run_id, metadata)
 
         try:
             audit = scope.get('guard')
@@ -149,6 +162,7 @@ class Orchestrator:
             else:
                 adapter.on_event = lambda kind, text: self.storage.append_event(run_id, kind, text)
                 adapter.on_metrics = record_metrics
+                adapter.on_progress = record_progress
                 result = await adapter.execute(context.model_dump_json(), str(cwd), command.mode, session)
         except asyncio.CancelledError:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
@@ -159,6 +173,8 @@ class Orchestrator:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
             if isinstance(exc, CliExecutionError):
                 metadata['error_detail'] = exc.detail
+            if isinstance(exc, TimeoutError):
+                metadata['termination_reason'] = 'timeout'
             self.storage.finish_run(run_id, "failed", error=str(exc), metadata=metadata)
             raise
         native_session = result.session_id or session
