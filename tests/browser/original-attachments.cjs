@@ -1,11 +1,13 @@
 // Real Edge UI with synthetic API fixtures. No live model/account or private document.
 const fs=require('node:fs'),http=require('node:http'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
-let materials=[],uploads=[],tokens=new Map(),hold=false,held=null,serial=0;
+let materials=[],uploads=[],tokens=new Map(),hold=false,held=null,serial=0,submissions=0;
+const chat='b'.repeat(32);
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,'http://fixture'),path=url.pathname;
   const json=(value,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(value));};
+  if(path.endsWith('/chat')&&req.method==='POST'){submissions++;return json({detail:'unexpected dispatch'},409);}
   if(path==='/'){res.setHeader('content-type','text/html');return res.end(fs.readFileSync('app/web/templates/index.html'));}
   if(path.startsWith('/static/')){const file='app/web'+path;if(!fs.existsSync(file)){res.writeHead(404);return res.end();}res.setHeader('content-type',path.endsWith('.css')?'text/css':path.endsWith('.svg')?'image/svg+xml':path.endsWith('.woff2')?'font/woff2':'application/javascript');return res.end(fs.readFileSync(file));}
   if(path.endsWith('/material-preparations')&&req.method==='POST'){
@@ -24,7 +26,7 @@ const server=http.createServer(async(req,res)=>{
    '/api/clients/codex/status':{state:'available',models:[],limits:[]},'/api/notifications':{events:[],cursor:0,has_more:false},
    '/api/session-overview':{sessions:[],running:[],usage:[]},'/api/projects/sample/workspace':{path:'C:/fixture/sample'},
    '/api/projects/sample/settings':{client:'codex',mode:'read-only',cwd:'.',context_paths:[],timeout_seconds:600},
-   '/api/projects/sample/tasks':{tasks:[]},'/api/projects/sample/runs':{runs:[]},'/api/projects/sample/questions':{messages:[]},
+   '/api/projects/sample/tasks':{tasks:[{id:chat,task:'첨부 테스트',status:'active',count:0}]},'/api/projects/sample/runs':{runs:[]},'/api/projects/sample/questions':{messages:[]},
    '/api/projects/sample/messages':{messages:[]},'/api/projects/sample/rules':{rules:[]},
    '/api/projects/sample/guard':{level:'strong',privacy_mode:'replace',fields:[]},'/api/projects/sample/work-items':{items:[]},
    '/api/projects/sample/plan':{items:[]},'/api/projects/sample/environment':{git:{state:'available',branch:'main'},ports:{values:[]},docker:{state:'available',containers:[]}},
@@ -38,7 +40,7 @@ async function main(){
  const browser=await chromium.launch({channel:'msedge',headless:true});
  try{
   const page=await browser.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.goto('http://127.0.0.1:'+server.address().port);
+  await page.goto('http://127.0.0.1:'+server.address().port+'/#chat/'+chat);
   await page.locator('#startup-loading').waitFor({state:'hidden'});
   const picker=page.locator('#attachment-picker'),modes=page.locator('#attachment-mode-dialog select');
   const file=name=>({name,mimeType:'text/plain',buffer:Buffer.from('synthetic original')});
@@ -55,6 +57,16 @@ async function main(){
   await picker.setInputFiles(file('cancel-choice.txt'));await page.locator('#attachment-mode-dialog[open]').waitFor();
   await page.locator('#attachment-mode-dialog').getByRole('button',{name:'취소',exact:true}).click();
   await page.waitForFunction(()=>!window.materialGuard.isUploading());assert.equal(uploads.length,2);
+  await page.route('**/api/projects/sample/materials',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'fixture unavailable'})}));
+  await page.evaluate(id=>window.materialGuard.restore('sample',[id]),materials[0].id);
+  await page.waitForFunction(()=>document.querySelector('#attachment-chips')?.textContent.includes('확인 중'));
+  assert.doesNotMatch(await page.locator('#attachment-chips').innerText(),/텍스트 변환/);
+  await page.locator('#text').fill('Read my attachment');await page.locator('#send').click();
+  await page.waitForFunction(()=>document.querySelector('#status-toast')?.textContent.includes('첨부 방식을 확인하지 못했습니다'));
+  assert.equal(submissions,0);await page.unroute('**/api/projects/sample/materials');
+  await page.getByRole('button',{name:'보관된 첨부 관리',exact:true}).click();
+  await page.waitForFunction(()=>!window.materialGuard.isUnresolved());
+  await page.getByRole('button',{name:'첨부 자료 닫기',exact:true}).click();
   await page.locator('#attachment-chips .attachment-chip').first().getByRole('button',{name:/첨부 제거/}).click();
   assert.equal(materials.length,2);
   await page.getByRole('button',{name:'보관된 첨부 관리',exact:true}).click();

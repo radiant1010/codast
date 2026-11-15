@@ -150,18 +150,64 @@ def test_office_extension_and_xml_names_do_not_make_a_document(store):
         original(store, stream.getvalue(), filename='fake.docx')
 
 
-def test_original_pdf_validation_and_decompression_limit(store):
+@pytest.mark.parametrize('oversize_predictor', [False, True])
+def test_original_pdf_validation_and_decompression_limit(store, oversize_predictor):
     import zlib
     from tests.test_pdf_materials import pdf_bytes, TABLE
     from app.core.material_originals import PDF_STRUCTURE_BYTES
     content = pdf_bytes([TABLE])
     report = original(store, content, filename='sample.pdf')
     assert store.original('one', report['id'])[1] == content
-    data = zlib.compress(b'\x00' * (PDF_STRUCTURE_BYTES + 1))
-    payload = b'%PDF-1.5\n1 0 obj\n<< /Type /XRef /Size 1 /W [1 1 1] /Length '+str(len(data)).encode()+b' /Filter /FlateDecode >>\nstream\n'+data+b'\nendstream\nendobj\nstartxref\n9\n%%EOF'
+    payload = b'%PDF-1.5\n'
+    offsets = [0]
+    for body in [b'1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+                 b'2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n']:
+        offsets.append(len(payload)); payload += body
+    offsets.append(len(payload))
+    def entry(tag, offset, generation):
+        return bytes([tag]) + offset.to_bytes(4,'big') + generation.to_bytes(2,'big')
+    xref = entry(0,0,65535) + b''.join(entry(1,offset,0) for offset in offsets[1:])
+    data = zlib.compress(b'\x00'+xref if oversize_predictor else xref + b'\x00' * (PDF_STRUCTURE_BYTES + 1))
+    params = b' /DecodeParms << /Predictor 12 /Columns 1000000000 >>' if oversize_predictor else b''
+    payload += (b'3 0 obj\n<< /Type /XRef /Size 4 /Root 1 0 R /W [1 4 2] /Length '
+                + str(len(data)).encode() + b' /Filter /FlateDecode' + params + b' >>\nstream\n' + data
+                + b'\nendstream\nendobj\nstartxref\n' + str(offsets[3]).encode() + b'\n%%EOF\n')
     with pytest.raises(ValueError):
         original(store, payload, filename='compressed.pdf')
     assert len(store.list('one')) == 1
+
+
+@pytest.mark.parametrize('stage', ['pipe','process','start'])
+def test_pdf_worker_setup_failure_releases_shared_slot(monkeypatch, stage):
+    from app.core import material_originals, material_pdf
+    from threading import BoundedSemaphore
+    slots = BoundedSemaphore(1)
+    monkeypatch.setattr(material_pdf,'PDF_SLOTS',slots)
+    handles = []
+    class Handle:
+        def __init__(self):
+            self.closed = False; handles.append(self)
+        def close(self):
+            self.closed = True
+    class Worker:
+        pid = None
+        def start(self):
+            raise OSError('start failed')
+    class Context:
+        def Pipe(self, **kwargs):
+            if stage == 'pipe':
+                raise OSError('pipe failed')
+            return Handle(), Handle()
+        def Process(self, **kwargs):
+            if stage == 'process':
+                raise OSError('process failed')
+            return Worker()
+    monkeypatch.setattr(material_originals.multiprocessing,'get_context',lambda _:Context())
+    with pytest.raises(OSError):
+        material_originals.validate_pdf(b'fixture',lambda:None)
+    assert slots.acquire(blocking=False)
+    slots.release()
+    assert all(h.closed for h in handles)
 
 
 def test_original_cancellation_leaves_no_pending_or_files(store):

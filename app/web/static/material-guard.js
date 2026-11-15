@@ -58,7 +58,7 @@
   page.append(intro,form);
   const dialog=el('dialog',undefined,'session-drawer'),header=el('div',undefined,'account-dialog-header');dialog.id='attachment-dialog';dialog.setAttribute('aria-label','첨부 자료');
   header.append(el('h2','첨부 자료'),icon('close','첨부 자료 닫기',()=>dialog.close()));
-  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF를 파일당 최대 8 MiB까지 첨부할 수 있습니다. 긴 자료에 대한 구체적인 질문에는 관련 부분과 주변 내용을 발췌하고, 전체 요약, 분석, 구현 요청에는 전체 내용을 전달합니다. 변경된 보호 설정을 적용하려면 파일을 다시 첨부해야 합니다.','hint'),list);document.body.append(dialog);
+  dialog.append(header,el('p','텍스트, Markdown, CSV, 엑셀, 워드, PowerPoint, PDF를 파일당 최대 8 MiB까지 첨부할 수 있습니다. 원본은 경로를 전달하며 보호 설정을 적용하지 않습니다. 텍스트 변환은 질문에 따라 전체 또는 관련 부분을 전달합니다. 변경된 보호 설정을 텍스트 자료에 적용하려면 다시 첨부하세요.','hint'),list);document.body.append(dialog);
   toolbar.append(icon('file','보관된 첨부 관리',async()=>{await refresh();dialog.showModal();}));
   const historyDialog=el('dialog',undefined,'session-drawer'),historyHeader=el('div',undefined,'account-dialog-header'),historyTitle=el('h2'),historyInfo=el('p',undefined,'hint'),historyReport=el('div'),historyContent=el('pre');
   historyDialog.id='sent-attachment-dialog';historyDialog.setAttribute('aria-label','보낸 첨부 내용');let historyTicket=0;

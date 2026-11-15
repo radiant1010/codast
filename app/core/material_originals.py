@@ -42,8 +42,19 @@ def _validate_pdf_worker(content, sender):
         decode = pdftypes.PDFStream.decode
         def bounded_decode(stream):
             # Catalog/xref object streams use Flate or no filter. Do not run image codecs or LZW here.
-            if any(name not in pdftypes.LITERALS_FLATE_DECODE for name, _ in stream.get_filters()):
-                raise ValueError('Unsupported PDF structure filter')
+            for name, params in stream.get_filters():
+                if name not in pdftypes.LITERALS_FLATE_DECODE:
+                    raise ValueError('Unsupported PDF structure filter')
+                params = pdftypes.resolve1(params)
+                if params:
+                    values = [pdftypes.resolve1(params.get(key, default)) for key, default in
+                              [('Predictor',1),('Columns',1),('Colors',1),('BitsPerComponent',8)]]
+                    predictor, columns, colors, bits = values
+                    if (any(type(value) is not int for value in values)
+                            or predictor not in (1,2,10,11,12,13,14,15)
+                            or not 1 <= columns <= 65536 or not 1 <= colors <= 4
+                            or bits not in (1,2,4,8,16) or columns * colors * bits > 65536 * 8):
+                        raise ValueError('PDF predictor limit')
             if len(stream.rawdata or b'') > PDF_STRUCTURE_BYTES:
                 raise ValueError('PDF structure limit')
             decode(stream)
@@ -63,10 +74,11 @@ def validate_pdf(content, checkpoint):
         checkpoint()
         if monotonic() - started > PDF_TIMEOUT:
             raise ValueError('PDF 형식 확인 대기 시간이 초과되었습니다.')
-    context = multiprocessing.get_context('spawn')
-    receiver, sender = context.Pipe(duplex=False)
-    worker = context.Process(target=_validate_pdf_worker, args=(content, sender), daemon=True)
+    receiver = sender = worker = None
     try:
+        context = multiprocessing.get_context('spawn')
+        receiver, sender = context.Pipe(duplex=False)
+        worker = context.Process(target=_validate_pdf_worker, args=(content, sender), daemon=True)
         checkpoint()
         worker.start(); sender.close()
         while True:
@@ -81,11 +93,15 @@ def validate_pdf(content, checkpoint):
             if not worker.is_alive():
                 raise ValueError('PDF 형식을 확인하지 못했습니다.')
     finally:
-        if worker.pid is not None:
+        if worker is not None and worker.pid is not None:
             if worker.is_alive():
                 worker.terminate()
             worker.join()
-        receiver.close(); sender.close(); PDF_SLOTS.release()
+        if receiver is not None:
+            receiver.close()
+        if sender is not None:
+            sender.close()
+        PDF_SLOTS.release()
 
 
 def validate_original(filename, content, checkpoint):

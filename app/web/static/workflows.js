@@ -135,7 +135,7 @@
       const inputs=el('details');inputs.append(el('summary','이 실행에 전달한 이전 결과'),el('pre',JSON.stringify(attempt.inputs,null,2)));card.append(inputs);body.append(card);
     }
     if(s.status==='done'){
-      body.append(el('p','모든 결과를 승인했습니다. 승인된 단계별 문서와 버전 목록, 수정, 승인 이력을 ZIP으로 내려받을 수 있습니다. 이력에는 전달한 자료의 가공본도 포함됩니다.','hint'),icon('save','승인 산출물과 이력 내려받기',()=>safe(async()=>{
+      body.append(el('p','모든 결과를 승인했습니다. 승인된 단계별 문서와 버전 목록, 수정, 승인 이력을 ZIP으로 내려받을 수 있습니다. 이력에는 텍스트 첨부의 가공본과 원본 첨부의 경로, 해시가 포함되며 원본 파일 자체는 포함되지 않습니다.','hint'),icon('save','승인 산출물과 이력 내려받기',()=>safe(async()=>{
         const blob=await request(endpoint()+'/'+s.id+'/export?connection_id='+binding.connection_id,{},'blob');
         const url=URL.createObjectURL(blob),link=el('a');link.href=url;link.download=s.id+'.zip';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
       })));
