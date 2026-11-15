@@ -35,7 +35,7 @@ def test_preparation_cancel_commit_scope_and_policy(tmp_path):
         assert len(c.get(base+'/materials').json()['materials'])==1
 
 
-@pytest.mark.parametrize('stage',['extract','guard'])
+@pytest.mark.parametrize('stage',['extract','guard','validate_original'])
 def test_disconnect_stops_preparation_without_persistence(tmp_path,monkeypatch,stage):
     app=create_app(tmp_path/'ws');s=app.state.harness;s.projects.create('one')
     from app.core import materials
@@ -51,7 +51,7 @@ def test_disconnect_stops_preparation_without_persistence(tmp_path,monkeypatch,s
         def __init__(self):self.app=app
         async def stream(self):yield b'password=dummy'
         async def receive(self):return {'type':'http.disconnect'}
-    with pytest.raises(ValueError):asyncio.run(prepare('one',Request(),'test.txt'))
+    with pytest.raises(ValueError):asyncio.run(prepare('one',Request(),'test.txt',mode='original' if stage=='validate_original' else 'text'))
     assert s.materials.list('one')==[]
     assert not s.materials.pending
 

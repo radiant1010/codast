@@ -41,6 +41,7 @@ htmlcov/
 /.claude/
 /.harness/
 .codast-documents/
+.codast-attachments/
 auth.json
 credentials.json
 secrets.json

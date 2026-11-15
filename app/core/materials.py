@@ -1,6 +1,7 @@
-"""Attachment repository and local import boundary. No raw source files are retained."""
+"""Project-scoped original and protected text attachments."""
 import hashlib
 import json
+from contextlib import contextmanager
 from threading import Lock
 from time import monotonic
 from pathlib import Path
@@ -10,6 +11,7 @@ from app.core.material_extract import extract
 from app.core.material_markdown import to_markdown
 from app.core.material_context import index_material, retrieve, search_terms
 from app.core.storage import now
+from app.core.material_originals import OriginalFiles, ORIGINAL_POLICY, ORIGINAL_NOTICE, validate_original, manifest
 from app.models.schemas import ContextPart
 
 
@@ -25,6 +27,7 @@ def fingerprint(options):
 class Materials:
     def __init__(self, storage):
         self.storage = storage
+        self.originals = OriginalFiles(storage.path)
         self.pending = {}
         self.pending_lock = Lock()
 
@@ -39,11 +42,20 @@ class Materials:
                        (project,options.model_dump_json()))
         return options
 
-    def import_file(self, project, filename, content, test_data=False):
-        return self.persist(project, self.prepare(project, filename, content, test_data))
+    def import_file(self, project, filename, content, test_data=False, mode='text'):
+        return self.persist(project, self.prepare(project, filename, content, test_data, mode=mode))
 
-    def prepare(self, project, filename, content, test_data=False, checkpoint=lambda: None):
+    def prepare(self, project, filename, content, test_data=False, checkpoint=lambda: None, mode='text'):
         checkpoint()
+        if mode == 'original':
+            suffix = validate_original(filename, content, checkpoint)
+            identity = uuid4().hex
+            report = dict(id=identity, label='자료 '+identity[:8]+suffix, created_at=now(), test_data=test_data,
+                          mode='original', status='ready', bytes=len(content), sha256=hashlib.sha256(content).hexdigest(),
+                          findings=[], omissions=[], notice=ORIGINAL_NOTICE)
+            return ORIGINAL_POLICY, report, content
+        if mode != 'text':
+            raise ValueError('첨부 방식은 original 또는 text여야 합니다.')
         options = self.options(project)
         parts, omissions = extract(filename, content, options, checkpoint)
         checkpoint()
@@ -60,7 +72,7 @@ class Materials:
         identity = uuid4().hex
         # Filenames may contain personal data; retain only format + generated ID.
         report.update(id=identity, label='자료 '+identity[:8]+Path(filename).suffix.lower(),
-                      created_at=now(), test_data=test_data, omissions=omissions)
+                      created_at=now(), test_data=test_data, omissions=omissions, mode='text')
         if Path(filename).suffix.lower() in {'.pdf', '.pptx'}:
             report['context_structure'] = 'native-pages-v1'
         checkpoint()
@@ -68,14 +80,24 @@ class Materials:
 
     def persist(self, project, prepared):
         policy, report, text = prepared
-        with self.storage.connect() as db:
-            db.execute('BEGIN IMMEDIATE')
-            if db.execute('SELECT COUNT(*) FROM materials WHERE project=?',(project,)).fetchone()[0]>=100:
-                raise ValueError('자료는 프로젝트별 100개까지 보관합니다. 불필요한 자료를 삭제하세요.')
-            db.execute('INSERT INTO materials VALUES (?,?,?,?,?)',
-                       (report['id'],project,policy,json.dumps(report,ensure_ascii=False),text))
-            if text:
-                index_material(db, report['id'], text)
+        created = False
+        try:
+            with self.storage.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                if db.execute('SELECT COUNT(*) FROM materials WHERE project=?',(project,)).fetchone()[0]>=100:
+                    raise ValueError('자료는 프로젝트별 100개까지 보관합니다. 불필요한 자료를 삭제하세요.')
+                if policy == ORIGINAL_POLICY:
+                    self.originals.write(project, report, text)
+                    created = True
+                    text = ''
+                db.execute('INSERT INTO materials VALUES (?,?,?,?,?)',
+                           (report['id'],project,policy,json.dumps(report,ensure_ascii=False),text))
+                if text:
+                    index_material(db, report['id'], text)
+        except BaseException:
+            if created:
+                self.originals.delete(project, report)
+            raise
         return report
 
     def stage(self, project, prepared):
@@ -96,7 +118,7 @@ class Materials:
             item = self.pending.pop((project, token), None)
         if not item or item[0]<=monotonic():
             raise FileNotFoundError('검사 결과가 만료되었거나 취소됐습니다. 다시 첨부하세요.')
-        if item[1][0]!=fingerprint(self.options(project)):
+        if item[1][0] not in (ORIGINAL_POLICY, fingerprint(self.options(project))):
             raise ValueError('보호 설정이 바뀌었습니다. 다시 첨부하세요.')
         return self.persist(project, item[1])
 
@@ -104,7 +126,7 @@ class Materials:
         current = fingerprint(self.options(project))
         with self.storage.connect() as db:
             rows = db.execute('SELECT report,fingerprint FROM materials WHERE project=? ORDER BY rowid DESC',(project,)).fetchall()
-        return [dict(json.loads(row['report']), stale=row['fingerprint']!=current) for row in rows]
+        return [dict(json.loads(row['report']), stale=row['fingerprint'] not in (ORIGINAL_POLICY, current)) for row in rows]
 
     def read(self, project, identity):
         with self.storage.connect() as db:
@@ -114,8 +136,85 @@ class Materials:
 
     def delete(self, project, identity):
         with self.storage.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT report FROM materials WHERE project=? AND id=?', (project, identity)).fetchone()
+            if not row:
+                return  # Preserve idempotent deletion; never touch another project's files.
+            report = json.loads(row['report'])
+            if report.get('mode') == 'original':
+                self.originals.delete(project, report)
             db.execute('DELETE FROM material_chunks WHERE material IN (SELECT id FROM materials WHERE project=? AND id=?)', (project,identity))
             db.execute('DELETE FROM materials WHERE project=? AND id=?',(project,identity))
+
+    def original(self, project, identity):
+        report = json.loads(self.read(project, identity)['report'])
+        if report.get('mode') != 'original':
+            raise ValueError('이 자료에는 원본이 보관되어 있지 않습니다. 원본 방식으로 다시 첨부하세요.')
+        return self.originals.read(project, report)
+
+    def original_paths(self, project, identities):
+        paths = []
+        for identity in dict.fromkeys(identities):
+            report = json.loads(self.read(project, identity)['report'])
+            if report.get('mode') == 'original':
+                paths.append(str(self.original(project, identity)[0]))
+        return paths
+
+    @contextmanager
+    def original_delivery(self, project, identities, context, cwd):
+        """Give a native sandbox selected files inside its cwd, then remove the copies."""
+        # shortcut: forced host termination can leave excluded copies; add startup recovery if needed.
+        copies, replacements, selected = [], {}, []
+        directory = None
+        try:
+            for identity in dict.fromkeys(identities):
+                report = json.loads(self.read(project, identity)['report'])
+                if report.get('mode') != 'original':
+                    continue
+                original_path, data = self.original(project, identity)
+                if directory is None:
+                    root = self.originals.check_path(Path(cwd) / '.codast-attachments')
+                    root.mkdir(exist_ok=True)
+                    self.originals.check_path(root)
+                    # Ignore transient bytes even when the selected project has no ignore rules.
+                    with self.originals.lock:
+                        for name, content in (('.gitignore', '*\n'), ('.gitattributes', '* export-ignore\n')):
+                            marker = self.originals.check_path(root / name)
+                            try:
+                                with marker.open('x', encoding='utf-8') as stream:
+                                    stream.write(content)
+                            except FileExistsError:
+                                if self.originals.check_path(marker).read_text(encoding='utf-8') != content:
+                                    raise ValueError('첨부 임시 폴더의 제외 설정이 변경되었습니다.')
+                    candidate = root / uuid4().hex
+                    # Inherit the workspace ACL, unlike tempfile's owner-only Windows directory.
+                    candidate.mkdir()
+                    directory = candidate
+                path = self.originals.check_path(directory / (identity + Path(report['label']).suffix))
+                with path.open('xb') as stream:
+                    copies.append(path)
+                    stream.write(data)
+                replacements[(report['label'], str(original_path))] = json.dumps(manifest(path, report), ensure_ascii=False)
+                selected.append(identity)
+            # A delete racing preparation must fail before dispatch and leave no copy.
+            for identity in selected:
+                self.original(project, identity)
+            sent = context.model_copy(deep=True)
+            for part in sent.files:
+                try:
+                    info = json.loads(part.content)
+                except ValueError:
+                    continue
+                if isinstance(info, dict) and info.get('mode') == 'original' and isinstance(info.get('path'), str):
+                    replacement = replacements.get((part.path, info.get('path')))
+                    if replacement is not None:
+                        part.content = replacement
+            yield sent
+        finally:
+            for path in copies:
+                self.originals.check_path(path).unlink(missing_ok=True)
+            if directory is not None:
+                self.originals.check_path(directory).rmdir()
 
     def selected(self, project, identities, query='', budget=24000):
         current = fingerprint(self.options(project))
@@ -124,7 +223,10 @@ class Materials:
             row = self.read(project, identity)
             report = json.loads(row['report'])
             if report['status']!='ready': raise ValueError('차단된 자료는 전달할 수 없습니다.')
-            if row['fingerprint']!=current: raise ValueError('가드 설정이 변경되었습니다. 선택 자료를 다시 업로드하세요.')
+            if row['fingerprint'] not in (ORIGINAL_POLICY, current): raise ValueError('가드 설정이 변경되었습니다. 선택 자료를 다시 업로드하세요.')
+            if report.get('mode') == 'original':
+                path, _ = self.original(project, identity)
+                row['content'] = json.dumps(manifest(path, report), ensure_ascii=False)
             reports.append(report)
             rows.append(row)
         terms = search_terms(query)
@@ -134,6 +236,10 @@ class Materials:
         share = min(6000, (budget - reserved) // max(1, large) - 128)
         with self.storage.connect() as db:
             for row, report in zip(rows, reports):
+                if report.get('mode') == 'original':
+                    selected.append(ContextPart(path=report['label'], content=row['content']))
+                    report['delivery'] = {'mode': 'original', 'bytes': report['bytes'], 'sha256': report['sha256']}
+                    continue
                 native = Path(report['label']).suffix.lower() in {'.pdf', '.pptx'}
                 structured = native and report.get('context_structure') == 'native-pages-v1'
                 # Older native uploads have no reliable page boundaries in their saved copy.

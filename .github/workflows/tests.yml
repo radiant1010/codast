@@ -48,4 +48,7 @@ jobs:
       - name: Existing streaming plan panel
         if: ${{ !cancelled() }}
         run: node tests/browser/plan-panel.cjs
+      - name: Original and text attachment flows
+        if: ${{ !cancelled() }}
+        run: node tests/browser/original-attachments.cjs
 

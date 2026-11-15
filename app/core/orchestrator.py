@@ -152,6 +152,10 @@ class Orchestrator:
                 self.storage.update_run_metadata(run_id, metadata)
 
         try:
+            # Recheck persisted originals after preparation; never recreate deleted files.
+            original_paths = self.materials.original_paths(name, command.material_ids)
+            if command.client != 'mock':
+                adapter.original_paths = original_paths
             audit = scope.get('guard')
             if audit:
                 audit['state'] = 'dispatch_attempted'
@@ -163,7 +167,11 @@ class Orchestrator:
                 adapter.on_event = lambda kind, text: self.storage.append_event(run_id, kind, text)
                 adapter.on_metrics = record_metrics
                 adapter.on_progress = record_progress
-                result = await adapter.execute(context.model_dump_json(), str(cwd), command.mode, session)
+                if command.client == 'codex':
+                    with self.materials.original_delivery(name, command.material_ids, context, cwd) as delivered:
+                        result = await adapter.execute(delivered.model_dump_json(), str(cwd), command.mode, session)
+                else:
+                    result = await adapter.execute(context.model_dump_json(), str(cwd), command.mode, session)
         except asyncio.CancelledError:
             self.storage.forget_session(name, command.task, command.client, str(cwd), command.mode, chat_id=command.chat_id)
             self.storage.finish_run(run_id, "interrupted", error="실행이 취소되었습니다.", metadata=metadata)

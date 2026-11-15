@@ -1,7 +1,10 @@
 """Browser uploads use a bounded raw body, avoiding disk-backed multipart spooling."""
 import asyncio
+import json
 from threading import Event
+from typing import Literal
 from fastapi import APIRouter, Request, Query
+from fastapi.responses import Response
 from app.core.data_guard import GuardOptions
 from app.core.material_extract import MAX_BYTES
 
@@ -30,18 +33,28 @@ def materials(name: str, request: Request):
 
 
 @router.post('/materials', status_code=201)
-async def upload(name: str, request: Request, filename: str = Query(max_length=255), test_data: bool = False):
+async def upload(name: str, request: Request, filename: str = Query(max_length=255), test_data: bool = False, mode: Literal['text', 'original'] = 'text'):
     store = service(request,name)
     content = bytearray()
     async for chunk in request.stream():
         if len(content)+len(chunk)>MAX_BYTES: raise ValueError('파일은 8 MiB 이하만 지원합니다.')
         content.extend(chunk)
-    return await asyncio.to_thread(store.import_file,name,filename,bytes(content),test_data)
+    return await asyncio.to_thread(store.import_file,name,filename,bytes(content),test_data,mode)
 
 
 @router.get('/materials/{identity}')
 def preview(name: str, identity: str, request: Request):
-    return {'content':service(request,name).read(name,identity)['content']}
+    row = service(request,name).read(name,identity)
+    report = json.loads(row['report'])
+    return {'content': row['content'], 'mode': report.get('mode', 'text')}
+
+
+@router.get('/materials/{identity}/original')
+def original(name: str, identity: str, request: Request):
+    path, content = service(request, name).original(name, identity)
+    return Response(content, media_type='application/octet-stream', headers={
+        'Content-Disposition': f'attachment; filename="{path.name}"',
+        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
 
 
 @router.delete('/materials/{identity}')
@@ -51,7 +64,7 @@ def delete(name: str, identity: str, request: Request):
 
 
 @router.post('/material-preparations', status_code=201)
-async def prepare(name: str, request: Request, filename: str = Query(max_length=255), test_data: bool = False):
+async def prepare(name: str, request: Request, filename: str = Query(max_length=255), test_data: bool = False, mode: Literal['text', 'original'] = 'text'):
     store = service(request, name)
     content = bytearray()
     async for chunk in request.stream():
@@ -69,7 +82,7 @@ async def prepare(name: str, request: Request, filename: str = Query(max_length=
                 stopped.set()
                 return
     watcher = asyncio.create_task(watch_disconnect())
-    worker = asyncio.create_task(asyncio.to_thread(store.prepare, name, filename, bytes(content), test_data, checkpoint))
+    worker = asyncio.create_task(asyncio.to_thread(store.prepare, name, filename, bytes(content), test_data, checkpoint, mode))
     try:
         prepared = await worker
         checkpoint()

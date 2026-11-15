@@ -258,6 +258,7 @@ class CliAdapter:
         self.model = None
         self.reasoning_effort = None
         self.ultracode = None
+        self.original_paths = []
 
     def arguments(self, mode, session=None, mcp_args=None):
         if self.client == 'codex':
@@ -273,6 +274,20 @@ class CliAdapter:
             return args + ['--json', '--skip-git-repo-check', '-']
         args = [self.path, '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--permission-mode',
                 'plan' if mode == 'read-only' else 'acceptEdits']
+        read_rules = []
+        for original in self.original_paths:
+            path = Path(original).as_posix()
+            # Claude normalizes C:/... to /c/...; only grant reading this selected file.
+            if len(path) > 2 and path[1] == ':':
+                path = '/' + path[0].lower() + path[2:]
+            path = ''.join('\\' + c if c in '*?[]!\\' else c for c in path)
+            read_rules.append('Read(/' + path + ')')
+        mcp_args = list(mcp_args or [])
+        if read_rules and '--allowedTools' in mcp_args:
+            position = mcp_args.index('--allowedTools') + 1
+            mcp_args[position:position] = read_rules
+        elif read_rules:
+            args += ['--allowedTools', *read_rules]
         if session:
             args += ['--resume', session]
         if self.model:

@@ -20,6 +20,8 @@
 /.claude export-ignore
 /.harness export-ignore
 **/.codast-documents export-ignore
+**/.codast-attachments export-ignore
+**/.codast-attachments/** export-ignore
 .env export-ignore
 .env.* export-ignore
 *.sqlite* export-ignore
