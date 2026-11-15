@@ -1,6 +1,7 @@
 from tests.schema_helpers import remove_work_item_schema
 import io
 import json
+import sys
 
 import pytest
 
@@ -157,7 +158,8 @@ def test_index_scope_stale_policy_and_delete(tmp_path):
 
 
 @pytest.mark.parametrize('client', ['mock', 'codex', 'claude'])
-def test_context_budget_retrieval_and_common_rules(tmp_path, client):
+def test_context_budget_retrieval_and_common_rules(tmp_path, monkeypatch, client):
+    monkeypatch.setattr('app.core.orchestrator.executable', lambda *args: sys.executable)
     harness, store = setup_store(tmp_path)
     report = store.import_file('one', 'guide.md', long_document().encode())
     prepared = harness.prepare('one', Command(text='권한은 어떻게 받아?', material_ids=[report['id']], client=client))
@@ -225,6 +227,7 @@ def test_short_text_code_fences_and_full_workflow(tmp_path):
 
 @pytest.mark.parametrize('client', ['codex', 'claude'])
 def test_reduced_context_reaches_both_cli_adapters(tmp_path, monkeypatch, client):
+    monkeypatch.setattr('app.core.orchestrator.executable', lambda *args: sys.executable)
     import asyncio
     from app.models.schemas import AgentResult
     from app.llm.cli import CliAdapter
