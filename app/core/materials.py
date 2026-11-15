@@ -138,7 +138,7 @@ class Materials:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT report FROM materials WHERE project=? AND id=?', (project, identity)).fetchone()
             if not row:
-                raise FileNotFoundError('자료를 찾을 수 없습니다.')
+                return  # Preserve idempotent deletion; never touch another project's files.
             report = json.loads(row['report'])
             if report.get('mode') == 'original':
                 self.originals.delete(project, report)

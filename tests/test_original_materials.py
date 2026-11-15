@@ -66,9 +66,11 @@ def test_project_scope_delete_missing_and_tampered_file(store):
     report = original(store)
     identity = report['id']
     path, _ = store.original('one', identity)
-    for method in [store.read, store.original, store.delete]:
+    for method in [store.read, store.original]:
         with pytest.raises(FileNotFoundError):
             method('two', identity)
+    store.delete('two', identity)
+    assert path.exists() and store.original('one', identity)[1] == b'password=synthetic-private\n'
     path.write_bytes(b'changed')
     with pytest.raises(ValueError, match='변경|손상'):
         store.selected('one', [identity])
@@ -168,7 +170,7 @@ def test_original_pdf_validation_and_decompression_limit(store, oversize_predict
         return bytes([tag]) + offset.to_bytes(4,'big') + generation.to_bytes(2,'big')
     xref = entry(0,0,65535) + b''.join(entry(1,offset,0) for offset in offsets[1:])
     data = zlib.compress(b'\x00'+xref if oversize_predictor else xref + b'\x00' * (PDF_STRUCTURE_BYTES + 1))
-    params = b' /DecodeParms << /Predictor 12 /Columns 1000000000 >>' if oversize_predictor else b''
+    params = b' /DecodeParms << /Predictor 12 /Columns 65537 >>' if oversize_predictor else b''
     payload += (b'3 0 obj\n<< /Type /XRef /Size 4 /Root 1 0 R /W [1 4 2] /Length '
                 + str(len(data)).encode() + b' /Filter /FlateDecode' + params + b' >>\nstream\n' + data
                 + b'\nendstream\nendobj\nstartxref\n' + str(offsets[3]).encode() + b'\n%%EOF\n')

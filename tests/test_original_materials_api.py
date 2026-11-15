@@ -33,8 +33,10 @@ def test_original_api_scope_restart_download_and_legacy(tmp_path):
         assert download.headers['cache-control'] == 'no-store'
         assert download.headers['x-content-type-options'] == 'nosniff'
         assert 'private' not in download.headers['content-disposition']
-        for method, suffix in [('get',''), ('get','/original'), ('delete','')]:
+        for method, suffix in [('get',''), ('get','/original')]:
             assert getattr(client, method)('/api/projects/two/materials/'+identity+suffix).status_code == 404
+        assert client.delete('/api/projects/two/materials/'+identity).status_code == 200
+        assert client.get(endpoint+'/original').content == source
         assert client.post(base+'/materials?filename=x.txt&mode=bad', content=b'hi').status_code == 422
         legacy = client.post(base+'/materials?filename=x.txt', content=b'password=dummy-private').json()
         assert client.get(base+'/materials/'+legacy['id']+'/original').status_code == 400
@@ -58,7 +60,8 @@ def test_both_adapters_receive_manifest_and_read_original_pdf(tmp_path, monkeypa
         from pdfminer.high_level import extract_text
         path = harness.materials.original('one', report['id'])[0]
         assert 'Sample Person' not in prompt and 'base64' not in prompt
-        assert str(path).replace('\\', '\\\\') in prompt
+        context = json.loads(prompt[prompt.index('{"task"'):])
+        assert json.loads(context['files'][0]['content'])['path'] == str(path)
         assert 'Sample Person' in extract_text(path)
         observed.append(argv)
         if provider == 'codex':

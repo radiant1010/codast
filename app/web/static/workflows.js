@@ -11,7 +11,7 @@
   function modeSelect(value){const n=select(['read-only','workspace-write'],value||'read-only');n.options[0].textContent='분석만 (읽기 전용)';n.options[1].textContent='구현, 테스트 (작업 폴더 수정 허용)';return n;}
   const resultDialog=el('dialog',undefined,'session-drawer workflow-dialog');resultDialog.id='workflow-result-dialog';const resultBody=el('div'),resultStatus=el('p',undefined,'hint');resultStatus.setAttribute('role','status');const resultHead=el('header');resultHead.append(el('h2','작업 결과 상세'),icon('close','결과 상세 닫기',()=>resultDialog.close()));resultDialog.append(resultHead,resultStatus,resultBody);document.body.append(resultDialog);
   const close=icon('close','워크플로 닫기',()=>dialog.close());head.append(heading,close);dialog.append(head,status,body);document.body.append(dialog);
-  dialog.addEventListener('close',()=>{clearTimeout(timer);uploadController?.abort();uploadGeneration++;window.attachmentFiles.cancelChoice();});
+  dialog.addEventListener('close',()=>{clearTimeout(timer);uploadController?.abort();uploadGeneration++;window.attachmentFiles.cancelChoice('workflow');});
   $('project').addEventListener('change',()=>{if(dialog.open)dialog.close();});
   async function safe(fn){if(locked)return;locked=true;const controls=[...body.querySelectorAll('button,input,select,textarea')].map(n=>[n,n.disabled]);controls.forEach(([n])=>n.disabled=true);try{status.textContent='처리 중…';await fn();status.textContent='';}catch(e){status.textContent=e.message;if(resultDialog.open)resultStatus.textContent=e.message;}finally{locked=false;controls.forEach(([n,d])=>{if(n.isConnected)n.disabled=d;});}}
   const launch=icon('route','워크플로 설정 및 진행',()=>safe(async()=>{
@@ -84,7 +84,7 @@
     for(const role of roles){const row=el('div',undefined,'workflow-material-row'),files=el('div'),input=el('input',undefined,'form-control');input.type='file';input.multiple=true;input.accept='.txt,.md,.csv,.xlsx,.docx,.pptx,.pdf';input.hidden=true;input.setAttribute('aria-label',role+' 파일');
       input.onchange=()=>safe(async()=>{const owner=uploadGeneration,base='/projects/'+encodeURIComponent(project),filesToUpload=Array.from(input.files);input.value='';
        if(chosen.length+filesToUpload.length>10)throw Error('입력 자료는 총 10개까지 등록할 수 있습니다.');
-       const choices=await window.attachmentFiles.choose(filesToUpload);
+       const choices=await window.attachmentFiles.choose(filesToUpload,'workflow');
        for(const {file,mode} of choices){if(owner!==uploadGeneration)return;
         if(file.size>8*1024*1024)throw Error('파일은 8 MiB 이하만 지원합니다.');
         const controller=new AbortController();uploadController=controller;
