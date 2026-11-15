@@ -282,7 +282,11 @@ class CliAdapter:
                 path = '/' + path[0].lower() + path[2:]
             path = ''.join('\\' + c if c in '*?[]!\\' else c for c in path)
             read_rules.append('Read(/' + path + ')')
-        if read_rules:
+        mcp_args = list(mcp_args or [])
+        if read_rules and '--allowedTools' in mcp_args:
+            position = mcp_args.index('--allowedTools') + 1
+            mcp_args[position:position] = read_rules
+        elif read_rules:
             args += ['--allowedTools', *read_rules]
         if session:
             args += ['--resume', session]

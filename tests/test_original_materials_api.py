@@ -65,7 +65,9 @@ def test_both_adapters_receive_manifest_and_read_original_pdf(tmp_path, monkeypa
         assert 'Sample Person' in extract_text(path)
         observed.append(argv)
         if provider == 'codex':
-            return 0, json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'read synthetic PDF'}}), ''
+            events = [{'type':'item.completed','item':{'type':'agent_message','text':'read synthetic PDF'}},
+                      {'type':'turn.completed','usage':{'input_tokens':10,'output_tokens':5}}]
+            return 0, '\n'.join(json.dumps(event) for event in events), ''
         return 0, json.dumps({'type':'result','subtype':'success','result':'read synthetic PDF'}), ''
     monkeypatch.setattr('app.llm.cli.ProcessRunner.run', run)
     result = asyncio.run(harness.execute('one', Command(text='Read the file', client=provider, material_ids=[report['id']])))
@@ -101,3 +103,17 @@ def test_original_read_allowlist_does_not_grant_directory_or_write_access(mode):
     assert '\\[1\\]' in rules[0]
     assert not any(item.startswith(('Edit(', 'Write(')) for item in argv)
     assert '--add-dir' not in argv
+
+
+def test_original_read_allowlist_merges_with_existing_connected_tools():
+    from pathlib import Path
+    from app.core.toolchain import client_arguments
+    adapter = CliAdapter('claude', 'unused')
+    adapter.original_paths = [str(Path('/attachments/sample.pdf').absolute())]
+    connected = client_arguments('claude', {'codast-context7': {'command':'fixture'}})
+    unchanged = list(connected)
+    argv = adapter.arguments('read-only', mcp_args=connected)
+    assert argv.count('--allowedTools') == 1
+    assert any(arg.startswith('Read(') for arg in argv)
+    assert 'mcp__codast-context7__query-docs' in argv
+    assert connected == unchanged
