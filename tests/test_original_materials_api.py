@@ -61,8 +61,14 @@ def test_both_adapters_receive_manifest_and_read_original_pdf(tmp_path, monkeypa
         path = harness.materials.original('one', report['id'])[0]
         assert 'Sample Person' not in prompt and 'base64' not in prompt
         context = json.loads(prompt[prompt.index('{"task"'):])
-        assert json.loads(context['files'][0]['content'])['path'] == str(path)
-        assert 'Sample Person' in extract_text(path)
+        from pathlib import Path
+        delivered_path = Path(json.loads(context['files'][0]['content'])['path'])
+        if provider == 'codex':
+            assert delivered_path.is_relative_to(Path(cwd)) and delivered_path != path
+        else:
+            assert delivered_path == path
+        assert delivered_path.read_bytes() == path.read_bytes()
+        assert 'Sample Person' in extract_text(delivered_path)
         observed.append(argv)
         if provider == 'codex':
             events = [{'type':'item.completed','item':{'type':'agent_message','text':'read synthetic PDF'}},

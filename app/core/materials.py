@@ -1,6 +1,7 @@
 """Project-scoped original and protected text attachments."""
 import hashlib
 import json
+from contextlib import contextmanager
 from threading import Lock
 from time import monotonic
 from pathlib import Path
@@ -158,6 +159,62 @@ class Materials:
             if report.get('mode') == 'original':
                 paths.append(str(self.original(project, identity)[0]))
         return paths
+
+    @contextmanager
+    def original_delivery(self, project, identities, context, cwd):
+        """Give a native sandbox selected files inside its cwd, then remove the copies."""
+        # shortcut: forced host termination can leave excluded copies; add startup recovery if needed.
+        copies, replacements, selected = [], {}, []
+        directory = None
+        try:
+            for identity in dict.fromkeys(identities):
+                report = json.loads(self.read(project, identity)['report'])
+                if report.get('mode') != 'original':
+                    continue
+                original_path, data = self.original(project, identity)
+                if directory is None:
+                    root = self.originals.check_path(Path(cwd) / '.codast-attachments')
+                    root.mkdir(exist_ok=True)
+                    self.originals.check_path(root)
+                    # Ignore transient bytes even when the selected project has no ignore rules.
+                    with self.originals.lock:
+                        for name, content in (('.gitignore', '*\n'), ('.gitattributes', '* export-ignore\n')):
+                            marker = self.originals.check_path(root / name)
+                            try:
+                                with marker.open('x', encoding='utf-8') as stream:
+                                    stream.write(content)
+                            except FileExistsError:
+                                if self.originals.check_path(marker).read_text(encoding='utf-8') != content:
+                                    raise ValueError('첨부 임시 폴더의 제외 설정이 변경되었습니다.')
+                    candidate = root / uuid4().hex
+                    # Inherit the workspace ACL, unlike tempfile's owner-only Windows directory.
+                    candidate.mkdir()
+                    directory = candidate
+                path = self.originals.check_path(directory / (identity + Path(report['label']).suffix))
+                with path.open('xb') as stream:
+                    copies.append(path)
+                    stream.write(data)
+                replacements[(report['label'], str(original_path))] = json.dumps(manifest(path, report), ensure_ascii=False)
+                selected.append(identity)
+            # A delete racing preparation must fail before dispatch and leave no copy.
+            for identity in selected:
+                self.original(project, identity)
+            sent = context.model_copy(deep=True)
+            for part in sent.files:
+                try:
+                    info = json.loads(part.content)
+                except ValueError:
+                    continue
+                if isinstance(info, dict) and info.get('mode') == 'original' and isinstance(info.get('path'), str):
+                    replacement = replacements.get((part.path, info.get('path')))
+                    if replacement is not None:
+                        part.content = replacement
+            yield sent
+        finally:
+            for path in copies:
+                self.originals.check_path(path).unlink(missing_ok=True)
+            if directory is not None:
+                self.originals.check_path(directory).rmdir()
 
     def selected(self, project, identities, query='', budget=24000):
         current = fingerprint(self.options(project))
